@@ -584,11 +584,11 @@ export function JornadaView() {
                 <motion.img 
                   animate={{ y: [0, -10, 0] }}
                   transition={{ duration: 4, repeat: Infinity, ease: "easeInOut" }}
-                  src="https://i.imgur.com/QVg57L1.png" 
-                  alt="Coroado" 
-                  className="w-48 mx-auto drop-shadow-[0_0_40px_rgba(201,146,42,0.5)]"
+                  src="/simbolob.png" 
+                  alt="Coroado Icon" 
+                  className="w-48 mx-auto drop-shadow-[0_0_40px_rgba(201,146,42,0.5)] text-white"
                 />
-                <img src="https://i.imgur.com/ItH3qGm.png" alt="Coroado" className="h-8 mx-auto drop-shadow-[0_0_10px_rgba(201,146,42,0.45)]" />
+                <img src="/logomarcab.png" alt="Coroado" className="h-8 mx-auto drop-shadow-[0_0_10px_rgba(201,146,42,0.45)] text-white" />
               </div>
               
               <div className="space-y-2">
@@ -681,7 +681,7 @@ export function JornadaView() {
             {/* Side Panel */}
             <div className="w-full md:w-96 bg-zinc-900 border-t md:border-t-0 md:border-l border-white/10 flex flex-col h-[50vh] md:h-full flex-shrink-0">
               <div className="p-6 border-b border-white/10 flex items-center gap-4 flex-shrink-0 bg-zinc-900/50 backdrop-blur-sm">
-                <img src="https://i.imgur.com/ItH3qGm.png" alt="Coroado" className="h-5 opacity-80" />
+                <img src="/logomarcab.png" alt="Coroado" className="h-5 opacity-80 text-white" />
                 <Badge variant="outline" className="border-primary/30 text-primary px-3 py-0.5 rounded-full uppercase tracking-[0.2em] text-[8px] font-black bg-primary/5">
                   Jornada Digital
                 </Badge>
@@ -863,9 +863,9 @@ export function JornadaView() {
                 <motion.img 
                   animate={{ y: [0, -20, 0], scale: [1, 1.1, 1] }}
                   transition={{ duration: 4, repeat: Infinity, ease: "easeInOut" }}
-                  src="https://i.imgur.com/QVg57L1.png" 
-                  alt="Coroado" 
-                  className="w-56 mx-auto drop-shadow-[0_0_60px_rgba(201,146,42,0.6)]"
+                  src="/simbolob.png" 
+                  alt="Coroado Icon" 
+                  className="w-56 mx-auto drop-shadow-[0_0_60px_rgba(201,146,42,0.6)] text-white"
                 />
                 <div className="space-y-2">
                   <Badge variant="outline" className="border-primary/50 text-primary px-6 py-2 rounded-full uppercase tracking-[0.4em] text-xs font-black bg-primary/10">

@@ -1,0 +1,1124 @@
+{
+  "entities": {
+    "User": {
+      "title": "User",
+      "description": "User profile containing roles and approval state",
+      "type": "object",
+      "properties": {
+        "email": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "phone": {
+          "type": "string"
+        },
+        "birthdate": {
+          "type": "string"
+        },
+        "roles": {
+          "type": "array"
+        },
+        "isApproved": {
+          "type": "boolean"
+        },
+        "tenantId": {
+          "type": "string"
+        },
+        "cellId": {
+          "type": "string"
+        },
+        "ministryId": {
+          "type": "string"
+        },
+        "createdAt": {
+          "type": "number"
+        },
+        "updatedAt": {
+          "type": "number"
+        }
+      },
+      "required": [
+        "email",
+        "name",
+        "roles",
+        "isApproved",
+        "tenantId",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "Task": {
+      "title": "Task",
+      "description": "Kanban planning task",
+      "type": "object",
+      "properties": {
+        "title": {
+          "type": "string"
+        },
+        "tag": {
+          "type": "string"
+        },
+        "assigneeId": {
+          "type": "string"
+        },
+        "status": {
+          "type": "string"
+        },
+        "tenantId": {
+          "type": "string"
+        },
+        "createdBy": {
+          "type": "string"
+        },
+        "createdAt": {
+          "type": "number"
+        },
+        "updatedAt": {
+          "type": "number"
+        },
+        "description": {
+          "type": "string"
+        },
+        "assignedTo": {
+          "type": "string"
+        },
+        "dueDate": {
+          "type": "string"
+        },
+        "startDate": {
+          "type": "string"
+        },
+        "completedAt": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "title",
+        "tag",
+        "status",
+        "tenantId",
+        "createdBy",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "Course": {
+      "title": "Course",
+      "description": "School online course",
+      "type": "object",
+      "properties": {
+        "title": {
+          "type": "string"
+        },
+        "description": {
+          "type": "string"
+        },
+        "level": {
+          "type": "string"
+        },
+        "duration": {
+          "type": "string"
+        },
+        "img": {
+          "type": "string"
+        },
+        "status": {
+          "type": "string"
+        },
+        "category": {
+          "type": "string"
+        },
+        "tenantId": {
+          "type": "string"
+        },
+        "createdBy": {
+          "type": "string"
+        },
+        "students": {
+          "type": "number"
+        },
+        "createdAt": {
+          "type": "number"
+        },
+        "updatedAt": {
+          "type": "number"
+        }
+      },
+      "required": [
+        "title",
+        "status",
+        "tenantId",
+        "createdBy",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "EventEnrollment": {
+      "title": "EventEnrollment",
+      "description": "User enrollment to an event",
+      "type": "object",
+      "properties": {
+        "eventId": {
+          "type": "string"
+        },
+        "userId": {
+          "type": "string"
+        },
+        "tenantId": {
+          "type": "string"
+        },
+        "checkedIn": {
+          "type": "boolean"
+        },
+        "createdAt": {
+          "type": "number"
+        },
+        "updatedAt": {
+          "type": "number"
+        }
+      },
+      "required": [
+        "eventId",
+        "userId",
+        "tenantId",
+        "checkedIn",
+        "createdAt",
+        "updatedAt"
+      ]
+    },    
+    "Enrollment": {
+      "title": "Enrollment",
+      "description": "User course enrollment",
+      "type": "object",
+      "properties": {
+        "userId": {
+          "type": "string"
+        },
+        "courseId": {
+          "type": "string"
+        },
+        "tenantId": {
+          "type": "string"
+        },
+        "progress": {
+          "type": "number"
+        },
+        "status": {
+          "type": "string"
+        },
+        "createdAt": {
+          "type": "number"
+        },
+        "updatedAt": {
+          "type": "number"
+        }
+      },
+      "required": [
+        "userId",
+        "courseId",
+        "tenantId",
+        "progress",
+        "status",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "Module": {
+      "title": "Module",
+      "description": "Course module containing lessons",
+      "type": "object",
+      "properties": {
+        "title": {
+          "type": "string"
+        },
+        "courseId": {
+          "type": "string"
+        },
+        "tenantId": {
+          "type": "string"
+        },
+        "order": {
+          "type": "number"
+        },
+        "createdAt": {
+          "type": "number"
+        },
+        "updatedAt": {
+          "type": "number"
+        }
+      },
+      "required": [
+        "title",
+        "courseId",
+        "tenantId",
+        "order",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "Lesson": {
+      "title": "Lesson",
+      "description": "Individual lesson inside a module",
+      "type": "object",
+      "properties": {
+        "title": {
+          "type": "string"
+        },
+        "description": {
+          "type": "string"
+        },
+        "videoUrl": {
+          "type": "string"
+        },
+        "moduleId": {
+          "type": "string"
+        },
+        "courseId": {
+          "type": "string"
+        },
+        "tenantId": {
+          "type": "string"
+        },
+        "order": {
+          "type": "number"
+        },
+        "isFree": {
+          "type": "boolean"
+        },
+        "createdAt": {
+          "type": "number"
+        },
+        "updatedAt": {
+          "type": "number"
+        }
+      },
+      "required": [
+        "title",
+        "moduleId",
+        "courseId",
+        "tenantId",
+        "order",
+        "isFree",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "Path": {
+      "title": "Path",
+      "description": "Learning path comprising multiple courses",
+      "type": "object",
+      "properties": {
+        "title": {
+          "type": "string"
+        },
+        "description": {
+          "type": "string"
+        },
+        "stage": {
+          "type": "string"
+        },
+        "courses": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "tenantId": {
+          "type": "string"
+        },
+        "createdAt": {
+          "type": "number"
+        },
+        "updatedAt": {
+          "type": "number"
+        }
+      },
+      "required": [
+        "title",
+        "description",
+        "stage",
+        "courses",
+        "tenantId",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "Ministry": {
+      "title": "Ministry",
+      "description": "Church ministry configuration",
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "description": {
+          "type": "string"
+        },
+        "leaderId": {
+          "type": "string"
+        },
+        "leaderName": {
+          "type": "string"
+        },
+        "icon": {
+          "type": "string"
+        },
+        "tenantId": {
+          "type": "string"
+        },
+        "createdAt": {
+          "type": "number"
+        },
+        "updatedAt": {
+          "type": "number"
+        }
+      },
+      "required": [
+        "name",
+        "description",
+        "leaderId",
+        "leaderName",
+        "icon",
+        "tenantId",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "Scale": {
+      "title": "Scale",
+      "description": "Volunteer schedule/scale for a ministry",
+      "type": "object",
+      "properties": {
+        "ministryId": {
+          "type": "string"
+        },
+        "eventName": {
+          "type": "string"
+        },
+        "date": {
+          "type": "string"
+        },
+        "time": {
+          "type": "string"
+        },
+        "assignments": {
+          "type": "array"
+        },
+        "setlist": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "notes": {
+          "type": "string"
+        },
+        "tenantId": {
+          "type": "string"
+        },
+        "createdAt": {
+          "type": "number"
+        },
+        "updatedAt": {
+          "type": "number"
+        }
+      },
+      "required": [
+        "ministryId",
+        "eventName",
+        "date",
+        "time",
+        "assignments",
+        "tenantId",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "Briefing": {
+      "title": "Briefing",
+      "description": "Task/Request for a ministry",
+      "type": "object",
+      "properties": {
+        "ministryId": {
+          "type": "string"
+        },
+        "requesterMinistry": {
+          "type": "string"
+        },
+        "title": {
+          "type": "string"
+        },
+        "description": {
+          "type": "string"
+        },
+        "deadline": {
+          "type": "string"
+        },
+        "status": {
+          "type": "string"
+        },
+        "assigneeId": {
+          "type": "string"
+        },
+        "tenantId": {
+          "type": "string"
+        },
+        "createdAt": {
+          "type": "number"
+        },
+        "updatedAt": {
+          "type": "number"
+        }
+      },
+      "required": [
+        "ministryId",
+        "requesterMinistry",
+        "title",
+        "description",
+        "deadline",
+        "status",
+        "tenantId",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "MinistryEvent": {
+      "title": "MinistryEvent",
+      "description": "Calendar event for a ministry",
+      "type": "object",
+      "properties": {
+        "ministryId": {
+          "type": "string"
+        },
+        "title": {
+          "type": "string"
+        },
+        "date": {
+          "type": "string"
+        },
+        "type": {
+          "type": "string"
+        },
+        "tenantId": {
+          "type": "string"
+        },
+        "createdAt": {
+          "type": "number"
+        },
+        "updatedAt": {
+          "type": "number"
+        }
+      },
+      "required": [
+        "ministryId",
+        "title",
+        "date",
+        "type",
+        "tenantId",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "Cell": {
+      "title": "Cell",
+      "description": "Small group/cell containing members and configuration",
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "neighborhood": {
+          "type": "string"
+        },
+        "day": {
+          "type": "string"
+        },
+        "time": {
+          "type": "string"
+        },
+        "phone": {
+          "type": "string"
+        },
+        "leaderId": {
+          "type": "string"
+        },
+        "tenantId": {
+          "type": "string"
+        },
+        "createdAt": {
+          "type": "number"
+        },
+        "updatedAt": {
+          "type": "number"
+        }
+      },
+      "required": [
+        "name",
+        "neighborhood",
+        "day",
+        "time",
+        "leaderId",
+        "tenantId",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "CellReport": {
+      "title": "CellReport",
+      "description": "Attendance and summary of cell meeting",
+      "type": "object",
+      "properties": {
+        "cellId": {
+          "type": "string"
+        },
+        "date": {
+          "type": "string"
+        },
+        "present": {
+          "type": "number"
+        },
+        "visitors": {
+          "type": "number"
+        },
+        "summary": {
+          "type": "string"
+        },
+        "tenantId": {
+          "type": "string"
+        },
+        "createdAt": {
+          "type": "number"
+        },
+        "updatedAt": {
+          "type": "number"
+        }
+      },
+      "required": [
+        "cellId",
+        "date",
+        "present",
+        "visitors",
+        "summary",
+        "tenantId",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "VisitorLead": {
+      "title": "VisitorLead",
+      "description": "Visitor Lead for pastoral care",
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "phone": {
+          "type": "string"
+        },
+        "neighborhood": {
+          "type": "string"
+        },
+        "dateVisited": {
+          "type": "string"
+        },
+        "source": {
+          "type": "string"
+        },
+        "status": {
+          "type": "string"
+        },
+        "assignedCellId": {
+          "type": "string"
+        },
+        "notes": {
+          "type": "string"
+        },
+        "tenantId": {
+          "type": "string"
+        },
+        "createdAt": {
+          "type": "number"
+        },
+        "updatedAt": {
+          "type": "number"
+        }
+      },
+      "required": [
+        "name",
+        "phone",
+        "neighborhood",
+        "dateVisited",
+        "source",
+        "status",
+        "tenantId",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "PrayerRequest": {
+      "title": "PrayerRequest",
+      "description": "Prayer requests from users",
+      "type": "object",
+      "properties": {
+        "authorName": {
+          "type": "string"
+        },
+        "date": {
+          "type": "string"
+        },
+        "reason": {
+          "type": "string"
+        },
+        "details": {
+          "type": "string"
+        },
+        "isPrivate": {
+          "type": "boolean"
+        },
+        "status": {
+          "type": "string"
+        },
+        "tenantId": {
+          "type": "string"
+        },
+        "createdAt": {
+          "type": "number"
+        },
+        "updatedAt": {
+          "type": "number"
+        }
+      },
+      "required": [
+        "authorName",
+        "date",
+        "reason",
+        "details",
+        "isPrivate",
+        "status",
+        "tenantId",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "RiskAlert": {
+      "title": "RiskAlert",
+      "description": "Alerts for members at risk",
+      "type": "object",
+      "properties": {
+        "memberId": {
+          "type": "string"
+        },
+        "memberName": {
+          "type": "string"
+        },
+        "weeksAbsent": {
+          "type": "number"
+        },
+        "lastCellDate": {
+          "type": "string"
+        },
+        "riskLevel": {
+          "type": "string"
+        },
+        "tenantId": {
+          "type": "string"
+        },
+        "createdAt": {
+          "type": "number"
+        },
+        "updatedAt": {
+          "type": "number"
+        }
+      },
+      "required": [
+        "memberId",
+        "memberName",
+        "weeksAbsent",
+        "lastCellDate",
+        "riskLevel",
+        "tenantId",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "KpiTarget": {
+      "title": "KpiTarget",
+      "description": "Target for a specific KPI or pillar",
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "period": {
+          "type": "string"
+        },
+        "targetValue": {
+          "type": "number"
+        },
+        "unit": {
+          "type": "string"
+        },
+        "tenantId": {
+          "type": "string"
+        },
+        "createdAt": {
+          "type": "number"
+        },
+        "updatedAt": {
+          "type": "number"
+        }
+      },
+      "required": [
+        "name",
+        "period",
+        "targetValue",
+        "unit",
+        "tenantId",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "KpiEntry": {
+      "title": "KpiEntry",
+      "description": "Actual value entry for a KPI",
+      "type": "object",
+      "properties": {
+        "kpiName": {
+          "type": "string"
+        },
+        "date": {
+          "type": "string"
+        },
+        "actualValue": {
+          "type": "number"
+        },
+        "targetValue": {
+          "type": "number"
+        },
+        "notes": {
+          "type": "string"
+        },
+        "tenantId": {
+          "type": "string"
+        },
+        "createdAt": {
+          "type": "number"
+        },
+        "updatedAt": {
+          "type": "number"
+        }
+      },
+      "required": [
+        "kpiName",
+        "date",
+        "actualValue",
+        "tenantId",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "ServiceReport": {
+      "title": "ServiceReport",
+      "description": "Attendance report for a service/culto",
+      "type": "object",
+      "properties": {
+        "serviceName": {
+          "type": "string"
+        },
+        "date": {
+          "type": "string"
+        },
+        "attendanceActual": {
+          "type": "number"
+        },
+        "attendanceTarget": {
+          "type": "number"
+        },
+        "visitorsActual": {
+          "type": "number"
+        },
+        "visitorsTarget": {
+          "type": "number"
+        },
+        "tenantId": {
+          "type": "string"
+        },
+        "createdAt": {
+          "type": "number"
+        },
+        "updatedAt": {
+          "type": "number"
+        }
+      },
+      "required": [
+        "serviceName",
+        "date",
+        "attendanceActual",
+        "visitorsActual",
+        "tenantId",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "FinancialReport": {
+      "title": "FinancialReport",
+      "description": "Financial tithe/offering log",
+      "type": "object",
+      "properties": {
+        "title": {
+          "type": "string"
+        },
+        "date": {
+          "type": "string"
+        },
+        "amount": {
+          "type": "number"
+        },
+        "target": {
+          "type": "number"
+        },
+        "tenantId": {
+          "type": "string"
+        },
+        "createdAt": {
+          "type": "number"
+        },
+        "updatedAt": {
+          "type": "number"
+        }
+      },
+      "required": [
+        "title",
+        "date",
+        "amount",
+        "tenantId",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "StrategicGoal": {
+      "title": "StrategicGoal",
+      "description": "Strategic pillar goal for the platform",
+      "type": "object",
+      "properties": {
+        "title": {
+          "type": "string"
+        },
+        "pillar": {
+          "type": "string"
+        },
+        "description": {
+          "type": "string"
+        },
+        "targetText": {
+          "type": "string"
+        },
+        "period": {
+          "type": "string"
+        },
+        "progress": {
+          "type": "number"
+        },
+        "color": {
+          "type": "string"
+        },
+        "tenantId": {
+          "type": "string"
+        },
+        "createdAt": {
+          "type": "number"
+        },
+        "updatedAt": {
+          "type": "number"
+        }
+      },
+      "required": [
+        "title",
+        "pillar",
+        "description",
+        "targetText",
+        "period",
+        "progress",
+        "color",
+        "tenantId",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "TaskUpdate": {
+      "title": "TaskUpdate",
+      "description": "Comment or update on a task",
+      "type": "object",
+      "properties": {
+        "taskId": {
+          "type": "string"
+        },
+        "content": {
+          "type": "string"
+        },
+        "authorName": {
+          "type": "string"
+        },
+        "date": {
+          "type": "string"
+        },
+        "tenantId": {
+          "type": "string"
+        },
+        "createdAt": {
+          "type": "number"
+        }
+      },
+      "required": [
+        "taskId",
+        "content",
+        "authorName",
+        "date",
+        "tenantId",
+        "createdAt"
+      ]
+    }
+  },
+  "firestore": {
+    "/cells/{cellId}": {
+      "schema": {
+        "$ref": "#/entities/Cell"
+      },
+      "description": "Cell groups"
+    },
+    "/cell_reports/{reportId}": {
+      "schema": {
+        "$ref": "#/entities/CellReport"
+      },
+      "description": "Cell group weekly reports"
+    },
+    "/users/{userId}": {
+      "schema": {
+        "$ref": "#/entities/User"
+      },
+      "description": "User profiles"
+    },
+    "/tasks/{taskId}": {
+      "schema": {
+        "$ref": "#/entities/Task"
+      },
+      "description": "Kanban tasks"
+    },
+    "/courses/{courseId}": {
+      "schema": {
+        "$ref": "#/entities/Course"
+      },
+      "description": "School courses"
+    },
+    "/enrollments/{enrollmentId}": {
+      "schema": {
+        "$ref": "#/entities/Enrollment"
+      },
+      "description": "User course enrollments"
+    },
+    "/modules/{moduleId}": {
+      "schema": {
+        "$ref": "#/entities/Module"
+      },
+      "description": "Course modules"
+    },
+    "/lessons/{lessonId}": {
+      "schema": {
+        "$ref": "#/entities/Lesson"
+      },
+      "description": "Module lessons"
+    },
+    "/paths/{pathId}": {
+      "schema": {
+        "$ref": "#/entities/Path"
+      },
+      "description": "Learning paths"
+    },
+    "/ministries/{ministryId}": {
+      "schema": {
+        "$ref": "#/entities/Ministry"
+      },
+      "description": "Church ministries"
+    },
+    "/scales/{scaleId}": {
+      "schema": {
+        "$ref": "#/entities/Scale"
+      },
+      "description": "Scales (Volunteer schedules)"
+    },
+    "/briefings/{briefingId}": {
+      "schema": {
+        "$ref": "#/entities/Briefing"
+      },
+      "description": "Briefings for ministries"
+    },
+    "/ministry_events/{eventId}": {
+      "schema": {
+        "$ref": "#/entities/MinistryEvent"
+      },
+      "description": "Ministry calendar events"
+    },
+    "/visitor_leads/{leadId}": {
+      "schema": {
+        "$ref": "#/entities/VisitorLead"
+      },
+      "description": "Visitor Leads"
+    },
+    "/prayer_requests/{requestId}": {
+      "schema": {
+        "$ref": "#/entities/PrayerRequest"
+      },
+      "description": "Prayer Requests"
+    },
+    "/risk_alerts/{alertId}": {
+      "schema": {
+        "$ref": "#/entities/RiskAlert"
+      },
+      "description": "Risk Alerts"
+    },
+    "/kpi_targets/{targetId}": {
+      "schema": {
+        "$ref": "#/entities/KpiTarget"
+      },
+      "description": "KPI targets"
+    },
+    "/kpi_entries/{entryId}": {
+      "schema": {
+        "$ref": "#/entities/KpiEntry"
+      },
+      "description": "KPI actual entries"
+    },
+    "/service_reports/{reportId}": {
+      "schema": {
+        "$ref": "#/entities/ServiceReport"
+      },
+      "description": "Service attendance reports"
+    },
+    "/financial_reports/{reportId}": {
+      "schema": {
+        "$ref": "#/entities/FinancialReport"
+      },
+      "description": "Financial entries reports"
+    },
+    "/strategic_goals/{goalId}": {
+      "schema": {
+        "$ref": "#/entities/StrategicGoal"
+      },
+      "description": "Strategic goals"
+    },
+    "/task_updates/{updateId}": {
+      "schema": {
+        "$ref": "#/entities/TaskUpdate"
+      },
+      "description": "Updates and comments for kanban tasks"
+    },
+    "/event_enrollments/{enrollmentId}": {
+      "schema": {
+        "$ref": "#/entities/EventEnrollment"
+      },
+      "description": "Event enrollments for check-in"
+    }
+  }
+}

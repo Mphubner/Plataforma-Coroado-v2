@@ -23,6 +23,10 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Separator } from '@/components/ui/separator';
 import { cn } from '@/lib/utils';
 
+interface StoreViewProps {
+  isAdmin?: boolean;
+}
+
 interface Product {
   id: number;
   name: string;
@@ -95,17 +99,36 @@ const PRODUCTS: Product[] = [
   },
   { 
     id: 6, 
-    name: "Caderno de Notas", 
-    price: 35.00, 
-    category: "Papelaria", 
-    img: "https://images.unsplash.com/photo-1531346878377-a541e4a0ecce?q=80&w=500&auto=format&fit=crop",
-    description: "Caderno pautado com 80 folhas. Ideal para anotações de mensagens e estudos bíblicos.",
-    colors: ["Preto", "Kraft"],
-    rating: 4.6,
-    reviews: 78
+    name: "Ingresso: Conferência Jovens", 
+    price: 60.00, 
+    category: "Ingressos", 
+    img: "https://images.unsplash.com/photo-1540039155733-d730a53ffb4c?q=80&w=500&auto=format&fit=crop",
+    description: "Ingresso válido para os dois dias de imersão da Conferência de Jovens Coroado. Inclui pulseira.",
+    rating: 4.9,
+    reviews: 15
   },
   { 
     id: 7, 
+    name: "Pacote Missões: Boquira", 
+    price: 250.00, 
+    category: "Missões", 
+    img: "https://images.unsplash.com/photo-1488521787991-ed7bbaae773c?q=80&w=500&auto=format&fit=crop",
+    description: "Ajude no projeto Boquira comprando este pacote simbólico que financia cestas básicas e logística.",
+    rating: 5.0,
+    reviews: 42
+  },
+  { 
+    id: 8, 
+    name: "Livro Base: Escola IDE", 
+    price: 45.00, 
+    category: "Livros", 
+    img: "https://images.unsplash.com/photo-1456513080510-7bf3a84b82f8?q=80&w=500&auto=format&fit=crop",
+    description: "Livro texto oficial para o nivelamento e o Módulo 1 da Escola de Líderes IDE.",
+    rating: 4.8,
+    reviews: 180
+  },
+  { 
+    id: 9, 
     name: "Pulseira Identidade", 
     price: 15.00, 
     category: "Acessórios", 
@@ -116,7 +139,7 @@ const PRODUCTS: Product[] = [
     reviews: 156
   },
   { 
-    id: 8, 
+    id: 10, 
     name: "Ecobag Logo", 
     price: 25.00, 
     category: "Acessórios", 
@@ -127,14 +150,15 @@ const PRODUCTS: Product[] = [
   },
 ];
 
-const CATEGORIES = ["Todos", "Vestuário", "Acessórios", "Home", "Livros", "Papelaria"];
+const CATEGORIES = ["Todos", "Vestuário", "Acessórios", "Home", "Livros", "Papelaria", "Ingressos", "Missões"];
 
-export function StoreView() {
+export function StoreView({ isAdmin = false }: { isAdmin?: boolean }) {
   const [selectedCategory, setSelectedCategory] = useState("Todos");
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
   const [cart, setCart] = useState<{ product: Product; quantity: number; size?: string; color?: string }[]>([]);
   const [isCartOpen, setIsCartOpen] = useState(false);
+  const [storeTab, setStoreTab] = useState("shop");
 
   const filteredProducts = PRODUCTS.filter(p => {
     const matchesCategory = selectedCategory === "Todos" || p.category === selectedCategory;
@@ -175,15 +199,50 @@ export function StoreView() {
 
   return (
     <div className="space-y-12 pb-20">
-      <AnimatePresence mode="wait">
-        {!selectedProduct ? (
-          <motion.div
-            key="list"
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -20 }}
-            className="space-y-10"
-          >
+      {isAdmin && (
+        <div className="flex items-center gap-2 overflow-x-auto pb-4 scrollbar-hide">
+             <button
+                onClick={() => setStoreTab("shop")}
+                className={cn(
+                  "px-6 h-10 rounded-full text-xs font-black uppercase tracking-widest transition-all whitespace-nowrap border",
+                  storeTab === "shop" 
+                    ? "bg-primary border-primary text-black" 
+                    : "bg-white/5 border-white/10 text-white/40 hover:border-white/20 hover:text-white"
+                )}
+              >
+                Loja Público
+             </button>
+             <button
+                onClick={() => setStoreTab("admin")}
+                className={cn(
+                  "px-6 h-10 rounded-full text-xs font-black uppercase tracking-widest transition-all whitespace-nowrap border",
+                  storeTab === "admin" 
+                    ? "bg-secondary border-secondary text-black" 
+                    : "bg-white/5 border-white/10 text-white/40 hover:border-white/20 hover:text-white"
+                )}
+              >
+                Gestão da Loja
+             </button>
+        </div>
+      )}
+
+      {storeTab === 'admin' && isAdmin ? (
+        <div className="space-y-6">
+           <div className="p-8 text-center text-white/50 border border-white/10 rounded-xl bg-white/5">
+             Ambiente de Gestão de Vendas, Estoque e Produtos da Loja em Desenvolvimento
+           </div>
+        </div>
+      ) : (
+        <>
+          <AnimatePresence mode="wait">
+            {!selectedProduct ? (
+              <motion.div
+                key="list"
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -20 }}
+                className="space-y-10"
+              >
             {/* Header */}
             <div className="flex flex-col md:flex-row md:items-end justify-between gap-6">
               <div className="space-y-2">
@@ -543,7 +602,26 @@ export function StoreView() {
                       <span className="text-primary font-black">R$ {cartTotal.toFixed(2).replace('.', ',')}</span>
                     </div>
                   </div>
-                  <Button className="w-full h-16 rounded-full bg-primary text-black font-black text-lg shadow-lg shadow-primary/20 hover:scale-[1.02] active:scale-[0.98] transition-all">
+                  <Button 
+                    onClick={async () => {
+                       try {
+                         const response = await fetch('/api/checkout', {
+                           method: 'POST',
+                           headers: { 'Content-Type': 'application/json' },
+                           body: JSON.stringify({ items: cart })
+                         });
+                         const data = await response.json();
+                         if (data.success && data.init_point) {
+                           window.location.href = data.init_point;
+                         } else {
+                           alert('Erro ao iniciar checkout: ' + (data.error || 'Erro desconhecido'));
+                         }
+                       } catch (e) {
+                         alert('Erro de conexão ao iniciar o checkout.');
+                       }
+                    }}
+                    className="w-full h-16 rounded-full bg-primary text-black font-black text-lg shadow-lg shadow-primary/20 hover:scale-[1.02] active:scale-[0.98] transition-all"
+                  >
                     Finalizar Compra
                   </Button>
                   <p className="text-[10px] text-center text-white/20 font-bold uppercase tracking-widest">Pagamento seguro via Coroado Pay</p>
@@ -553,6 +631,8 @@ export function StoreView() {
           </>
         )}
       </AnimatePresence>
+        </>
+      )}
     </div>
   );
 }

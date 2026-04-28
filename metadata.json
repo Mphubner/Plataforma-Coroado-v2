@@ -1,5 +1,5 @@
 {
   "name": "Coroado Ecosystem",
   "description": "Plataforma completa para gestão eclesiástica, área de membros, escola IDE e loja Coroado.",
-  "requestFramePermissions": ["geolocation"]
+  "requestFramePermissions": ["geolocation", "camera"]
 }

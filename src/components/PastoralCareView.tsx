@@ -1,12 +1,14 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Shield, BrainCircuit, EyeOff, Search, Heart, MapPin, HandHeart, MessageCircle, AlertTriangle, Filter, CheckCircle2, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
+import { db } from '@/lib/firebase';
+import { collection, query, where, onSnapshot, doc, updateDoc, serverTimestamp } from 'firebase/firestore';
 
 // Types
-type VisitorLead = {
+export type VisitorLead = {
   id: string;
   name: string;
   phone: string;
@@ -16,9 +18,10 @@ type VisitorLead = {
   status: 'new' | 'contacted' | 'assigned' | 'converted';
   assignedCellId?: string;
   notes?: string;
+  tenantId?: string;
 };
 
-type PrayerRequest = {
+export type PrayerRequest = {
   id: string;
   authorName: string;
   date: string;
@@ -26,15 +29,17 @@ type PrayerRequest = {
   details: string;
   isPrivate: boolean;
   status: 'open' | 'praying' | 'answered';
+  tenantId?: string;
 };
 
-type RiskAlert = {
+export type RiskAlert = {
   id: string;
   memberId: string;
   memberName: string;
   weeksAbsent: number;
   lastCellDate: string;
   riskLevel: 'medium' | 'high' | 'critical';
+  tenantId?: string;
 };
 
 // Mocks
@@ -56,17 +61,51 @@ const MOCK_ALERTS: RiskAlert[] = [
   { id: 'a3', memberId: 'm9', memberName: 'Luiz Fernando', weeksAbsent: 6, lastCellDate: '2023-09-21', riskLevel: 'critical' },
 ];
 
-export function PastoralCareView() {
-  const [activeTab, setActiveTab] = React.useState<'visitors' | 'prayers' | 'alerts'>('visitors');
-  const [leads, setLeads] = React.useState(MOCK_LEADS);
-  const [prayers, setPrayers] = React.useState(MOCK_PRAYERS);
-  const [alerts, setAlerts] = React.useState(MOCK_ALERTS);
+export function PastoralCareView({ isLoggedIn = true, userData }: { isLoggedIn?: boolean; userData?: any }) {
+  const [activeTab, setActiveTab] = useState<'visitors' | 'prayers' | 'alerts'>('visitors');
+  const [leads, setLeads] = useState<VisitorLead[]>([]);
+  const [prayers, setPrayers] = useState<PrayerRequest[]>([]);
+  const [alerts, setAlerts] = useState<RiskAlert[]>([]);
 
-  const [selectedLead, setSelectedLead] = React.useState<VisitorLead | null>(null);
+  const [selectedLead, setSelectedLead] = useState<VisitorLead | null>(null);
+  const tenantId = userData?.tenantId;
 
-  const handleUpdateLeadStatus = (id: string, newStatus: VisitorLead['status']) => {
-    setLeads(leads.map(l => l.id === id ? { ...l, status: newStatus } : l));
-    setSelectedLead(null);
+  useEffect(() => {
+    if (!tenantId) return;
+
+    const unsubLeads = onSnapshot(query(collection(db, 'visitor_leads'), where('tenantId', '==', tenantId)), (snap) => {
+      if (snap.empty && leads.length === 0) setLeads(MOCK_LEADS);
+      else setLeads(snap.docs.map(doc => ({ id: doc.id, ...doc.data() } as VisitorLead)));
+    });
+
+    const unsubPrayers = onSnapshot(query(collection(db, 'prayer_requests'), where('tenantId', '==', tenantId)), (snap) => {
+      if (snap.empty && prayers.length === 0) setPrayers(MOCK_PRAYERS);
+      else setPrayers(snap.docs.map(doc => ({ id: doc.id, ...doc.data() } as PrayerRequest)));
+    });
+
+    const unsubAlerts = onSnapshot(query(collection(db, 'risk_alerts'), where('tenantId', '==', tenantId)), (snap) => {
+      if (snap.empty && alerts.length === 0) setAlerts(MOCK_ALERTS);
+      else setAlerts(snap.docs.map(doc => ({ id: doc.id, ...doc.data() } as RiskAlert)));
+    });
+
+    return () => {
+      unsubLeads();
+      unsubPrayers();
+      unsubAlerts();
+    };
+  }, [tenantId]);
+
+  const handleUpdateLeadStatus = async (id: string, newStatus: VisitorLead['status']) => {
+    try {
+      const docRef = doc(db, 'visitor_leads', id);
+      await updateDoc(docRef, { status: newStatus, updatedAt: serverTimestamp() });
+      setSelectedLead(null);
+    } catch (e) {
+      console.error(e);
+      // Fallback for mocks
+      setLeads(leads.map(l => l.id === id ? { ...l, status: newStatus } : l));
+      setSelectedLead(null);
+    }
   };
 
   return (
@@ -207,8 +246,28 @@ export function PastoralCareView() {
                     </div>
                   )}
                   {prayer.status !== 'answered' && (
-                    <Button variant="outline" className="w-full border-white/10 hover:bg-white/5 transition-all text-xs h-8">
-                       Marcar como "Estou Orando"
+                    <Button 
+                        variant="outline" 
+                        className="w-full border-white/10 hover:bg-white/5 transition-all text-xs h-8"
+                        onClick={async () => {
+                            if (prayer.status === 'open') {
+                                try {
+                                    await updateDoc(doc(db, 'prayer_requests', prayer.id), { status: 'praying', updatedAt: serverTimestamp() });
+                                } catch (e) {
+                                    console.error(e);
+                                    alert("Erro");
+                                }
+                            } else if (prayer.status === 'praying') {
+                                try {
+                                    await updateDoc(doc(db, 'prayer_requests', prayer.id), { status: 'answered', updatedAt: serverTimestamp() });
+                                } catch (e) {
+                                    console.error(e);
+                                    alert("Erro");
+                                }
+                            }
+                        }}
+                    >
+                       {prayer.status === 'open' ? 'Marcar como "Estou Orando"' : 'Marcar como "Respondido"'}
                     </Button>
                   )}
                 </div>
