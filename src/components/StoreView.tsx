@@ -1,10 +1,8 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { 
   ShoppingBag, 
   Search, 
-  Filter, 
-  ChevronRight, 
   ArrowLeft, 
   Plus, 
   Minus, 
@@ -16,15 +14,22 @@ import {
   RefreshCw
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Separator } from '@/components/ui/separator';
 import { cn } from '@/lib/utils';
+import { auth, db } from '@/lib/firebase';
+import { collection, query, where, onSnapshot, addDoc, deleteDoc, doc, writeBatch, serverTimestamp } from 'firebase/firestore';
+
+interface StoreViewProps {
+  isAdmin?: boolean;
+  userData?: any;
+}
 
 interface Product {
-  id: number;
+  id: string | number;
   name: string;
   price: number;
   category: string;
@@ -95,17 +100,36 @@ const PRODUCTS: Product[] = [
   },
   { 
     id: 6, 
-    name: "Caderno de Notas", 
-    price: 35.00, 
-    category: "Papelaria", 
-    img: "https://images.unsplash.com/photo-1531346878377-a541e4a0ecce?q=80&w=500&auto=format&fit=crop",
-    description: "Caderno pautado com 80 folhas. Ideal para anotações de mensagens e estudos bíblicos.",
-    colors: ["Preto", "Kraft"],
-    rating: 4.6,
-    reviews: 78
+    name: "Ingresso: Conferência Jovens", 
+    price: 60.00, 
+    category: "Ingressos", 
+    img: "https://images.unsplash.com/photo-1540039155733-d730a53ffb4c?q=80&w=500&auto=format&fit=crop",
+    description: "Ingresso válido para os dois dias de imersão da Conferência de Jovens Coroado. Inclui pulseira.",
+    rating: 4.9,
+    reviews: 15
   },
   { 
     id: 7, 
+    name: "Pacote Missões: Boquira", 
+    price: 250.00, 
+    category: "Missões", 
+    img: "https://images.unsplash.com/photo-1488521787991-ed7bbaae773c?q=80&w=500&auto=format&fit=crop",
+    description: "Ajude no projeto Boquira comprando este pacote simbólico que financia cestas básicas e logística.",
+    rating: 5.0,
+    reviews: 42
+  },
+  { 
+    id: 8, 
+    name: "Livro Base: Escola IDE", 
+    price: 45.00, 
+    category: "Livros", 
+    img: "https://images.unsplash.com/photo-1456513080510-7bf3a84b82f8?q=80&w=500&auto=format&fit=crop",
+    description: "Livro texto oficial para o nivelamento e o Módulo 1 da Escola de Líderes IDE.",
+    rating: 4.8,
+    reviews: 180
+  },
+  { 
+    id: 9, 
     name: "Pulseira Identidade", 
     price: 15.00, 
     category: "Acessórios", 
@@ -116,7 +140,7 @@ const PRODUCTS: Product[] = [
     reviews: 156
   },
   { 
-    id: 8, 
+    id: 10, 
     name: "Ecobag Logo", 
     price: 25.00, 
     category: "Acessórios", 
@@ -127,16 +151,118 @@ const PRODUCTS: Product[] = [
   },
 ];
 
-const CATEGORIES = ["Todos", "Vestuário", "Acessórios", "Home", "Livros", "Papelaria"];
+const CATEGORIES = ["Todos", "Vestuário", "Acessórios", "Home", "Livros", "Papelaria", "Ingressos", "Missões"];
 
-export function StoreView() {
+export function StoreView({ isAdmin = false, userData }: StoreViewProps) {
   const [selectedCategory, setSelectedCategory] = useState("Todos");
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
   const [cart, setCart] = useState<{ product: Product; quantity: number; size?: string; color?: string }[]>([]);
   const [isCartOpen, setIsCartOpen] = useState(false);
+  const [storeTab, setStoreTab] = useState("shop");
 
-  const filteredProducts = PRODUCTS.filter(p => {
+  const [dbProducts, setDbProducts] = useState<Product[]>([]);
+  const [newProductForm, setNewProductForm] = useState({
+    name: "",
+    price: "",
+    category: "Vestuário",
+    img: "",
+    description: "",
+    sizes: "",
+    colors: ""
+  });
+  const [loading, setLoading] = useState(false);
+
+  const tenantId = userData?.tenantId || 'tenant-1';
+
+  useEffect(() => {
+    const q = query(collection(db, 'products'), where('tenantId', '==', tenantId));
+    const unsub = onSnapshot(q, (snap) => {
+      setDbProducts(snap.docs.map(d => ({ id: d.id, ...d.data() }) as unknown as Product));
+    });
+    return () => unsub();
+  }, [tenantId]);
+
+  const handleSeedProducts = async () => {
+    try {
+      setLoading(true);
+      const batch = writeBatch(db);
+      PRODUCTS.forEach(p => {
+        const ref = doc(collection(db, 'products'));
+        const { id, ...data } = p;
+        batch.set(ref, {
+          ...data,
+          tenantId,
+          createdAt: serverTimestamp(),
+          updatedAt: serverTimestamp()
+        });
+      });
+      await batch.commit();
+      alert("Produtos padrão importados com sucesso!");
+    } catch (e) {
+      console.error(e);
+      alert("Erro ao importar produtos: " + (e as Error).message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleCreateProduct = async () => {
+    if (!newProductForm.name || !newProductForm.price) {
+      alert("Por favor preencha o nome e preço do produto.");
+      return;
+    }
+    try {
+      setLoading(true);
+      await addDoc(collection(db, 'products'), {
+        name: newProductForm.name,
+        price: Number(newProductForm.price),
+        category: newProductForm.category,
+        img: newProductForm.img || "https://images.unsplash.com/photo-1521572163474-6864f9cf17ab?q=80&w=500&auto=format&fit=crop",
+        description: newProductForm.description || "Descrição do produto",
+        sizes: newProductForm.sizes ? newProductForm.sizes.split(',').map(s => s.trim()).filter(Boolean) : [],
+        colors: newProductForm.colors ? newProductForm.colors.split(',').map(c => c.trim()).filter(Boolean) : [],
+        rating: 5.0,
+        reviews: 0,
+        tenantId,
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp()
+      });
+      setNewProductForm({
+        name: "",
+        price: "",
+        category: "Vestuário",
+        img: "",
+        description: "",
+        sizes: "",
+        colors: ""
+      });
+      alert("Produto cadastrado com sucesso!");
+    } catch (e) {
+      console.error(e);
+      alert("Erro ao cadastrar produto: " + (e as Error).message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleDeleteProduct = async (id: string | number) => {
+    if (typeof id !== 'string') {
+      alert("Apenas produtos salvos no banco de dados podem ser excluídos.");
+      return;
+    }
+    if (!confirm("Tem certeza que deseja excluir este produto?")) return;
+    try {
+      await deleteDoc(doc(db, 'products', id));
+    } catch (e) {
+      console.error(e);
+      alert("Erro ao excluir produto.");
+    }
+  };
+
+  const catalogProducts = dbProducts.length > 0 ? dbProducts : PRODUCTS;
+
+  const filteredProducts = catalogProducts.filter(p => {
     const matchesCategory = selectedCategory === "Todos" || p.category === selectedCategory;
     const matchesSearch = p.name.toLowerCase().includes(searchQuery.toLowerCase());
     return matchesCategory && matchesSearch;
@@ -156,11 +282,11 @@ export function StoreView() {
     });
   };
 
-  const removeFromCart = (productId: number, size?: string, color?: string) => {
+  const removeFromCart = (productId: string | number, size?: string, color?: string) => {
     setCart(prev => prev.filter(item => !(item.product.id === productId && item.size === size && item.color === color)));
   };
 
-  const updateQuantity = (productId: number, delta: number, size?: string, color?: string) => {
+  const updateQuantity = (productId: string | number, delta: number, size?: string, color?: string) => {
     setCart(prev => prev.map(item => {
       if (item.product.id === productId && item.size === size && item.color === color) {
         const newQty = Math.max(1, item.quantity + delta);
@@ -175,15 +301,121 @@ export function StoreView() {
 
   return (
     <div className="space-y-12 pb-20">
-      <AnimatePresence mode="wait">
-        {!selectedProduct ? (
-          <motion.div
-            key="list"
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -20 }}
-            className="space-y-10"
-          >
+      {isAdmin && (
+        <div className="flex items-center gap-2 overflow-x-auto pb-4 scrollbar-hide">
+             <button
+                onClick={() => setStoreTab("shop")}
+                className={cn(
+                  "px-6 h-10 rounded-full text-xs font-black uppercase tracking-widest transition-all whitespace-nowrap border",
+                  storeTab === "shop" 
+                    ? "bg-primary border-primary text-black" 
+                    : "bg-white/5 border-white/10 text-white/40 hover:border-white/20 hover:text-white"
+                )}
+              >
+                Loja Público
+              </button>
+             <button
+                onClick={() => setStoreTab("admin")}
+                className={cn(
+                  "px-6 h-10 rounded-full text-xs font-black uppercase tracking-widest transition-all whitespace-nowrap border",
+                  storeTab === "admin" 
+                    ? "bg-secondary border-secondary text-black" 
+                    : "bg-white/5 border-white/10 text-white/40 hover:border-white/20 hover:text-white"
+                )}
+              >
+                Gestão da Loja
+              </button>
+        </div>
+      )}
+
+      {storeTab === 'admin' && isAdmin ? (
+        <div className="space-y-8">
+           <div className="grid md:grid-cols-3 gap-8">
+              {/* Form de Cadastro */}
+              <Card className="bg-zinc-900 border-white/10 md:col-span-1">
+                 <CardHeader>
+                    <CardTitle className="font-serif italic text-xl">Novo Produto</CardTitle>
+                    <CardDescription>Cadastre um produto no catálogo.</CardDescription>
+                 </CardHeader>
+                 <CardContent className="space-y-4">
+                    <div className="space-y-2">
+                       <label className="text-xs font-bold text-white/40 uppercase">Nome</label>
+                       <Input value={newProductForm.name} onChange={e => setNewProductForm({...newProductForm, name: e.target.value})} className="bg-black border-white/10" placeholder="Ex: Camisa Polo"/>
+                    </div>
+                    <div className="space-y-2">
+                       <label className="text-xs font-bold text-white/40 uppercase">Preço (R$)</label>
+                       <Input type="number" value={newProductForm.price} onChange={e => setNewProductForm({...newProductForm, price: e.target.value})} className="bg-black border-white/10" placeholder="Ex: 59.90"/>
+                    </div>
+                    <div className="space-y-2">
+                       <label className="text-xs font-bold text-white/40 uppercase">Categoria</label>
+                       <select value={newProductForm.category} onChange={e => setNewProductForm({...newProductForm, category: e.target.value})} className="w-full h-10 bg-black border border-white/10 rounded-md px-3 text-white">
+                          {CATEGORIES.filter(c => c !== "Todos").map(c => <option key={c} value={c}>{c}</option>)}
+                       </select>
+                    </div>
+                    <div className="space-y-2">
+                       <label className="text-xs font-bold text-white/40 uppercase">URL da Imagem</label>
+                       <Input value={newProductForm.img} onChange={e => setNewProductForm({...newProductForm, img: e.target.value})} className="bg-black border-white/10" placeholder="https://unsplash.com/..."/>
+                    </div>
+                    <div className="space-y-2">
+                       <label className="text-xs font-bold text-white/40 uppercase">Descrição</label>
+                       <textarea value={newProductForm.description} onChange={e => setNewProductForm({...newProductForm, description: e.target.value})} className="w-full h-20 bg-black border border-white/10 rounded-md p-3 text-white text-sm" placeholder="Mais detalhes..."/>
+                    </div>
+                    <div className="space-y-2">
+                       <label className="text-xs font-bold text-white/40 uppercase">Tamanhos (Ex: P, M, G)</label>
+                       <Input value={newProductForm.sizes} onChange={e => setNewProductForm({...newProductForm, sizes: e.target.value})} className="bg-black border-white/10" placeholder="P, M, G, GG"/>
+                    </div>
+                    <div className="space-y-2">
+                       <label className="text-xs font-bold text-white/40 uppercase">Cores (Ex: Preto, Azul)</label>
+                       <Input value={newProductForm.colors} onChange={e => setNewProductForm({...newProductForm, colors: e.target.value})} className="bg-black border-white/10" placeholder="Preto, Branco"/>
+                    </div>
+                    <Button onClick={handleCreateProduct} disabled={loading} className="w-full bg-primary text-black font-bold h-12">Cadastrar Produto</Button>
+                 </CardContent>
+              </Card>
+
+              {/* Tabela/Lista de Produtos Cadastrados */}
+              <div className="md:col-span-2 space-y-6">
+                 <div className="flex justify-between items-center">
+                    <h3 className="text-xl font-bold font-serif italic">Produtos Atuais</h3>
+                    {dbProducts.length === 0 && (
+                       <Button onClick={handleSeedProducts} disabled={loading} className="bg-secondary text-black font-bold">
+                          Importar 10 Produtos Padrão
+                       </Button>
+                    )}
+                 </div>
+                 
+                 <div className="space-y-4">
+                    {dbProducts.map(p => (
+                       <div key={p.id} className="p-4 bg-zinc-900 border border-white/10 rounded-2xl flex justify-between items-center gap-4">
+                          <div className="flex items-center gap-4">
+                             <img src={p.img} alt={p.name} className="w-12 h-12 object-cover rounded-lg" />
+                             <div>
+                                <h4 className="font-bold text-sm text-white">{p.name}</h4>
+                                <p className="text-xs text-white/40">{p.category} • R$ {p.price.toFixed(2).replace('.', ',')}</p>
+                             </div>
+                          </div>
+                          <Button onClick={() => handleDeleteProduct(p.id)} variant="ghost" size="sm" className="text-red-400 hover:text-red-500 hover:bg-red-500/10">Excluir</Button>
+                       </div>
+                    ))}
+                    {dbProducts.length === 0 && (
+                       <div className="p-8 text-center text-white/40 border border-dashed border-white/10 rounded-xl">
+                          Nenhum produto cadastrado no banco para este tenant.
+                       </div>
+                    )}
+                 </div>
+              </div>
+           </div>
+        </div>
+      ) : (
+        <>
+          <AnimatePresence mode="wait">
+            {!selectedProduct ? (
+              <motion.div
+                key="list"
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -20 }}
+                className="space-y-10"
+              >
             {/* Header */}
             <div className="flex flex-col md:flex-row md:items-end justify-between gap-6">
               <div className="space-y-2">
@@ -278,6 +510,11 @@ export function StoreView() {
                   </div>
                 </motion.div>
               ))}
+              {filteredProducts.length === 0 && (
+                <div className="sm:col-span-2 lg:col-span-4 rounded-2xl border border-dashed border-white/10 bg-zinc-900/60 p-10 text-center text-white/50">
+                  Catalogo da loja aguardando cadastro real de produtos.
+                </div>
+              )}
             </div>
           </motion.div>
         ) : (
@@ -357,7 +594,7 @@ export function StoreView() {
 
                 {/* Options */}
                 <div className="space-y-8">
-                  {selectedProduct.sizes && (
+                  {selectedProduct.sizes && selectedProduct.sizes.length > 0 && (
                     <div className="space-y-4">
                       <p className="text-xs font-black uppercase tracking-widest text-white/40">Tamanho</p>
                       <div className="flex flex-wrap gap-3">
@@ -373,7 +610,7 @@ export function StoreView() {
                     </div>
                   )}
 
-                  {selectedProduct.colors && (
+                  {selectedProduct.colors && selectedProduct.colors.length > 0 && (
                     <div className="space-y-4">
                       <p className="text-xs font-black uppercase tracking-widest text-white/40">Cor</p>
                       <div className="flex flex-wrap gap-3">
@@ -543,7 +780,36 @@ export function StoreView() {
                       <span className="text-primary font-black">R$ {cartTotal.toFixed(2).replace('.', ',')}</span>
                     </div>
                   </div>
-                  <Button className="w-full h-16 rounded-full bg-primary text-black font-black text-lg shadow-lg shadow-primary/20 hover:scale-[1.02] active:scale-[0.98] transition-all">
+                  <Button 
+                    onClick={async () => {
+                       try {
+                         const currentUser = auth.currentUser;
+                         if (!currentUser) {
+                           alert('Entre com sua conta para finalizar a compra.');
+                           return;
+                         }
+
+                         const idToken = await currentUser.getIdToken();
+                         const response = await fetch('/api/checkout', {
+                           method: 'POST',
+                           headers: {
+                             'Content-Type': 'application/json',
+                             Authorization: `Bearer ${idToken}`,
+                           },
+                           body: JSON.stringify({ items: cart })
+                         });
+                         const data = await response.json();
+                         if (data.success && data.init_point) {
+                           window.location.href = data.init_point;
+                         } else {
+                           alert('Erro ao iniciar checkout: ' + (data.error || 'Erro desconhecido'));
+                         }
+                       } catch (e) {
+                         alert('Erro de conexão ao iniciar o checkout.');
+                       }
+                    }}
+                    className="w-full h-16 rounded-full bg-primary text-black font-black text-lg shadow-lg shadow-primary/20 hover:scale-[1.02] active:scale-[0.98] transition-all"
+                  >
                     Finalizar Compra
                   </Button>
                   <p className="text-[10px] text-center text-white/20 font-bold uppercase tracking-widest">Pagamento seguro via Coroado Pay</p>
@@ -553,9 +819,10 @@ export function StoreView() {
           </>
         )}
       </AnimatePresence>
+        </>
+      )}
     </div>
   );
 }
 
-// Re-exporting for compatibility with existing imports if needed
 export default StoreView;

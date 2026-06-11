@@ -18,6 +18,9 @@ import { ScrollArea } from "@/components/ui/scroll-area"
 import { Input } from "@/components/ui/input"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Separator } from "@/components/ui/separator"
+import { db, auth } from "@/lib/firebase"
+import { collection, query, where, onSnapshot, addDoc, updateDoc, doc, deleteDoc, serverTimestamp, getDoc } from "firebase/firestore"
+import { onAuthStateChanged } from "firebase/auth"
 
 // Simple Progress component
 function Progress({ value, className }: { value: number, className?: string }) {
@@ -28,17 +31,26 @@ function Progress({ value, className }: { value: number, className?: string }) {
   )
 }
 
-export function SchoolView({ userRole = 'member' }: { userRole?: string }) {
+export function SchoolView({ userRole = [], isAdmin = false }: { userRole?: string[], isAdmin?: boolean }) {
   const [activeTab, setActiveTab] = React.useState("dashboard")
   const [selectedCourse, setSelectedCourse] = React.useState<any>(null)
-  const [selectedLesson, setSelectedLesson] = React.useState<any>(null)
+  const [playCourse, setPlayCourse] = React.useState<boolean>(false)
+  const [playLesson, setPlayLesson] = React.useState<any | null>(null)
+  const [user, setUser] = React.useState<any>(null)
 
-  if (selectedLesson) {
-    return <LessonPlayer lesson={selectedLesson} course={selectedCourse} onBack={() => setSelectedLesson(null)} />
+  React.useEffect(() => {
+    const unsub = onAuthStateChanged(auth, (u) => {
+      setUser(u)
+    })
+    return () => unsub()
+  }, [])
+
+  if (selectedCourse && playCourse) {
+    return <LessonPlayer course={selectedCourse} initialLesson={playLesson} user={user} onBack={() => { setPlayCourse(false); setPlayLesson(null) }} />
   }
 
   if (selectedCourse) {
-    return <CourseDetails course={selectedCourse} onBack={() => setSelectedCourse(null)} onStartLesson={(lesson) => setSelectedLesson(lesson)} />
+    return <CourseDetails course={selectedCourse} onBack={() => setSelectedCourse(null)} onStartLesson={(lesson) => { setPlayLesson(lesson); setPlayCourse(true); }} user={user} />
   }
 
   return (
@@ -68,26 +80,26 @@ export function SchoolView({ userRole = 'member' }: { userRole?: string }) {
             <TabsTrigger value="my-learning" className="rounded-full px-6 data-[state=active]:bg-primary data-[state=active]:text-black">Meu Aprendizado</TabsTrigger>
             <TabsTrigger value="certificates" className="rounded-full px-6 data-[state=active]:bg-primary data-[state=active]:text-black">Certificados</TabsTrigger>
             <TabsTrigger value="achievements" className="rounded-full px-6 data-[state=active]:bg-primary data-[state=active]:text-black">Conquistas</TabsTrigger>
-            {(userRole === 'admin' || userRole === 'teacher' || userRole === 'pastor') && (
+            {(isAdmin || userRole?.includes('teacher') || userRole?.includes('Pastor da Sede')) && (
               <TabsTrigger value="admin" className="rounded-full px-6 data-[state=active]:bg-primary data-[state=active]:text-black">Gestão</TabsTrigger>
             )}
           </TabsList>
         </ScrollArea>
         
         <TabsContent value="dashboard">
-          <SchoolDashboard onSelectCourse={setSelectedCourse} />
+          <SchoolDashboard onSelectCourse={setSelectedCourse} user={user} />
         </TabsContent>
         
         <TabsContent value="catalog">
-          <SchoolCatalog onSelectCourse={setSelectedCourse} />
+          <SchoolCatalog onSelectCourse={setSelectedCourse} user={user} />
         </TabsContent>
 
         <TabsContent value="paths">
-          <SchoolPaths />
+          <SchoolPaths user={user} />
         </TabsContent>
 
         <TabsContent value="my-learning">
-          <SchoolMyLearning onSelectCourse={setSelectedCourse} />
+          <SchoolMyLearning onSelectCourse={setSelectedCourse} user={user} />
         </TabsContent>
 
         <TabsContent value="certificates">
@@ -106,64 +118,104 @@ export function SchoolView({ userRole = 'member' }: { userRole?: string }) {
   )
 }
 
-function SchoolDashboard({ onSelectCourse }: { onSelectCourse: (course: any) => void }) {
-  const currentCourse = {
-    id: 1,
-    title: "Liderança de Célula",
-    lesson: "Aula 3 — Fundamentos da Adoração",
-    progress: 45,
-    img: "https://images.unsplash.com/photo-1517245386807-bb43f82c33c4?q=80&w=600&auto=format&fit=crop"
-  };
+function SchoolDashboard({ onSelectCourse, user }: { onSelectCourse: (course: any) => void, user?: any }) {
+  const [currentCourse, setCurrentCourse] = React.useState<any>(null)
+  
+  React.useEffect(() => {
+    if (!user?.uid) return;
+    
+    // Simplification for the current course. Fetch first enrollment.
+    const enrollmentsQuery = query(collection(db, "enrollments"), where("userId", "==", user.uid));
+    const unsub = onSnapshot(enrollmentsQuery, async (snapshot) => {
+      if (!snapshot.empty) {
+        const docSnap = snapshot.docs[0];
+        const enrData = docSnap.data();
+        // Load the course
+        const courseRef = doc(db, "courses", enrData.courseId);
+        const courseSnap = await getDoc(courseRef);
+        if (courseSnap.exists()) {
+          setCurrentCourse({
+             id: courseSnap.id,
+             ...courseSnap.data(),
+             progress: enrData.progress,
+             lesson: "Continuar de onde parou",
+          });
+        }
+      } else {
+        setCurrentCourse(null)
+      }
+    });
+    
+    return () => unsub();
+  }, [user?.uid])
 
   return (
     <div className="space-y-8">
       {/* Header de Boas-Vindas */}
       <div className="flex items-center gap-4 bg-zinc-900 border border-white/10 p-6 rounded-[2rem]">
         <Avatar className="h-16 w-16 border-2 border-primary">
-          <AvatarImage src="https://i.pravatar.cc/150?img=11" />
-          <AvatarFallback>JD</AvatarFallback>
+          <AvatarImage src={user?.photoURL || "https://i.pravatar.cc/150?img=11"} />
+          <AvatarFallback>{user?.displayName?.charAt(0) || "U"}</AvatarFallback>
         </Avatar>
         <div className="flex-1">
-          <h2 className="text-2xl font-bold">Olá, João!</h2>
+          <h2 className="text-2xl font-bold">Olá, {user?.displayName?.split(" ")[0] || "Aluno"}!</h2>
           <div className="flex items-center gap-2 mt-1">
-            <Badge variant="outline" className="border-white/10">Ministério de Louvor</Badge>
-            <Badge className="bg-orange-500/20 text-orange-500 border-none"><Flame className="w-3 h-3 mr-1" /> 7 dias seguidos</Badge>
+            <Badge variant="outline" className="border-white/10">Estudante</Badge>
+            <Badge className="bg-orange-500/20 text-orange-500 border-none"><Flame className="w-3 h-3 mr-1" /> 1 dia seguido</Badge>
           </div>
         </div>
       </div>
 
       {/* Card Continuar Estudando */}
-      <Card className="bg-zinc-900 border-white/10 overflow-hidden">
-        <div className="flex flex-col md:flex-row">
-          <div className="md:w-1/3 aspect-video relative group cursor-pointer" onClick={() => onSelectCourse(currentCourse)}>
-            <img src={currentCourse.img} alt="Curso" className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" />
-            <div className="absolute inset-0 bg-black/40 flex items-center justify-center">
-              <Button size="icon" className="h-12 w-12 rounded-full bg-primary text-black group-hover:scale-110 transition-transform">
-                <Play className="h-5 w-5 ml-1" />
-              </Button>
-            </div>
-          </div>
-          <div className="p-6 md:w-2/3 flex flex-col justify-center space-y-4">
-            <div>
-              <p className="text-sm text-white/60 font-medium">Continuar Estudando</p>
-              <h3 className="text-2xl font-bold mt-1">{currentCourse.title}</h3>
-              <p className="text-white/80 mt-1">{currentCourse.lesson}</p>
-            </div>
-            <div className="space-y-2">
-              <div className="flex justify-between text-sm">
-                <span className="text-white/60">Progresso do Módulo</span>
-                <span className="font-bold">{currentCourse.progress}%</span>
+      {currentCourse ? (
+        <Card className="bg-zinc-900 border-white/10 overflow-hidden">
+          <div className="flex flex-col md:flex-row">
+            <div className="md:w-1/3 aspect-video relative group cursor-pointer" onClick={() => onSelectCourse(currentCourse)}>
+              {currentCourse.img ? (
+                <img src={currentCourse.img} alt="Curso" className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" />
+              ) : (
+                 <div className="w-full h-full flex items-center justify-center bg-zinc-800">
+                    <BookOpen className="w-10 h-10 text-white/20" />
+                 </div>
+              )}
+              <div className="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                <Button size="icon" className="h-12 w-12 rounded-full bg-primary text-black scale-90 group-hover:scale-100 transition-transform">
+                  <Play className="h-5 w-5 ml-1" />
+                </Button>
               </div>
-              <Progress value={currentCourse.progress} className="h-2" />
-              <p className="text-xs text-white/40">~45 min restantes neste módulo</p>
             </div>
-            <div className="flex gap-4 pt-2">
-              <Button className="bg-primary text-black font-bold" onClick={() => onSelectCourse(currentCourse)}>Continuar Aula</Button>
-              <Button variant="outline" className="border-white/10">Ver todos os meus cursos</Button>
+            <div className="p-6 md:w-2/3 flex flex-col justify-center space-y-4">
+              <div>
+                <p className="text-sm text-white/60 font-medium">Continuar Estudando</p>
+                <h3 className="text-2xl font-bold mt-1">{currentCourse.title}</h3>
+                <p className="text-white/80 mt-1">{currentCourse.lesson}</p>
+              </div>
+              <div className="space-y-2">
+                <div className="flex justify-between text-sm">
+                  <span className="text-white/60">Progresso do Curso</span>
+                  <span className="font-bold">{currentCourse.progress || 0}%</span>
+                </div>
+                <Progress value={currentCourse.progress || 0} className="h-2" />
+              </div>
+              <div className="flex gap-4 pt-2">
+                <Button className="bg-primary text-black font-bold" onClick={() => onSelectCourse(currentCourse)}>Continuar Aula</Button>
+                <Button variant="outline" className="border-white/10" onClick={() => document.querySelector('button[value="my-learning"]')?.dispatchEvent(new MouseEvent('click', { bubbles: true }))}>Ver todos os meus cursos</Button>
+              </div>
             </div>
           </div>
-        </div>
-      </Card>
+        </Card>
+      ) : (
+        <Card className="bg-zinc-900 border-dashed border-white/10 overflow-hidden">
+          <div className="p-12 text-center space-y-4">
+            <BookOpen className="w-12 h-12 text-white/20 mx-auto" />
+            <div>
+               <h3 className="text-xl font-bold">Nenhum curso em andamento</h3>
+               <p className="text-white/60 mt-1">Inscreva-se em um curso para começar a estudar</p>
+            </div>
+            <Button onClick={() => document.querySelector('button[value="catalog"]')?.dispatchEvent(new MouseEvent('click', { bubbles: true }))}>Explorar Catálogo</Button>
+          </div>
+        </Card>
+      )}
 
       {/* Resumo de Atividade */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
@@ -284,16 +336,45 @@ function SchoolDashboard({ onSelectCourse }: { onSelectCourse: (course: any) => 
   )
 }
 
-function SchoolCatalog({ onSelectCourse }: { onSelectCourse: (course: any) => void }) {
+function SchoolCatalog({ onSelectCourse, user }: { onSelectCourse: (course: any) => void, user?: any }) {
   const [searchQuery, setSearchQuery] = React.useState("")
-  const [isLoading, setIsLoading] = React.useState(false)
+  const [courses, setCourses] = React.useState<CourseData[]>([])
+  const [isLoading, setIsLoading] = React.useState(true)
 
-  const courses = [
-    { id: 1, title: "Fundamentos da Fé", duration: "12h", students: 450, level: "Iniciante", format: "Vídeo", min: "Geral", img: "https://images.unsplash.com/photo-1491841550275-ad7854e35ca6?q=80&w=600&auto=format&fit=crop" },
-    { id: 2, title: "Liderança de Célula", duration: "20h", students: 120, level: "Intermediário", format: "Vídeo", min: "Células", img: "https://images.unsplash.com/photo-1517245386807-bb43f82c33c4?q=80&w=600&auto=format&fit=crop" },
-    { id: 3, title: "Teologia Prática", duration: "45h", students: 85, level: "Avançado", format: "Áudio", min: "Geral", img: "https://images.unsplash.com/photo-1456513080510-7bf3a84b82f8?q=80&w=600&auto=format&fit=crop" },
-    { id: 4, title: "Ministério Infantil", duration: "15h", students: 64, level: "Específico", format: "Vídeo", min: "Kids", img: "https://images.unsplash.com/photo-1502086223501-7ea6ecd79368?q=80&w=600&auto=format&fit=crop" },
-  ];
+  React.useEffect(() => {
+    if (!auth.currentUser) return;
+
+    let unsubscribe = () => {};
+
+    const loadCourses = async () => {
+      try {
+        const userDoc = await getDoc(doc(db, 'users', auth.currentUser!.uid));
+        if (userDoc.exists()) {
+          const tenantId = userDoc.data().tenantId;
+          const q = query(
+            collection(db, 'courses'), 
+            where('tenantId', '==', tenantId),
+            where('status', '==', 'Publicado')
+          );
+          
+          unsubscribe = onSnapshot(q, (snapshot) => {
+            const loaded: CourseData[] = [];
+            snapshot.forEach(doc => {
+              loaded.push({ id: doc.id, ...doc.data() } as CourseData);
+            });
+            setCourses(loaded);
+            setIsLoading(false);
+          });
+        }
+      } catch (error) {
+        console.error("Error fetching catalog", error);
+        setIsLoading(false);
+      }
+    };
+    
+    loadCourses();
+    return () => unsubscribe();
+  }, []);
 
   const filteredCourses = courses.filter(c => c.title.toLowerCase().includes(searchQuery.toLowerCase()))
 
@@ -331,18 +412,24 @@ function SchoolCatalog({ onSelectCourse }: { onSelectCourse: (course: any) => vo
           {filteredCourses.map((course) => (
             <Card key={course.id} className="bg-zinc-900 border-white/10 overflow-hidden group hover:border-primary/50 transition-all cursor-pointer focus-within:ring-2 focus-within:ring-primary" onClick={() => onSelectCourse(course)} tabIndex={0} role="button" aria-label={`Ver curso ${course.title}`}>
               <div className="aspect-video bg-zinc-800 relative overflow-hidden">
-                <img src={course.img} alt="" className="w-full h-full object-cover grayscale group-hover:grayscale-0 group-hover:scale-110 transition-all duration-500" aria-hidden="true" />
+                {course.img ? (
+                  <img src={course.img} alt="" className="w-full h-full object-cover grayscale group-hover:grayscale-0 group-hover:scale-110 transition-all duration-500" aria-hidden="true" />
+                ) : (
+                   <div className="w-full h-full flex items-center justify-center">
+                     <BookOpen className="w-8 h-8 text-white/20" />
+                   </div>
+                )}
                 <div className="absolute top-2 left-2 flex gap-1">
-                  <Badge className="bg-black/60 backdrop-blur-md border-white/10">{course.format === 'Vídeo' ? <Video className="w-3 h-3 mr-1" aria-hidden="true"/> : <Headphones className="w-3 h-3 mr-1" aria-hidden="true"/>} {course.format}</Badge>
+                  <Badge className="bg-black/60 backdrop-blur-md border-white/10"><Video className="w-3 h-3 mr-1" aria-hidden="true"/> Vídeo</Badge>
                   <Badge className="bg-black/60 backdrop-blur-md border-white/10">{course.level}</Badge>
                 </div>
               </div>
               <CardContent className="p-4 space-y-3">
-                <Badge variant="outline" className="border-white/10 text-[10px] uppercase">{course.min}</Badge>
+                <Badge variant="outline" className="border-white/10 text-[10px] uppercase">{course.category}</Badge>
                 <h3 className="font-bold text-lg leading-tight line-clamp-2">{course.title}</h3>
                 <div className="flex items-center gap-2 text-xs text-white/60">
-                  <Avatar className="w-5 h-5"><AvatarFallback>PR</AvatarFallback></Avatar>
-                  <span>Pr. João Silva</span>
+                  <Avatar className="w-5 h-5"><AvatarFallback>ID</AvatarFallback></Avatar>
+                  <span>Membro IDE</span>
                 </div>
                 <div className="flex items-center justify-between text-xs text-white/40 pt-2 border-t border-white/5">
                   <span className="flex items-center gap-1"><Clock className="w-3 h-3" aria-hidden="true" /> {course.duration}</span>
@@ -366,38 +453,96 @@ function SchoolCatalog({ onSelectCourse }: { onSelectCourse: (course: any) => vo
   )
 }
 
-function SchoolPaths() {
+function SchoolPaths({ user }: { user?: any }) {
+  const [paths, setPaths] = React.useState<any[]>([]);
+  const [tenantId, setTenantId] = React.useState<string | null>(null);
+
+  React.useEffect(() => {
+    if (!user?.uid) return;
+    const fetchTenant = async () => {
+      const uDoc = await getDoc(doc(db, 'users', user.uid));
+      if (uDoc.exists()) setTenantId(uDoc.data().tenantId);
+    };
+    fetchTenant();
+  }, [user?.uid]);
+
+  React.useEffect(() => {
+    if (!tenantId) return;
+    const q = query(collection(db, 'paths'), where('tenantId', '==', tenantId));
+    const unsub = onSnapshot(q, snap => {
+      setPaths(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+    });
+    return () => unsub();
+  }, [tenantId]);
+
   return (
     <div className="space-y-6">
       <div className="grid md:grid-cols-2 gap-6">
-        {[
-          { title: "Trilha do Novo Convertido", desc: "Fundamentos da Fé, Batismo, Célula", stage: "Ganhar", courses: 3 },
-          { title: "Trilha de Consolidação", desc: "Vida de Oração, Bíblia para Iniciantes", stage: "Consolidar", courses: 2 },
-          { title: "Trilha de Liderança", desc: "Liderança Servil, Discipulado", stage: "Treinar", courses: 4 },
-          { title: "Trilha de Missão", desc: "Evangelismo, Plantação de Igrejas", stage: "Enviar", courses: 3 },
-        ].map((path, i) => (
-          <Card key={i} className="bg-zinc-900 border-white/10 hover:border-primary/50 transition-colors cursor-pointer">
-            <div className="flex flex-col sm:flex-row">
-              <div className="sm:w-1/3 aspect-video sm:aspect-square bg-zinc-800 relative">
-                <div className="absolute inset-0 flex items-center justify-center">
+        {paths.length > 0 ? paths.map((path) => (
+          <Card key={path.id} className="bg-zinc-900 border-white/10 hover:border-primary/50 transition-colors cursor-pointer group">
+            <div className="flex flex-col sm:flex-row h-full">
+              <div className="sm:w-1/3 aspect-video sm:aspect-square bg-zinc-800 relative overflow-hidden flex-shrink-0">
+                <div className="absolute inset-0 flex items-center justify-center group-hover:scale-110 transition-transform">
                   <Target className="w-12 h-12 text-primary opacity-50" />
                 </div>
               </div>
               <div className="p-6 sm:w-2/3 flex flex-col justify-center space-y-2">
-                <Badge className="w-max bg-primary/20 text-primary border-none">{path.stage}</Badge>
-                <h3 className="text-xl font-bold">{path.title}</h3>
-                <p className="text-sm text-white/60">{path.desc}</p>
-                <p className="text-xs font-bold text-white/40 pt-2">{path.courses} cursos nesta trilha</p>
+                <Badge className="w-max bg-primary/20 text-primary border-none">{path.stage || "Geral"}</Badge>
+                <h3 className="text-xl font-bold line-clamp-2">{path.title}</h3>
+                <p className="text-sm text-white/60 line-clamp-2">{path.description}</p>
+                <p className="text-xs font-bold text-white/40 pt-2 flex items-center gap-1">
+                  <BookOpen className="w-3 h-3" />
+                  {(path.courses || []).length} cursos nesta trilha
+                </p>
               </div>
             </div>
           </Card>
-        ))}
+        )) : (
+          <div className="col-span-1 border border-dashed border-white/10 p-12 text-center rounded-2xl w-full text-white/40 md:col-span-2">
+            Nenhuma trilha encontrada.
+          </div>
+        )}
       </div>
     </div>
   )
 }
 
-function SchoolMyLearning({ onSelectCourse }: { onSelectCourse: (course: any) => void }) {
+function SchoolMyLearning({ onSelectCourse, user }: { onSelectCourse: (course: any) => void, user?: any }) {
+  const [enrollments, setEnrollments] = React.useState<any[]>([])
+  const [loading, setLoading] = React.useState(true)
+  const [courses, setCourses] = React.useState<any[]>([])
+
+  React.useEffect(() => {
+    if (!user?.uid) {
+      setEnrollments([])
+      setLoading(false)
+      return
+    }
+
+    const enrollmentsQuery = query(collection(db, "enrollments"), where("userId", "==", user.uid))
+    const unsubEnrollments = onSnapshot(enrollmentsQuery, (snapshot) => {
+      const enrData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }))
+      setEnrollments(enrData)
+      setLoading(false)
+    })
+
+    const coursesQuery = query(collection(db, "courses"), where("status", "==", "published"))
+    const unsubCourses = onSnapshot(coursesQuery, (snapshot) => {
+      const cData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }))
+      setCourses(cData)
+    })
+
+    return () => {
+      unsubEnrollments()
+      unsubCourses()
+    }
+  }, [user?.uid])
+
+  const enrollmentsWithDetails = enrollments.map(enr => {
+    const course = courses.find(c => c.id === enr.courseId)
+    return { ...enr, course }
+  }).filter(enr => enr.course)
+
   return (
     <div className="space-y-6">
       <Tabs defaultValue="in-progress" className="w-full">
@@ -420,29 +565,51 @@ function SchoolMyLearning({ onSelectCourse }: { onSelectCourse: (course: any) =>
         </TabsContent>
 
         <TabsContent value="in-progress" className="pt-6">
-          <div className="grid md:grid-cols-2 gap-6">
-            <Card className="bg-zinc-900 border-white/10 overflow-hidden">
-              <div className="flex">
-                <div className="w-1/3 aspect-square relative">
-                  <img src="https://images.unsplash.com/photo-1517245386807-bb43f82c33c4?q=80&w=600&auto=format&fit=crop" alt="Curso" className="w-full h-full object-cover" />
-                </div>
-                <div className="p-4 w-2/3 flex flex-col justify-between">
-                  <div>
-                    <h3 className="font-bold line-clamp-1">Liderança de Célula</h3>
-                    <p className="text-xs text-white/60 mt-1">Última aula: Aula 3 — há 2 dias</p>
-                  </div>
-                  <div className="space-y-2">
-                    <div className="flex justify-between text-xs">
-                      <span className="text-white/60">45% concluído</span>
-                      <span className="text-white/40">~3h restantes</span>
+          {loading ? (
+             <div className="flex items-center justify-center p-12">
+               <Loader2 className="w-8 h-8 animate-spin text-white/20" />
+             </div>
+          ) : enrollmentsWithDetails.length > 0 ? (
+            <div className="grid md:grid-cols-2 gap-6">
+              {enrollmentsWithDetails.map(enr => (
+                <Card key={enr.id} className="bg-zinc-900 border-white/10 overflow-hidden">
+                  <div className="flex">
+                    <div className="w-1/3 aspect-square relative">
+                      {enr.course.img ? (
+                        <img src={enr.course.img} alt={enr.course.title} className="w-full h-full object-cover" />
+                      ) : (
+                        <div className="w-full h-full bg-zinc-800 flex items-center justify-center">
+                          <BookOpen className="w-8 h-8 text-white/20" />
+                        </div>
+                      )}
                     </div>
-                    <Progress value={45} className="h-1.5" />
+                    <div className="p-4 w-2/3 flex flex-col justify-between">
+                      <div>
+                        <h3 className="font-bold line-clamp-1">{enr.course.title}</h3>
+                        <p className="text-xs text-white/60 mt-1">Último acesso: recent</p>
+                      </div>
+                      <div className="space-y-2">
+                        <div className="flex justify-between text-xs">
+                          <span className="text-white/60">{enr.progress}% concluído</span>
+                        </div>
+                        <Progress value={enr.progress} className="h-1.5" />
+                      </div>
+                      <Button size="sm" className="w-full bg-primary text-black mt-2" onClick={() => onSelectCourse(enr.course)}>Continuar</Button>
+                    </div>
                   </div>
-                  <Button size="sm" className="w-full bg-primary text-black mt-2" onClick={() => onSelectCourse({ title: "Liderança de Célula" })}>Continuar</Button>
-                </div>
-              </div>
-            </Card>
-          </div>
+                </Card>
+              ))}
+            </div>
+          ) : (
+             <div className="text-center py-12 space-y-4 border border-dashed border-white/10 rounded-2xl">
+               <BookOpen className="w-12 h-12 text-white/20 mx-auto" />
+               <div>
+                 <h3 className="font-bold text-lg">Nenhum curso em andamento</h3>
+                 <p className="text-white/60 text-sm">Inscreva-se em um curso para começar sua jornada de aprendizado.</p>
+               </div>
+               <Button variant="outline" className="border-white/10">Explorar Catálogo</Button>
+             </div>
+          )}
         </TabsContent>
       </Tabs>
     </div>
@@ -548,7 +715,322 @@ function SchoolAchievements() {
   )
 }
 
+type CourseData = {
+  id: string;
+  title: string;
+  description: string;
+  level: string;
+  duration: string;
+  img: string;
+  status: string;
+  category: string;
+  students: number;
+};
+
+function AdminCourseDetails({ course, onBack, tenantId }: { course: CourseData, onBack: () => void, tenantId: string | null }) {
+  const [modules, setModules] = React.useState<any[]>([]);
+  const [lessons, setLessons] = React.useState<any[]>([]);
+  const [showAddModule, setShowAddModule] = React.useState(false);
+  const [showAddLesson, setShowAddLesson] = React.useState<string | null>(null); // moduleId
+  const [newModuleTitle, setNewModuleTitle] = React.useState('');
+  const [newLessonData, setNewLessonData] = React.useState({ title: '', videoUrl: '', isFree: false, description: '' });
+
+  React.useEffect(() => {
+    if (!tenantId) return;
+
+    // Fetch Modules
+    const qm = query(collection(db, 'modules'), where('courseId', '==', course.id));
+    const unsubM = onSnapshot(qm, (snapshot) => {
+      setModules(snapshot.docs.map(d => ({ id: d.id, ...d.data() } as any)).sort((a: any, b: any) => a.order - b.order));
+    });
+
+    // Fetch Lessons
+    const ql = query(collection(db, 'lessons'), where('courseId', '==', course.id));
+    const unsubL = onSnapshot(ql, (snapshot) => {
+      setLessons(snapshot.docs.map(d => ({ id: d.id, ...d.data() } as any)).sort((a: any, b: any) => a.order - b.order));
+    });
+
+    return () => { unsubM(); unsubL(); };
+  }, [course.id, tenantId]);
+
+  const handleAddModule = async () => {
+    if (!newModuleTitle || !tenantId) return;
+    try {
+      await addDoc(collection(db, 'modules'), {
+        title: newModuleTitle,
+        courseId: course.id,
+        tenantId,
+        order: modules.length,
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp()
+      });
+      setShowAddModule(false);
+      setNewModuleTitle('');
+    } catch (e) {
+      console.error(e);
+    }
+  };
+
+  const handleAddLesson = async (moduleId: string) => {
+    if (!newLessonData.title || !tenantId) return;
+    try {
+      const moduleLessons = lessons.filter(l => l.moduleId === moduleId);
+      await addDoc(collection(db, 'lessons'), {
+        title: newLessonData.title,
+        description: newLessonData.description,
+        videoUrl: newLessonData.videoUrl,
+        moduleId,
+        courseId: course.id,
+        tenantId,
+        order: moduleLessons.length,
+        isFree: newLessonData.isFree,
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp()
+      });
+      setShowAddLesson(null);
+      setNewLessonData({ title: '', videoUrl: '', isFree: false, description: '' });
+    } catch (e) {
+      console.error(e);
+    }
+  };
+
+  return (
+    <div className="space-y-6">
+      <div className="flex items-center gap-4">
+        <Button variant="ghost" onClick={onBack} className="text-white/60 hover:text-white p-0 h-auto">
+          <ArrowLeft className="w-5 h-5 mr-2" /> Voltar
+        </Button>
+        <h2 className="text-2xl font-bold text-white flex-1">{course.title}</h2>
+        <Badge className={course.status === 'Publicado' ? 'bg-green-500/20 text-green-400 border-none' : 'bg-zinc-500/20 text-zinc-400 border-none'}>
+          {course.status}
+        </Badge>
+      </div>
+
+      <Card className="bg-zinc-900 border-white/10">
+        <CardHeader className="flex flex-row items-center justify-between pb-2">
+          <div>
+            <CardTitle>Módulos e Aulas</CardTitle>
+            <CardDescription>Estruture as aulas do seu curso.</CardDescription>
+          </div>
+          <Button onClick={() => setShowAddModule(true)} size="sm" className="bg-white text-black hover:bg-white/90">
+            <Plus className="w-4 h-4 mr-2" /> Adicionar Módulo
+          </Button>
+        </CardHeader>
+        <CardContent className="space-y-6 pt-4">
+          {modules.map((m, mIndex) => {
+            const modLessons = lessons.filter(l => l.moduleId === m.id);
+            return (
+              <div key={m.id} className="border border-white/10 rounded-xl overflow-hidden">
+                <div className="bg-black/20 p-4 flex items-center justify-between">
+                  <h4 className="font-bold">Módulo {mIndex + 1}: {m.title}</h4>
+                  <Button variant="ghost" size="sm" onClick={() => setShowAddLesson(m.id)} className="h-8 text-xs text-primary hover:text-primary hover:bg-primary/10">
+                    <Plus className="w-3 h-3 mr-1" /> Nova Aula
+                  </Button>
+                </div>
+                <div className="divide-y divide-white/5">
+                  {modLessons.length === 0 ? (
+                    <div className="p-4 text-sm text-white/40 text-center">Nenhuma aula neste módulo.</div>
+                  ) : (
+                    modLessons.map((l, lIndex) => (
+                      <div key={l.id} className="p-4 flex items-center justify-between hover:bg-white/5 group">
+                        <div className="flex items-center gap-3">
+                          <div className="w-6 h-6 rounded-full bg-white/5 flex items-center justify-center text-xs font-bold text-white/40">
+                            {lIndex + 1}
+                          </div>
+                          <div>
+                            <p className="text-sm font-bold flex items-center gap-2">
+                              {l.title}
+                              {l.isFree && <Badge variant="secondary" className="text-[10px] bg-primary/20 text-primary border-none">Grátis</Badge>}
+                            </p>
+                            <p className="text-xs text-white/40 flex items-center gap-1 mt-1">
+                              <Video className="w-3 h-3" /> {l.videoUrl || 'Sem vídeo atribuído'}
+                            </p>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                          <Button variant="ghost" size="icon" className="h-8 w-8 text-white/40 hover:text-white"><Edit3 className="w-4 h-4" /></Button>
+                        </div>
+                      </div>
+                    ))
+                  )}
+                </div>
+              </div>
+            )
+          })}
+
+          {modules.length === 0 && (
+            <div className="text-center py-12 border border-dashed border-white/10 rounded-xl">
+              <p className="text-white/40 mb-4">Seu curso ainda não possui módulos.</p>
+              <Button onClick={() => setShowAddModule(true)} variant="outline" className="border-white/10">Criar Primeiro Módulo</Button>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Add Module Modal */}
+      <AnimatePresence>
+        {showAddModule && (
+          <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setShowAddModule(false)} className="absolute inset-0 bg-black/80 backdrop-blur-sm" />
+            <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.95 }} className="relative w-full max-w-sm glass-card p-6 rounded-2xl space-y-4">
+              <h3 className="font-bold text-lg">Novo Módulo</h3>
+              <Input placeholder="Título do Módulo" value={newModuleTitle} onChange={e => setNewModuleTitle(e.target.value)} className="bg-black/50 border-white/10" />
+              <div className="flex gap-2 justify-end">
+                <Button variant="ghost" onClick={() => setShowAddModule(false)}>Cancelar</Button>
+                <Button onClick={handleAddModule} disabled={!newModuleTitle} className="bg-primary text-black">Adicionar</Button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* Add Lesson Modal */}
+      <AnimatePresence>
+        {showAddLesson && (
+          <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setShowAddLesson(null)} className="absolute inset-0 bg-black/80 backdrop-blur-sm" />
+            <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.95 }} className="relative w-full max-w-md glass-card p-6 rounded-2xl space-y-4">
+              <h3 className="font-bold text-lg">Nova Aula</h3>
+              <div className="space-y-3">
+                <Input placeholder="Título da Aula" value={newLessonData.title} onChange={e => setNewLessonData({...newLessonData, title: e.target.value})} className="bg-black/50 border-white/10" />
+                <Input placeholder="URL do Vídeo (Ex: YouTube, Vimeo...)" value={newLessonData.videoUrl} onChange={e => setNewLessonData({...newLessonData, videoUrl: e.target.value})} className="bg-black/50 border-white/10" />
+                <textarea 
+                  className="w-full bg-black/50 border border-white/10 rounded-md p-3 text-sm text-white resize-none h-24"
+                  placeholder="Descrição da aula..."
+                  value={newLessonData.description}
+                  onChange={e => setNewLessonData({...newLessonData, description: e.target.value})}
+                />
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input type="checkbox" checked={newLessonData.isFree} onChange={e => setNewLessonData({...newLessonData, isFree: e.target.checked})} className="accent-primary w-4 h-4" />
+                  <span className="text-sm text-white/80">Aula gratuita (degustação)</span>
+                </label>
+              </div>
+              <div className="flex gap-2 justify-end pt-2">
+                <Button variant="ghost" onClick={() => setShowAddLesson(null)}>Cancelar</Button>
+                <Button onClick={() => handleAddLesson(showAddLesson)} disabled={!newLessonData.title} className="bg-primary text-black">Adicionar Aula</Button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+    </div>
+  )
+}
+
 function SchoolAdmin() {
+  const [courses, setCourses] = React.useState<CourseData[]>([]);
+  const [paths, setPaths] = React.useState<any[]>([]);
+  const [tenantId, setTenantId] = React.useState<string | null>(null);
+  const [showAddCourse, setShowAddCourse] = React.useState(false);
+  const [showAddPath, setShowAddPath] = React.useState(false);
+  const [newCourse, setNewCourse] = React.useState({ title: '', category: 'Geral', status: 'Rascunho' });
+  const [newPath, setNewPath] = React.useState({ title: '', description: '', stage: 'Geral' });
+  const [selectedCourseId, setSelectedCourseId] = React.useState<string | null>(null);
+  const [selectedPathForCourses, setSelectedPathForCourses] = React.useState<string | null>(null);
+
+  React.useEffect(() => {
+    if (!auth.currentUser) return;
+    const fetchTenant = async () => {
+      try {
+        const userDoc = await getDoc(doc(db, 'users', auth.currentUser!.uid));
+        if (userDoc.exists()) {
+          setTenantId(userDoc.data().tenantId);
+        }
+      } catch (error) {
+        console.error("Error fetching user tenant:", error);
+      }
+    };
+    fetchTenant();
+  }, []);
+
+  React.useEffect(() => {
+    if (!tenantId || !auth.currentUser) return;
+    
+    const q = query(collection(db, 'courses'), where('tenantId', '==', tenantId));
+    const unsubscribeTasks = onSnapshot(q, (snapshot) => {
+      const loadedCourses: CourseData[] = [];
+      snapshot.forEach(doc => {
+        const data = doc.data();
+        loadedCourses.push({
+          id: doc.id,
+          title: data.title,
+          description: data.description || '',
+          level: data.level || 'Básico',
+          duration: data.duration || '0h',
+          img: data.img || '',
+          status: data.status,
+          category: data.category || 'Geral',
+          students: data.students || 0
+        });
+      });
+      setCourses(loadedCourses);
+    }, (error) => {
+      console.error("Error fetching courses", error);
+    });
+
+    const qPaths = query(collection(db, 'paths'), where('tenantId', '==', tenantId));
+    const unsubscribePaths = onSnapshot(qPaths, (snapshot) => {
+      setPaths(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+    }, (error) => {
+      console.error("Error fetching paths", error);
+    });
+
+    return () => { unsubscribeTasks(); unsubscribePaths(); };
+  }, [tenantId]);
+
+  const handleAddCourse = async () => {
+    if (!tenantId || !auth.currentUser) return;
+    if (!newCourse.title) return;
+    
+    try {
+      await addDoc(collection(db, 'courses'), {
+        title: newCourse.title,
+        status: newCourse.status,
+        category: newCourse.category,
+        description: '',
+        level: 'Básico',
+        duration: '0h',
+        img: '',
+        students: 0,
+        tenantId: tenantId,
+        createdBy: auth.currentUser.uid,
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp()
+      });
+      setShowAddCourse(false);
+      setNewCourse({ title: '', category: 'Geral', status: 'Rascunho' });
+    } catch (error) {
+      console.error("Error adding course", error);
+    }
+  };
+
+  const handleAddPath = async () => {
+    if (!tenantId || !newPath.title) return;
+    try {
+      await addDoc(collection(db, 'paths'), {
+        title: newPath.title,
+        description: newPath.description,
+        stage: newPath.stage,
+        courses: [],
+        tenantId,
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp()
+      });
+      setShowAddPath(false);
+      setNewPath({ title: '', description: '', stage: 'Geral' });
+    } catch (e) {
+      console.error("Error adding path", e);
+    }
+  };
+
+  if (selectedCourseId) {
+    const course = courses.find(c => c.id === selectedCourseId)
+    if (course) {
+      return <AdminCourseDetails course={course} onBack={() => setSelectedCourseId(null)} tenantId={tenantId} />
+    }
+  }
+
   return (
     <div className="space-y-6">
       <Tabs defaultValue="overview" className="w-full">
@@ -558,6 +1040,7 @@ function SchoolAdmin() {
             <TabsTrigger value="engagement" className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent px-0 py-3">Engajamento (Eclesiástico)</TabsTrigger>
             <TabsTrigger value="financial" className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent px-0 py-3">Financeiro</TabsTrigger>
             <TabsTrigger value="courses" className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent px-0 py-3">Gestão de Cursos</TabsTrigger>
+            <TabsTrigger value="paths" className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent px-0 py-3">Gestão de Trilhas</TabsTrigger>
             <TabsTrigger value="members" className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent px-0 py-3">Membros</TabsTrigger>
             <TabsTrigger value="support" className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent px-0 py-3">Suporte (Dúvidas)</TabsTrigger>
           </TabsList>
@@ -635,7 +1118,7 @@ function SchoolAdmin() {
             <Card className="bg-zinc-900 border-white/10">
               <CardHeader><CardTitle>Matrículas (Últimos 30 dias)</CardTitle></CardHeader>
               <CardContent className="h-[250px]">
-                <ResponsiveContainer width="100%" height="100%">
+                <ResponsiveContainer width="100%" height="100%" minHeight={250}>
                   <LineChart data={[{name: '01', val: 12}, {name: '05', val: 19}, {name: '10', val: 15}, {name: '15', val: 25}, {name: '20', val: 22}, {name: '25', val: 30}, {name: '30', val: 28}]}>
                     <CartesianGrid strokeDasharray="3 3" stroke="#333" vertical={false} />
                     <XAxis dataKey="name" stroke="#666" fontSize={12} tickLine={false} axisLine={false} />
@@ -649,7 +1132,7 @@ function SchoolAdmin() {
             <Card className="bg-zinc-900 border-white/10">
               <CardHeader><CardTitle>Engajamento por Ministério</CardTitle></CardHeader>
               <CardContent className="h-[250px] flex items-center justify-center">
-                <ResponsiveContainer width="100%" height="100%">
+                <ResponsiveContainer width="100%" height="100%" minHeight={250}>
                   <PieChart>
                     <Pie
                       data={[
@@ -721,7 +1204,28 @@ function SchoolAdmin() {
           <Card className="bg-zinc-900 border-white/10">
             <CardHeader><CardTitle>Transações Recentes</CardTitle></CardHeader>
             <CardContent>
-              <div className="overflow-x-auto">
+              {/* Mobile View */}
+              <div className="md:hidden space-y-4">
+                {[
+                  { date: "Hoje, 10:23", user: "João Silva", prod: "Assinatura Mensal", val: "R$ 49,90", status: "Pago", color: "text-green-500" },
+                  { date: "Hoje, 09:15", user: "Maria Costa", prod: "Curso: Liderança", val: "R$ 97,00", status: "Pago", color: "text-green-500" },
+                  { date: "Ontem, 18:40", user: "Pedro Alves", prod: "Assinatura Anual", val: "R$ 499,00", status: "Pendente", color: "text-yellow-500" },
+                ].map((tx, i) => (
+                  <div key={i} className="bg-black/30 p-4 rounded-lg border border-white/5 space-y-2">
+                    <div className="flex justify-between items-center text-sm">
+                      <span className="font-bold">{tx.user}</span>
+                      <span className={`font-bold ${tx.color}`}>{tx.status}</span>
+                    </div>
+                    <div className="text-white/60 text-xs flex justify-between">
+                      <span>{tx.prod}</span>
+                      <span>{tx.date}</span>
+                    </div>
+                    <div className="text-right font-mono font-bold mt-2">{tx.val}</div>
+                  </div>
+                ))}
+              </div>
+              {/* Desktop View */}
+              <div className="hidden md:block overflow-x-auto">
                 <table className="w-full text-sm text-left">
                   <thead className="text-xs text-white/40 uppercase border-b border-white/10">
                     <tr><th className="pb-3 font-bold">Data</th><th className="pb-3 font-bold">Membro</th><th className="pb-3 font-bold">Produto</th><th className="pb-3 font-bold">Valor</th><th className="pb-3 font-bold">Status</th></tr>
@@ -753,38 +1257,250 @@ function SchoolAdmin() {
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-white/40" />
               <Input placeholder="Buscar cursos..." className="pl-9 bg-zinc-900 border-white/10" />
             </div>
-            <Button className="bg-primary text-black"><Plus className="w-4 h-4 mr-2" /> Novo Curso</Button>
+            <Button className="bg-primary text-black" onClick={() => setShowAddCourse(true)}><Plus className="w-4 h-4 mr-2" /> Novo Curso</Button>
           </div>
+
           <Card className="bg-zinc-900 border-white/10">
-            <div className="overflow-x-auto">
+            {/* Mobile View */}
+            <div className="md:hidden p-4 space-y-4">
+              {courses.length === 0 ? (
+                <div className="text-center text-white/40 font-bold py-8">Nenhum curso cadastrado ainda.</div>
+              ) : (
+                courses.map(c => (
+                  <div key={c.id} className="bg-black/30 p-4 rounded-lg border border-white/5 space-y-2 relative" onClick={() => setSelectedCourseId(c.id)}>
+                    <div className="flex justify-between items-start">
+                      <div className="font-bold pr-8">{c.title}</div>
+                      <Badge className={`absolute top-4 right-4 ${c.status === 'Publicado' ? 'bg-green-500/20 text-green-400 border-none' : 'bg-zinc-500/20 text-zinc-400 border-none'}`}>{c.status}</Badge>
+                    </div>
+                    <div className="flex gap-2">
+                       <Badge variant="outline" className="text-[10px] border-white/10">{c.category}</Badge>
+                    </div>
+                    <div className="text-sm pt-2 text-white/60">
+                      <strong>{c.students}</strong> matrículas
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+            {/* Desktop View */}
+            <div className="hidden md:block overflow-x-auto">
               <table className="w-full text-sm text-left">
                 <thead className="text-xs text-white/40 uppercase border-b border-white/10 bg-black/20">
-                  <tr><th className="p-4 font-bold">Curso</th><th className="p-4 font-bold">Ministério</th><th className="p-4 font-bold">Módulos/Aulas</th><th className="p-4 font-bold">Matrículas</th><th className="p-4 font-bold">Status</th><th className="p-4 font-bold"></th></tr>
+                  <tr><th className="p-4 font-bold">Curso</th><th className="p-4 font-bold">Categoria</th><th className="p-4 font-bold">Matrículas</th><th className="p-4 font-bold">Status</th><th className="p-4 font-bold"></th></tr>
                 </thead>
                 <tbody className="divide-y divide-white/5">
-                  {[
-                    { name: "Liderança de Célula", min: "Células", content: "3 mod • 12 aulas", students: 847, status: "Publicado" },
-                    { name: "Fundamentos da Fé", min: "Geral", content: "2 mod • 8 aulas", students: 1240, status: "Publicado" },
-                    { name: "Teologia Prática", min: "Ensino", content: "5 mod • 20 aulas", students: 0, status: "Rascunho" },
-                  ].map((c, i) => (
-                    <tr key={i} className="hover:bg-white/5">
-                      <td className="p-4 font-bold">{c.name}</td>
-                      <td className="p-4"><Badge variant="outline" className="border-white/10">{c.min}</Badge></td>
-                      <td className="p-4 text-white/60">{c.content}</td>
-                      <td className="p-4">{c.students}</td>
-                      <td className="p-4">
-                        <Badge className={c.status === 'Publicado' ? 'bg-green-500/20 text-green-400 border-none' : 'bg-white/10 text-white/60 border-none'}>{c.status}</Badge>
-                      </td>
-                      <td className="p-4 text-right">
-                        <Button variant="ghost" size="icon" className="h-8 w-8 text-white/60 hover:text-white"><Edit3 className="w-4 h-4" /></Button>
+                  {courses.length === 0 ? (
+                    <tr>
+                      <td colSpan={5} className="p-8 text-center text-white/40 font-bold">
+                        Nenhum curso cadastrado ainda.
                       </td>
                     </tr>
-                  ))}
+                  ) : (
+                    courses.map((c) => (
+                      <tr key={c.id} className="hover:bg-white/5 cursor-pointer" onClick={() => setSelectedCourseId(c.id)}>
+                        <td className="p-4 font-bold">{c.title}</td>
+                        <td className="p-4"><Badge variant="outline" className="border-white/10">{c.category}</Badge></td>
+                        <td className="p-4">{c.students}</td>
+                        <td className="p-4">
+                          <Badge className={c.status === 'Publicado' ? 'bg-green-500/20 text-green-400 border-none' : 'bg-zinc-500/20 text-zinc-400 border-none'}>{c.status}</Badge>
+                        </td>
+                        <td className="p-4 text-right">
+                          <Button variant="ghost" size="icon" className="h-8 w-8 text-white/60 hover:text-white" onClick={(e) => { e.stopPropagation(); setSelectedCourseId(c.id); }}><Edit3 className="w-4 h-4" /></Button>
+                        </td>
+                      </tr>
+                    ))
+                  )}
                 </tbody>
               </table>
             </div>
           </Card>
         </TabsContent>
+
+        <AnimatePresence>
+          {showAddCourse && (
+            <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+              <motion.div 
+                initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+                onClick={() => setShowAddCourse(false)} className="absolute inset-0 bg-black/80 backdrop-blur-sm"
+              />
+              <motion.div 
+                initial={{ opacity: 0, scale: 0.9, y: 20 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 0.9, y: 20 }}
+                className="relative w-full max-w-md glass-card p-8 rounded-[2.5rem] space-y-6"
+              >
+                <div className="space-y-2">
+                  <h3 className="text-2xl font-black font-serif italic text-white">Novo Curso</h3>
+                  <p className="text-sm text-white/60">Crie a base do curso para adicionar os módulos e aulas.</p>
+                </div>
+                
+                <div className="space-y-4">
+                  <div className="space-y-2">
+                    <label className="text-xs font-bold text-white/40 uppercase">Título do Curso</label>
+                    <Input 
+                      className="bg-zinc-900 border-white/10" 
+                      placeholder="Ex: Treinamento de Líderes" 
+                      value={newCourse.title}
+                      onChange={e => setNewCourse({...newCourse, title: e.target.value})}
+                    />
+                  </div>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <label className="text-xs font-bold text-white/40 uppercase">Categoria</label>
+                      <select 
+                        className="w-full h-10 bg-zinc-900 border border-white/10 rounded-md px-3 text-white"
+                        value={newCourse.category}
+                        onChange={e => setNewCourse({...newCourse, category: e.target.value})}
+                      >
+                        <option value="Geral">Geral</option>
+                        <option value="Liderança">Liderança</option>
+                        <option value="Ministérios">Ministérios</option>
+                        <option value="Jovens">Jovens</option>
+                        <option value="Kids">Kids</option>
+                      </select>
+                    </div>
+                    <div className="space-y-2">
+                      <label className="text-xs font-bold text-white/40 uppercase">Status Inicial</label>
+                      <select 
+                        className="w-full h-10 bg-zinc-900 border border-white/10 rounded-md px-3 text-white"
+                        value={newCourse.status}
+                        onChange={e => setNewCourse({...newCourse, status: e.target.value})}
+                      >
+                        <option value="Rascunho">Rascunho</option>
+                        <option value="Publicado">Publicado</option>
+                      </select>
+                    </div>
+                  </div>
+                  
+                  <div className="pt-4 flex gap-2">
+                    <Button variant="ghost" onClick={() => setShowAddCourse(false)} className="flex-1">Cancelar</Button>
+                    <Button onClick={handleAddCourse} disabled={!newCourse.title} className="flex-1 bg-primary text-black font-bold">Criar Curso</Button>
+                  </div>
+                </div>
+              </motion.div>
+            </div>
+          )}
+        </AnimatePresence>
+
+        <TabsContent value="paths" className="pt-6 space-y-6">
+          <div className="flex justify-between items-center">
+            <h2 className="text-xl font-bold">Gestão de Trilhas</h2>
+            <Button className="bg-primary text-black" onClick={() => setShowAddPath(true)}><Plus className="w-4 h-4 mr-2" /> Nova Trilha</Button>
+          </div>
+          <div className="grid md:grid-cols-2 gap-6">
+            {paths.map(path => (
+              <Card key={path.id} className="bg-zinc-900 border-white/10">
+                <CardHeader>
+                  <div className="flex justify-between">
+                    <Badge variant="outline" className="text-primary border-primary/20 bg-primary/10">{path.stage}</Badge>
+                    <div className="flex gap-2">
+                       <Button variant="ghost" size="icon" className="h-8 w-8 text-white/40"><Edit3 className="w-4 h-4" /></Button>
+                    </div>
+                  </div>
+                  <CardTitle className="mt-2">{path.title}</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <p className="text-sm text-white/60 mb-4">{path.description}</p>
+                  <div className="space-y-2">
+                    <p className="text-xs text-white/40 font-bold uppercase">Cursos vinculados ({(path.courses || []).length})</p>
+                    <div className="flex flex-wrap gap-2">
+                      {(path.courses || []).map((cid: string, i: number) => {
+                        const c = courses.find(cc => cc.id === cid);
+                        return c ? <Badge key={i} variant="outline" className="border-white/10 text-white/60 bg-white/5">{c.title}</Badge> : null;
+                      })}
+                      {(path.courses || []).length === 0 && <span className="text-xs text-white/20 italic">Vazio</span>}
+                    </div>
+                  </div>
+                  <Button variant="outline" size="sm" className="w-full mt-4 border-white/10 hover:bg-white/5" onClick={() => setSelectedPathForCourses(path.id)}>Vincular Curso</Button>
+                </CardContent>
+              </Card>
+            ))}
+            {paths.length === 0 && (
+               <div className="col-span-2 text-center p-8 border border-dashed border-white/10 rounded-xl text-white/40">
+                 Nenhuma trilha criada.
+               </div>
+            )}
+          </div>
+        </TabsContent>
+
+        <AnimatePresence>
+          {showAddPath && (
+            <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+              <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setShowAddPath(false)} className="absolute inset-0 bg-black/80 backdrop-blur-sm" />
+              <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.95 }} className="relative w-full max-w-sm glass-card p-6 rounded-2xl space-y-4">
+                <h3 className="font-bold text-lg">Nova Trilha de Aprendizado</h3>
+                <div className="space-y-3">
+                  <Input placeholder="Título da Trilha" value={newPath.title} onChange={e => setNewPath({...newPath, title: e.target.value})} className="bg-black/50 border-white/10" />
+                  <Input placeholder="Estágio (ex: Ganhar, Consolidar)" value={newPath.stage} onChange={e => setNewPath({...newPath, stage: e.target.value})} className="bg-black/50 border-white/10" />
+                  <textarea 
+                    className="w-full bg-black/50 border border-white/10 rounded-md p-3 text-sm text-white resize-none h-20"
+                    placeholder="Descrição..."
+                    value={newPath.description}
+                    onChange={e => setNewPath({...newPath, description: e.target.value})}
+                  />
+                </div>
+                <div className="flex gap-2 justify-end">
+                  <Button variant="ghost" onClick={() => setShowAddPath(false)}>Cancelar</Button>
+                  <Button onClick={handleAddPath} disabled={!newPath.title} className="bg-primary text-black">Adicionar</Button>
+                </div>
+              </motion.div>
+            </div>
+          )}
+          
+          {selectedPathForCourses && (
+            <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+              <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setSelectedPathForCourses(null)} className="absolute inset-0 bg-black/80 backdrop-blur-sm" />
+              <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.95 }} className="relative w-full max-w-md glass-card p-6 rounded-2xl space-y-4">
+                <h3 className="font-bold text-lg">Vincular Cursos à Trilha</h3>
+                <p className="text-sm text-white/60">Selecione os cursos que deseja adicionar à trilha.</p>
+                
+                <div className="max-h-60 overflow-y-auto space-y-2 pr-2">
+                  {courses.map(course => {
+                    const path = paths.find(p => p.id === selectedPathForCourses);
+                    const isLinked = (path?.courses || []).includes(course.id);
+                    
+                    return (
+                      <div key={course.id} className="flex items-center justify-between p-3 bg-black/50 border border-white/5 rounded-lg">
+                        <div className="flex items-center gap-3">
+                          <BookOpen className="w-4 h-4 text-primary" />
+                          <div>
+                            <p className="text-sm font-bold line-clamp-1">{course.title}</p>
+                            <p className="text-xs text-white/40">{course.category}</p>
+                          </div>
+                        </div>
+                        <Button 
+                          size="sm" 
+                          variant={isLinked ? "outline" : "default"}
+                          className={isLinked ? "border-red-500/50 text-red-500 hover:bg-red-500/10" : "bg-primary text-black"}
+                          onClick={async () => {
+                            if (!path) return;
+                            try {
+                              let newCourses = [...(path.courses || [])];
+                              if (isLinked) {
+                                newCourses = newCourses.filter((id: string) => id !== course.id);
+                              } else {
+                                newCourses.push(course.id);
+                              }
+                              await updateDoc(doc(db, 'paths', path.id), {
+                                courses: newCourses,
+                                updatedAt: serverTimestamp()
+                              });
+                            } catch(e) { console.error('Error updating path course:', e) }
+                          }}
+                        >
+                          {isLinked ? 'Remover' : 'Adicionar'}
+                        </Button>
+                      </div>
+                    )
+                  })}
+                  {courses.length === 0 && <p className="text-xs text-white/40 text-center py-4">Nenhum curso cadastrado ainda.</p>}
+                </div>
+                
+                <div className="flex justify-end pt-2">
+                  <Button className="bg-white/10 hover:bg-white/20 text-white" onClick={() => setSelectedPathForCourses(null)}>Concluído</Button>
+                </div>
+              </motion.div>
+            </div>
+          )}
+        </AnimatePresence>
 
         <TabsContent value="members" className="pt-6 space-y-6">
           <div className="flex gap-4">
@@ -795,7 +1511,44 @@ function SchoolAdmin() {
             <Button variant="outline" className="border-white/10"><Filter className="w-4 h-4 mr-2" /> Filtros</Button>
           </div>
           <Card className="bg-zinc-900 border-white/10">
-            <div className="overflow-x-auto">
+            {/* Mobile Cards */}
+            <div className="grid grid-cols-1 gap-4 md:hidden p-4">
+              {[
+                { name: "João Silva", min: "Louvor", courses: "4 / 2", access: "Hoje", status: "active" },
+                { name: "Maria Costa", min: "Jovens", courses: "2 / 0", access: "Há 2 dias", status: "active" },
+                { name: "Pedro Alves", min: "Células", courses: "1 / 1", access: "Há 20 dias", status: "inactive" },
+              ].map((m, i) => (
+                <div key={i} className="bg-black/50 border border-white/5 rounded-xl p-4 space-y-4">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <Avatar className="w-10 h-10"><AvatarFallback>{m.name[0]}</AvatarFallback></Avatar>
+                      <span className="font-bold">{m.name}</span>
+                    </div>
+                    <Button variant="ghost" size="sm" className="text-primary hover:text-primary hover:bg-primary/10">Ver Perfil</Button>
+                  </div>
+                  <div className="grid grid-cols-2 gap-2 text-sm pt-2 border-t border-white/5 mt-2">
+                    <div>
+                      <p className="text-[10px] text-white/40 uppercase font-bold">Ministério</p>
+                      <p className="text-white/80">{m.min}</p>
+                    </div>
+                    <div>
+                      <p className="text-[10px] text-white/40 uppercase font-bold">Cursos</p>
+                      <p className="text-white/80">{m.courses}</p>
+                    </div>
+                    <div className="col-span-2">
+                      <p className="text-[10px] text-white/40 uppercase font-bold">Último Acesso</p>
+                      <span className={`text-sm flex items-center gap-2 ${m.status === 'inactive' ? 'text-red-400' : 'text-white/80'}`}>
+                        <div className={`w-2 h-2 rounded-full ${m.status === 'inactive' ? 'bg-red-500' : 'bg-green-500'}`} />
+                        {m.access}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            {/* Desktop Table */}
+            <div className="hidden md:block overflow-x-auto">
               <table className="w-full text-sm text-left">
                 <thead className="text-xs text-white/40 uppercase border-b border-white/10 bg-black/20">
                   <tr><th className="p-4 font-bold">Membro</th><th className="p-4 font-bold">Ministério</th><th className="p-4 font-bold">Cursos (Matr/Concl)</th><th className="p-4 font-bold">Último Acesso</th><th className="p-4 font-bold"></th></tr>
@@ -866,7 +1619,57 @@ function SchoolAdmin() {
 }
 
 // --- DETALHES DO CURSO ---
-function CourseDetails({ course, onBack, onStartLesson }: { course: any, onBack: () => void, onStartLesson: (lesson: any) => void }) {
+function CourseDetails({ course, onBack, onStartLesson, user }: { course: any, onBack: () => void, onStartLesson: (lesson: any, enrollment?: any) => void, user?: any }) {
+  const [enrollment, setEnrollment] = React.useState<any>(null)
+  const [enrolling, setEnrolling] = React.useState(false)
+  const [modules, setModules] = React.useState<any[]>([]);
+  const [lessons, setLessons] = React.useState<any[]>([]);
+  const [expandedModule, setExpandedModule] = React.useState<string | null>(null);
+
+  React.useEffect(() => {
+    if (!user?.uid || !course?.id) return;
+    const q = query(collection(db, "enrollments"), where("userId", "==", user.uid), where("courseId", "==", course.id));
+    const unsub = onSnapshot(q, (snap) => {
+      if (!snap.empty) {
+        setEnrollment({ id: snap.docs[0].id, ...snap.docs[0].data() })
+      } else {
+        setEnrollment(null)
+      }
+    });
+
+    const qm = query(collection(db, 'modules'), where('courseId', '==', course.id));
+    const unsubM = onSnapshot(qm, (snap) => setModules(snap.docs.map(d => ({id: d.id, ...d.data()} as any)).sort((a: any,b: any) => a.order - b.order)));
+    
+    const ql = query(collection(db, 'lessons'), where('courseId', '==', course.id));
+    const unsubL = onSnapshot(ql, (snap) => setLessons(snap.docs.map(d => ({id: d.id, ...d.data()} as any)).sort((a: any,b: any) => a.order - b.order)));
+
+    return () => { unsub(); unsubM(); unsubL(); }
+  }, [user?.uid, course?.id])
+
+  const handleEnroll = async () => {
+    if (!user?.uid || !course?.id) return;
+    setEnrolling(true)
+    try {
+      const userDoc = await getDoc(doc(db, "users", user.uid));
+      const tenantId = userDoc.exists() ? userDoc.data().tenantId : "";
+
+      await addDoc(collection(db, "enrollments"), {
+        userId: user.uid,
+        courseId: course.id,
+        tenantId: tenantId || "unknown",
+        progress: 0,
+        status: "in-progress",
+        completedLessons: [],
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp()
+      })
+    } catch (err) {
+      console.error("Error signing up:", err)
+    } finally {
+      setEnrolling(false)
+    }
+  }
+
   return (
     <div className="space-y-8 pb-20">
       <Button variant="ghost" onClick={onBack} className="mb-4 hover:bg-white/5"><ArrowLeft className="w-4 h-4 mr-2" /> Voltar ao catálogo</Button>
@@ -876,16 +1679,16 @@ function CourseDetails({ course, onBack, onStartLesson }: { course: any, onBack:
         <div className="lg:w-2/3 space-y-8">
           <div className="space-y-4">
             <div className="flex gap-2">
-              <Badge className="bg-primary/20 text-primary border-none">Ministério de Louvor</Badge>
-              <Badge variant="outline" className="border-white/10">Intermediário</Badge>
+              <Badge className="bg-primary/20 text-primary border-none">{course.category || "Geral"}</Badge>
+              <Badge variant="outline" className="border-white/10">{course.level || "Básico"}</Badge>
             </div>
             <h1 className="text-4xl md:text-5xl font-black font-serif italic">{course.title || "Liderança de Célula"}</h1>
-            <p className="text-xl text-white/60">Aprenda os fundamentos para liderar uma célula saudável e multiplicadora, com foco no discipulado e na palavra.</p>
+            <p className="text-xl text-white/60">{course.description || "Aprenda os fundamentos."}</p>
             
             <div className="flex flex-wrap gap-6 text-sm text-white/60 pt-4">
               <span className="flex items-center gap-1"><Star className="w-4 h-4 text-yellow-500" /> 4.8 (124 avaliações)</span>
-              <span className="flex items-center gap-1"><Users className="w-4 h-4" /> 847 alunos</span>
-              <span className="flex items-center gap-1"><Clock className="w-4 h-4" /> 12 horas totais</span>
+              <span className="flex items-center gap-1"><Users className="w-4 h-4" /> {course.students || 0} alunos</span>
+              <span className="flex items-center gap-1"><Clock className="w-4 h-4" /> {course.duration || "12h"} totais</span>
             </div>
           </div>
 
@@ -920,21 +1723,55 @@ function CourseDetails({ course, onBack, onStartLesson }: { course: any, onBack:
           <div className="space-y-4">
             <h3 className="text-2xl font-bold">Currículo do Curso</h3>
             <div className="space-y-2">
-              {[
-                { title: "Módulo 1: A Visão Celular", lessons: 3, duration: "2h 30m" },
-                { title: "Módulo 2: O Papel do Líder", lessons: 4, duration: "3h 15m" },
-                { title: "Módulo 3: Dinâmica do Encontro", lessons: 5, duration: "4h 00m" },
-              ].map((mod, i) => (
-                <Card key={i} className="bg-zinc-900 border-white/10">
-                  <CardHeader className="p-4 flex flex-row items-center justify-between cursor-pointer hover:bg-white/5">
-                    <div>
-                      <CardTitle className="text-lg">{mod.title}</CardTitle>
-                      <CardDescription className="text-xs mt-1">{mod.lessons} aulas • {mod.duration}</CardDescription>
-                    </div>
-                    <ChevronRight className="w-5 h-5 text-white/40" />
-                  </CardHeader>
-                </Card>
-              ))}
+              {modules.length === 0 ? (
+                <div className="text-white/40 p-4 border border-dashed border-white/10 rounded-xl text-center">Nenhum módulo cadastrado.</div>
+              ) : modules.map((mod, i) => {
+                const modLessons = lessons.filter(l => l.moduleId === mod.id);
+                const isExpanded = expandedModule === mod.id;
+                return (
+                  <Card key={mod.id} className="bg-zinc-900 border-white/10 overflow-hidden">
+                    <CardHeader 
+                      className="p-4 flex flex-row items-center justify-between cursor-pointer hover:bg-white/5 transition-colors"
+                      onClick={() => setExpandedModule(isExpanded ? null : mod.id)}
+                    >
+                      <div>
+                        <CardTitle className="text-lg">Módulo {i + 1}: {mod.title}</CardTitle>
+                        <CardDescription className="text-xs mt-1">{modLessons.length} aulas</CardDescription>
+                      </div>
+                      <ChevronRight className={`w-5 h-5 text-white/40 transition-transform ${isExpanded ? 'rotate-90' : ''}`} />
+                    </CardHeader>
+                    {isExpanded && modLessons.length > 0 && (
+                      <CardContent className="bg-black/20 p-0 border-t border-white/5">
+                        <div className="divide-y divide-white/5">
+                          {modLessons.map((lesson, lIndex) => {
+                            const isCompleted = (enrollment?.completedLessons || []).includes(lesson.id);
+                            return (
+                              <div key={lesson.id} className="p-4 flex items-center justify-between hover:bg-white/5 transition-colors cursor-pointer group" onClick={() => (enrollment ? onStartLesson(lesson) : handleEnroll())}>
+                                <div className="flex items-center gap-3">
+                                  <div className={`w-6 h-6 rounded-full border flex items-center justify-center shrink-0 ${isCompleted ? 'bg-primary border-primary text-black' : 'border-white/20'}`}>
+                                    {isCompleted ? <CheckCircle2 className="w-4 h-4" /> : <span className="text-[10px] font-bold">{lIndex + 1}</span>}
+                                  </div>
+                                  <div>
+                                    <p className={`text-sm ${isCompleted ? 'text-white/60 line-through decoration-white/20' : 'text-white/90 group-hover:text-primary transition-colors'}`}>{lesson.title}</p>
+                                    <p className="text-xs text-white/40 flex items-center gap-1 mt-1"><Video className="w-3 h-3" /> Vídeo {lesson.isFree ? '(Grátis)' : ''}</p>
+                                  </div>
+                                </div>
+                                <div className="opacity-0 group-hover:opacity-100 transition-opacity">
+                                  {enrollment ? (
+                                    <Button variant="ghost" size="sm" className="h-8 text-primary hover:text-primary hover:bg-primary/10">Assistir</Button>
+                                  ) : (
+                                    <Lock className="w-4 h-4 text-white/20" />
+                                  )}
+                                </div>
+                              </div>
+                            )
+                          })}
+                        </div>
+                      </CardContent>
+                    )}
+                  </Card>
+                )
+              })}
             </div>
           </div>
 
@@ -1024,7 +1861,13 @@ function CourseDetails({ course, onBack, onStartLesson }: { course: any, onBack:
           <div className="sticky top-24 space-y-6">
             <Card className="bg-zinc-900 border-white/10 overflow-hidden">
               <div className="aspect-video relative">
-                <img src={course.img || "https://images.unsplash.com/photo-1517245386807-bb43f82c33c4"} alt="Preview" className="w-full h-full object-cover" />
+                {course.img ? (
+                  <img src={course.img} alt="Preview" className="w-full h-full object-cover" />
+                ) : (
+                  <div className="w-full h-full bg-zinc-800 flex items-center justify-center">
+                    <Video className="w-10 h-10 text-white/20" />
+                  </div>
+                )}
                 <div className="absolute inset-0 bg-black/40 flex items-center justify-center">
                   <Button size="icon" className="h-16 w-16 rounded-full bg-white/20 backdrop-blur-md text-white hover:bg-primary hover:text-black transition-all">
                     <Play className="h-8 w-8 ml-1" />
@@ -1034,7 +1877,19 @@ function CourseDetails({ course, onBack, onStartLesson }: { course: any, onBack:
               <CardContent className="p-6 space-y-6">
                 <div className="text-3xl font-black text-primary">Gratuito</div>
                 <div className="space-y-3">
-                  <Button className="w-full h-12 bg-primary text-black font-bold text-lg" onClick={() => onStartLesson({ title: "Aula 1: Introdução" })}>Começar Agora</Button>
+                  {enrollment ? (
+                    <Button className="w-full h-12 bg-primary text-black font-bold text-lg" onClick={() => onStartLesson({ title: "Aula 1: Introdução" })}>
+                      {enrollment.progress > 0 ? "Continuar Curso" : "Começar Agora"}
+                    </Button>
+                  ) : (
+                    <Button 
+                      className="w-full h-12 bg-primary text-black font-bold text-lg" 
+                      onClick={handleEnroll} 
+                      disabled={enrolling || !user?.uid}
+                    >
+                      {enrolling ? <Loader2 className="w-5 h-5 animate-spin mx-auto" /> : "Inscrever-se"}
+                    </Button>
+                  )}
                   <Button variant="outline" className="w-full h-12 border-white/10">Adicionar à Lista</Button>
                 </div>
                 <div className="space-y-3 text-sm text-white/60 pt-4 border-t border-white/10">
@@ -1053,251 +1908,215 @@ function CourseDetails({ course, onBack, onStartLesson }: { course: any, onBack:
 }
 
 // --- SALA DE AULA (PLAYER) ---
-function LessonPlayer({ lesson, course, onBack }: { lesson: any, course: any, onBack: () => void }) {
-  const [videoError, setVideoError] = React.useState(false)
+function LessonPlayer({ course, initialLesson, onBack, user }: { course: any, initialLesson?: any, onBack: () => void, user: any }) {
+  const [modules, setModules] = React.useState<any[]>([]);
+  const [lessons, setLessons] = React.useState<any[]>([]);
+  const [activeLesson, setActiveLesson] = React.useState<any | null>(initialLesson || null);
+  const [enrollment, setEnrollment] = React.useState<any>(null);
+  const [tenantId, setTenantId] = React.useState<string | null>(null);
+
+  React.useEffect(() => {
+    if (!user?.uid || !course?.id) return;
+    const fetchUser = async () => {
+      const uDoc = await getDoc(doc(db, 'users', user.uid));
+      if (uDoc.exists()) setTenantId(uDoc.data().tenantId);
+    };
+    fetchUser();
+    
+    const enrQ = query(collection(db, 'enrollments'), where('userId', '==', user.uid), where('courseId', '==', course.id));
+    const unsubEnr = onSnapshot(enrQ, (snap) => {
+      if (!snap.empty) setEnrollment({ id: snap.docs[0].id, ...snap.docs[0].data() });
+    });
+    return () => unsubEnr();
+  }, [user?.uid, course?.id]);
+
+  React.useEffect(() => {
+    if (!tenantId || !course?.id) return;
+    const qm = query(collection(db, 'modules'), where('courseId', '==', course.id));
+    const unsubM = onSnapshot(qm, (snap) => setModules(snap.docs.map(d => ({id: d.id, ...d.data()} as any)).sort((a: any,b: any) => a.order - b.order)));
+    
+    const ql = query(collection(db, 'lessons'), where('courseId', '==', course.id));
+    const unsubL = onSnapshot(ql, (snap) => {
+      const loadedL = snap.docs.map(d => ({id: d.id, ...d.data()} as any)).sort((a: any,b: any) => a.order - b.order);
+      setLessons(loadedL);
+      if (loadedL.length > 0 && !activeLesson) {
+        const uncompleted = loadedL.find(l => !(enrollment?.completedLessons || []).includes(l.id));
+        setActiveLesson(uncompleted || loadedL[0]);
+      }
+    });
+    return () => { unsubM(); unsubL(); };
+  }, [course?.id, tenantId, enrollment?.completedLessons, activeLesson]);
+
+  const toggleLessonComplete = async (lessonId: string) => {
+    if (!enrollment?.id) return;
+    const isCompleted = (enrollment.completedLessons || []).includes(lessonId);
+    let newCompleted;
+    if (isCompleted) {
+      newCompleted = (enrollment.completedLessons || []).filter((id: string) => id !== lessonId);
+    } else {
+      newCompleted = [...(enrollment.completedLessons || []), lessonId];
+    }
+    const maxLessons = lessons.length || 1;
+    let newProgress = Math.round((newCompleted.length / maxLessons) * 100);
+    if (newProgress > 100) newProgress = 100;
+
+    await updateDoc(doc(db, 'enrollments', enrollment.id), {
+      completedLessons: newCompleted,
+      progress: newProgress,
+      updatedAt: serverTimestamp()
+    });
+  };
 
   return (
-    <div className="space-y-6 pb-20">
-      <Button variant="ghost" onClick={onBack} className="mb-2 hover:bg-white/5" aria-label="Voltar ao curso"><ArrowLeft className="w-4 h-4 mr-2" aria-hidden="true" /> Voltar ao curso</Button>
-      
-      <div className="flex flex-col lg:flex-row gap-6">
-        {/* Player Column (70%) */}
-        <div className="lg:w-[70%] space-y-4">
-          {/* Video Player Placeholder */}
-          <div className="aspect-video bg-black rounded-2xl border border-white/10 relative overflow-hidden flex items-center justify-center group" role="region" aria-label="Video Player">
-            {videoError ? (
-              <div className="text-center space-y-2 p-4">
-                <AlertTriangle className="w-10 h-10 text-red-500 mx-auto" />
-                <p className="font-bold">Vídeo indisponível</p>
-                <p className="text-sm text-white/60">Ocorreu um erro ao carregar o vídeo. O administrador já foi notificado.</p>
-                <Button variant="outline" size="sm" className="mt-2" onClick={() => setVideoError(false)}>Tentar novamente</Button>
-              </div>
-            ) : (
-              <>
-                <img src="https://images.unsplash.com/photo-1517245386807-bb43f82c33c4" className="absolute inset-0 w-full h-full object-cover opacity-30" alt="" aria-hidden="true" />
-                <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent" />
-                
-                <Button size="icon" className="h-20 w-20 rounded-full bg-primary text-black z-10 group-hover:scale-110 transition-transform shadow-[0_0_30px_rgba(192,255,0,0.3)]" aria-label="Play video">
-                  <Play className="h-10 w-10 ml-2" aria-hidden="true" />
-                </Button>
-
-                {/* Custom Controls Overlay */}
-                <div className="absolute bottom-0 left-0 right-0 p-4 flex items-center justify-between z-10 opacity-0 group-hover:opacity-100 transition-opacity bg-gradient-to-t from-black/90 to-transparent focus-within:opacity-100">
-                  <div className="flex items-center gap-4">
-                    <Button size="icon" variant="ghost" className="text-white hover:text-primary" aria-label="Play/Pause (Space)"><Play className="w-5 h-5" aria-hidden="true" /></Button>
-                    <span className="text-xs font-mono" aria-label="Tempo do vídeo: 12 minutos e 34 segundos de 45 minutos">12:34 / 45:00</span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <Button size="icon" variant="ghost" className="text-white hover:text-primary" title="Modo Áudio" aria-label="Alternar para modo áudio"><Headphones className="w-5 h-5" aria-hidden="true" /></Button>
-                    <Button size="icon" variant="ghost" className="text-white hover:text-primary" title="Legendas" aria-label="Ativar legendas"><MessageSquare className="w-5 h-5" aria-hidden="true" /></Button>
-                    <Button size="icon" variant="ghost" className="text-white hover:text-primary" title="Configurações" aria-label="Configurações do player"><Settings className="w-5 h-5" aria-hidden="true" /></Button>
-                  </div>
-                </div>
-              </>
-            )}
+    <div className="flex h-[calc(100vh-80px)] -m-6 relative bg-zinc-950">
+      {/* Sidebar / Modules Map */}
+      <div className="w-80 border-r border-white/10 bg-black overflow-y-auto flex-shrink-0 flex flex-col">
+        <div className="p-4 border-b border-white/10 sticky top-0 bg-black z-10 flex items-center gap-3">
+          <Button variant="ghost" size="icon" onClick={onBack} className="text-white/60 hover:text-white shrink-0"><ArrowLeft className="w-4 h-4" /></Button>
+          <div className="flex-1 truncate">
+            <h3 className="font-bold text-sm truncate">{course.title}</h3>
+            <p className="text-xs text-white/40">{enrollment?.progress || 0}% concluído</p>
           </div>
-
-          {/* Navigation & Actions */}
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-zinc-900 p-4 rounded-2xl border border-white/10">
-            <div className="flex items-center gap-2">
-              <Button variant="outline" size="icon" className="border-white/10 rounded-full"><ChevronLeft className="w-5 h-5" /></Button>
-              <div className="text-center sm:text-left">
-                <p className="text-xs text-white/40 uppercase tracking-wider font-bold">Módulo 1 • Aula 3</p>
-                <h2 className="font-bold">{lesson.title || "Fundamentos da Adoração"}</h2>
-              </div>
-              <Button variant="outline" size="icon" className="border-white/10 rounded-full"><ChevronRight className="w-5 h-5" /></Button>
-            </div>
-            <Button className="bg-green-500 hover:bg-green-600 text-black font-bold rounded-full">
-              <CheckCircle2 className="w-4 h-4 mr-2" /> Marcar como concluída
-            </Button>
-          </div>
-
-          {/* Content Tabs */}
-          <Tabs defaultValue="about" className="w-full mt-8">
-            <TabsList className="bg-transparent border-b border-white/10 rounded-none w-full justify-start h-auto p-0 space-x-6">
-              <TabsTrigger value="about" className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent px-0 py-3">Sobre a Aula</TabsTrigger>
-              <TabsTrigger value="materials" className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent px-0 py-3">Materiais</TabsTrigger>
-              <TabsTrigger value="notes" className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent px-0 py-3">Anotações</TabsTrigger>
-              <TabsTrigger value="qa" className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent px-0 py-3">Dúvidas</TabsTrigger>
-              <TabsTrigger value="quiz" className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent px-0 py-3">Quiz</TabsTrigger>
-            </TabsList>
-            
-            <TabsContent value="about" className="pt-6 space-y-6">
-              <div className="bg-primary/5 border border-primary/20 p-4 rounded-xl flex gap-4 items-start">
-                <SparklesIcon className="w-6 h-6 text-primary shrink-0 mt-1" />
-                <div>
-                  <h4 className="font-bold text-primary mb-1">Resumo gerado por IA</h4>
-                  <p className="text-sm text-white/80 leading-relaxed">Nesta aula, abordamos os princípios fundamentais da adoração genuína, destacando que ela vai além da música e se manifesta em um estilo de vida de obediência e entrega. Exploramos passagens chave em João 4 e Romanos 12.</p>
-                </div>
-              </div>
-              <div className="space-y-2">
-                <h4 className="font-bold">Descrição</h4>
-                <p className="text-sm text-white/60 leading-relaxed">A adoração é o coração da célula. Aprenda como conduzir momentos de louvor que conectam as pessoas a Deus, mesmo sem instrumentos musicais.</p>
-              </div>
-            </TabsContent>
-
-            <TabsContent value="materials" className="pt-6 space-y-4">
-              {[
-                { name: "Guia de Estudo - Aula 3.pdf", size: "2.4 MB", type: "PDF" },
-                { name: "Cifras - Louvores Sugeridos.pdf", size: "1.1 MB", type: "PDF" }
-              ].map((file, i) => (
-                <div key={i} className="flex items-center justify-between p-4 bg-zinc-900 border border-white/10 rounded-xl">
-                  <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 rounded-lg bg-white/5 flex items-center justify-center">
-                      <FileText className="w-5 h-5 text-white/60" />
-                    </div>
-                    <div>
-                      <p className="font-bold text-sm">{file.name}</p>
-                      <p className="text-xs text-white/40">{file.type} • {file.size}</p>
-                    </div>
-                  </div>
-                  <Button variant="outline" size="sm" className="border-white/10"><Download className="w-4 h-4 mr-2" /> Baixar</Button>
-                </div>
-              ))}
-            </TabsContent>
-
-            <TabsContent value="notes" className="pt-6 space-y-4">
-              <div className="bg-zinc-900 border border-white/10 p-4 rounded-xl space-y-4">
-                <textarea 
-                  placeholder="Faça suas anotações aqui..." 
-                  className="w-full bg-transparent border-none outline-none text-sm resize-none min-h-[100px] text-white placeholder:text-white/20"
-                />
-                <div className="flex justify-between items-center pt-2 border-t border-white/5">
-                  <Badge variant="outline" className="border-primary/50 text-primary cursor-pointer hover:bg-primary/10"><Clock className="w-3 h-3 mr-1" /> Adicionar tempo atual (12:34)</Badge>
-                  <Button size="sm" className="bg-primary text-black font-bold">Salvar Nota</Button>
-                </div>
-              </div>
-            </TabsContent>
-
-            <TabsContent value="qa" className="pt-6 space-y-6">
-              <div className="flex gap-4">
-                <Avatar><AvatarFallback>JD</AvatarFallback></Avatar>
-                <div className="flex-1 space-y-2">
-                  <textarea 
-                    placeholder="Tem alguma dúvida sobre esta aula?" 
-                    className="w-full bg-zinc-900 border border-white/10 rounded-xl p-3 text-sm outline-none focus:border-primary resize-none"
-                    rows={2}
-                  />
-                  <div className="flex justify-end">
-                    <Button size="sm" className="bg-primary text-black font-bold">Enviar Pergunta</Button>
-                  </div>
-                </div>
-              </div>
-              <Separator className="bg-white/10" />
-              <div className="space-y-4">
-                <div className="flex gap-4">
-                  <Avatar><AvatarFallback>MC</AvatarFallback></Avatar>
-                  <div className="flex-1 space-y-2">
-                    <div className="flex justify-between items-start">
-                      <div>
-                        <p className="font-bold text-sm">Maria Costa</p>
-                        <p className="text-xs text-white/40">há 2 dias • <span className="text-primary cursor-pointer hover:underline">Em 08:15</span></p>
-                      </div>
-                      <Button variant="ghost" size="sm" className="h-8 text-white/40 hover:text-white"><ThumbsUp className="w-4 h-4 mr-1" /> 12</Button>
-                    </div>
-                    <p className="text-sm text-white/80">Como lidar quando ninguém na célula sabe tocar um instrumento?</p>
-                    
-                    {/* Resposta Oficial */}
-                    <div className="mt-4 bg-primary/5 border border-primary/20 p-4 rounded-xl flex gap-3">
-                      <Avatar className="w-8 h-8 border border-primary"><AvatarFallback>PR</AvatarFallback></Avatar>
-                      <div>
-                        <div className="flex items-center gap-2">
-                          <p className="font-bold text-sm text-primary">Pr. João Silva</p>
-                          <Badge className="bg-primary text-black text-[8px] h-4 px-1">Professor</Badge>
-                        </div>
-                        <p className="text-sm text-white/80 mt-1">Ótima pergunta, Maria! Nesses casos, recomendamos usar playbacks ou focar em louvores a capela conhecidos por todos. O importante é a intenção do coração.</p>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </TabsContent>
-
-            <TabsContent value="quiz" className="pt-6 space-y-6">
-              <div className="bg-zinc-900 border border-white/10 p-6 rounded-2xl space-y-6">
-                <div className="space-y-2">
-                  <Badge className="bg-purple-500/20 text-purple-400 border-none mb-2">Quiz de Fixação</Badge>
-                  <h3 className="text-xl font-bold">Verifique seu aprendizado</h3>
-                  <p className="text-sm text-white/60">Responda para liberar a próxima aula. Nota mínima: 70%.</p>
-                </div>
-                
-                <div className="space-y-4">
-                  <div className="space-y-3">
-                    <p className="font-bold text-sm">1. Qual é o principal objetivo do momento de louvor na célula?</p>
-                    <div className="space-y-2">
-                      {["Cantar as músicas mais tocadas na rádio", "Preparar o ambiente para a palavra conectando as pessoas a Deus", "Mostrar os talentos musicais dos membros", "Apenas preencher o tempo antes do estudo"].map((opt, i) => (
-                        <label key={i} className="flex items-center gap-3 p-3 border border-white/10 rounded-xl cursor-pointer hover:bg-white/5 transition-colors">
-                          <input type="radio" name="q1" className="text-primary focus:ring-primary bg-zinc-800 border-white/20" />
-                          <span className="text-sm text-white/80">{opt}</span>
-                        </label>
-                      ))}
-                    </div>
-                  </div>
-                </div>
-
-                <div className="pt-4 border-t border-white/10 flex justify-between items-center">
-                  <span className="text-xs text-white/40">Você tem 3 tentativas restantes</span>
-                  <Button className="bg-primary text-black font-bold">Enviar Respostas</Button>
-                </div>
-              </div>
-            </TabsContent>
-          </Tabs>
         </div>
-
-        {/* Sidebar Column (30%) */}
-        <div className="lg:w-[30%]">
-          <div className="sticky top-24 space-y-6">
-            <Card className="bg-zinc-900 border-white/10">
-              <CardHeader className="pb-4 border-b border-white/5">
-                <CardTitle className="text-lg">Progresso do Curso</CardTitle>
-                <div className="flex items-center gap-3 mt-2">
-                  <Progress value={37} className="h-2 flex-1" />
-                  <span className="text-sm font-bold text-primary">37%</span>
-                </div>
-              </CardHeader>
-              <ScrollArea className="h-[calc(100vh-300px)]">
-                <div className="p-4 space-y-4">
-                  {[
-                    { title: "Módulo 1: A Visão Celular", lessons: [
-                      { title: "Aula 1: O que é uma célula", duration: "15:00", status: "completed" },
-                      { title: "Aula 2: Por que nos reunimos", duration: "18:30", status: "completed" },
-                      { title: "Aula 3: Fundamentos da Adoração", duration: "45:00", status: "current" },
-                    ]},
-                    { title: "Módulo 2: O Papel do Líder", lessons: [
-                      { title: "Aula 4: Prática de Banda", duration: "22:10", status: "locked" },
-                      { title: "Aula 5: Setlist", duration: "19:45", status: "locked" },
-                    ]}
-                  ].map((mod, i) => (
-                    <div key={i} className="space-y-2">
-                      <h4 className="font-bold text-sm text-white/80">{mod.title}</h4>
-                      <div className="space-y-1">
-                        {mod.lessons.map((l, j) => (
-                          <div key={j} className={`flex items-start gap-3 p-2 rounded-lg cursor-pointer transition-colors
-                            ${l.status === 'current' ? 'bg-primary/10 border border-primary/20' : 'hover:bg-white/5'}
-                            ${l.status === 'locked' ? 'opacity-50 cursor-not-allowed' : ''}
-                          `}>
-                            <div className="mt-0.5 shrink-0">
-                              {l.status === 'completed' && <CheckCircle2 className="w-4 h-4 text-green-500" />}
-                              {l.status === 'current' && <Play className="w-4 h-4 text-primary fill-primary" />}
-                              {l.status === 'locked' && <Lock className="w-4 h-4 text-white/40" />}
-                            </div>
-                            <div className="flex-1">
-                              <p className={`text-sm ${l.status === 'current' ? 'font-bold text-primary' : 'text-white/80'}`}>{l.title}</p>
-                              <p className="text-xs text-white/40">{l.duration}</p>
-                            </div>
-                          </div>
-                        ))}
+        <div className="flex-1 p-4 space-y-4">
+          {modules.map((m, mIndex) => {
+            const modLessons = lessons.filter(l => l.moduleId === m.id);
+            return (
+              <div key={m.id} className="space-y-1">
+                <h4 className="text-xs font-bold text-white/60 uppercase mb-2 mt-4 px-2">Módulo {mIndex + 1}: {m.title}</h4>
+                {modLessons.map((l, lIndex) => {
+                  const completed = (enrollment?.completedLessons || []).includes(l.id);
+                  const isCurrent = activeLesson?.id === l.id;
+                  return (
+                    <button 
+                      key={l.id}
+                      onClick={() => setActiveLesson(l)}
+                      className={`w-full text-left p-3 rounded-xl flex items-start gap-3 transition-colors outline-none focus:ring-2 focus:ring-primary ${isCurrent ? 'bg-primary/10 border border-primary/20' : 'hover:bg-white/5 border border-transparent'}`}
+                    >
+                      <div onClick={(e) => { e.stopPropagation(); toggleLessonComplete(l.id); }} className={`mt-0.5 shrink-0 w-5 h-5 rounded-full border flex items-center justify-center cursor-pointer transition-all ${completed ? 'bg-primary border-primary text-black' : 'border-white/20 hover:border-white/50'}`}>
+                        {completed && <CheckCircle2 className="w-3 h-3" />}
                       </div>
-                    </div>
-                  ))}
-                </div>
-              </ScrollArea>
-            </Card>
-          </div>
+                      <div className="flex-1">
+                        <p className={`text-sm ${isCurrent ? 'text-primary font-bold' : 'text-white/80'}`}>{lIndex + 1}. {l.title}</p>
+                        <p className="text-xs text-white/40 flex items-center gap-1 mt-1"><Video className="w-3 h-3" /> Vídeo</p>
+                      </div>
+                    </button>
+                  )
+                })}
+              </div>
+            )
+          })}
+          {modules.length === 0 && (
+            <div className="text-center p-4 text-white/40 text-sm">Este curso ainda não possui módulos.</div>
+          )}
         </div>
       </div>
+
+      {/* Main Content / Video Player */}
+      <div className="flex-1 overflow-y-auto bg-[#0a0a0a] flex flex-col">
+        {activeLesson ? (
+          <div className="max-w-4xl mx-auto w-full p-6 space-y-6">
+            <div className="aspect-video bg-black rounded-2xl border border-white/10 overflow-hidden relative flex items-center justify-center shadow-2xl">
+              {activeLesson.videoUrl ? (
+                <iframe 
+                  src={activeLesson.videoUrl.replace('watch?v=', 'embed/').split('&')[0]} 
+                  className="w-full h-full" 
+                  title={activeLesson.title}
+                  allowFullScreen
+                  allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                ></iframe>
+              ) : (
+                <div className="text-center">
+                  <Video className="w-12 h-12 text-white/20 mx-auto mb-2" />
+                  <p className="text-white/40">Vídeo não disponível</p>
+                </div>
+              )}
+            </div>
+            
+            <div className="flex items-start justify-between gap-4 bg-zinc-900 border border-white/10 p-6 rounded-2xl">
+              <div className="flex-1">
+                <h2 className="text-2xl font-bold text-white mb-2">{activeLesson.title}</h2>
+                <p className="text-sm text-white/70 leading-relaxed max-w-2xl">
+                  {activeLesson.description || "Nenhuma descrição fornecida para esta aula."}
+                </p>
+              </div>
+              <Button 
+                onClick={() => toggleLessonComplete(activeLesson.id)}
+                variant={(enrollment?.completedLessons || []).includes(activeLesson.id) ? "outline" : "default"}
+                className={`shrink-0 h-10 px-6 rounded-full font-bold transition-all ${(enrollment?.completedLessons || []).includes(activeLesson.id) ? "text-primary border-primary/50 hover:bg-primary/10" : "bg-primary text-black hover:bg-primary/90"}`}
+              >
+                {(enrollment?.completedLessons || []).includes(activeLesson.id) ? (
+                  <><CheckCircle2 className="w-4 h-4 mr-2" /> Concluída</>
+                ) : (
+                  <><CheckCircle2 className="w-4 h-4 mr-2 opacity-50" /> Marcar Concluída</>
+                )}
+              </Button>
+            </div>
+            
+            {/* Additional content Tabs to keep the layout complete */}
+            <Tabs defaultValue="materials" className="w-full mt-8">
+              <TabsList className="bg-transparent border-b border-white/10 rounded-none w-full justify-start h-auto p-0 space-x-6">
+                <TabsTrigger value="materials" className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent px-0 py-3">Materiais</TabsTrigger>
+                <TabsTrigger value="qa" className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent px-0 py-3">Dúvidas (0)</TabsTrigger>
+              </TabsList>
+              <TabsContent value="materials" className="pt-6">
+                <div className="grid gap-3">
+                  <div className="p-4 bg-zinc-900 border border-white/10 rounded-xl flex items-center justify-between group hover:bg-white/5 transition-colors cursor-pointer">
+                    <div className="flex flex-row items-center gap-3">
+                       <div className="w-10 h-10 rounded bg-red-500/20 text-red-500 flex items-center justify-center">
+                         <FileText className="w-5 h-5" />
+                       </div>
+                       <div>
+                         <p className="text-sm font-bold group-hover:text-primary transition-colors">Apostila da Aula - {activeLesson.title}</p>
+                         <p className="text-xs text-white/40">PDF • 2.4 MB</p>
+                       </div>
+                    </div>
+                    <Button variant="ghost" size="icon" className="text-white/40 hover:text-white"><Download className="w-4 h-4" /></Button>
+                  </div>
+                  <div className="p-4 bg-zinc-900 border border-white/10 rounded-xl flex items-center justify-between group hover:bg-white/5 transition-colors cursor-pointer">
+                    <div className="flex flex-row items-center gap-3">
+                       <div className="w-10 h-10 rounded bg-blue-500/20 text-blue-500 flex items-center justify-center">
+                         <FileText className="w-5 h-5" />
+                       </div>
+                       <div>
+                         <p className="text-sm font-bold group-hover:text-primary transition-colors">Resumo em Slides</p>
+                         <p className="text-xs text-white/40">Presentação • 5.1 MB</p>
+                       </div>
+                    </div>
+                    <Button variant="ghost" size="icon" className="text-white/40 hover:text-white"><Download className="w-4 h-4" /></Button>
+                  </div>
+                </div>
+              </TabsContent>
+              <TabsContent value="qa" className="pt-6 space-y-6">
+                <div className="bg-zinc-900 border border-white/10 rounded-xl p-4 flex gap-3">
+                  <Avatar className="w-10 h-10 border border-white/10 shrink-0"><AvatarFallback>EU</AvatarFallback></Avatar>
+                  <div className="flex-1 space-y-3">
+                    <textarea 
+                      className="w-full bg-black/50 border border-white/10 rounded-lg p-3 text-sm text-white resize-none h-20 outline-none focus:border-primary/50"
+                      placeholder="Ficou com alguma dúvida? Pergunte aqui..."
+                    />
+                    <div className="flex justify-end">
+                      <Button className="bg-primary text-black" size="sm">Enviar Dúvida</Button>
+                    </div>
+                  </div>
+                </div>
+                <div className="p-8 border border-dashed border-white/10 rounded-xl text-white/40 text-sm text-center">
+                  <MessageSquare className="w-8 h-8 mx-auto opacity-50 mb-2" />
+                  Nenhuma dúvida registrada nesta aula ainda. Seja o primeiro!
+                </div>
+              </TabsContent>
+            </Tabs>
+
+          </div>
+        ) : (
+          <div className="flex-1 flex flex-col items-center justify-center text-white/40 p-6">
+            <Video className="w-16 h-16 opacity-20 mb-4" />
+            <p>{lessons.length === 0 ? "Este curso ainda não possui aulas cadastradas pelo administrador." : "Selecione uma aula no menu lateral."}</p>
+          </div>
+        )}
+      </div>
     </div>
-  )
+  );
 }
 
 function SparklesIcon(props: any) {

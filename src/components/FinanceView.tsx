@@ -1,12 +1,15 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { HeartHandshake, DollarSign, Target, MapPin, Globe, CreditCard, Send, History, CheckCircle2, QrCode, Copy, ChevronRight, TrendingUp } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
+import { db } from '@/lib/firebase';
+import { collection, query, where, onSnapshot, addDoc, serverTimestamp } from 'firebase/firestore';
+import ReactQrCode from 'react-qr-code';
 
-const MOCK_PROJECT_BOQUIRA = {
+const DEV_PROJECT_BOQUIRA = {
   target: 15000,
   current: 8750,
   donors: 142,
@@ -17,30 +20,78 @@ const MOCK_PROJECT_BOQUIRA = {
   ]
 };
 
-const MOCK_HISTORY = [
-  { id: 'h1', date: '2023-11-05', type: 'Dízimo', amount: 500, status: 'completed' },
-  { id: 'h2', date: '2023-11-05', type: 'Oferta - Missões (Boquira)', amount: 150, status: 'completed' },
-  { id: 'h3', date: '2023-10-05', type: 'Dízimo', amount: 500, status: 'completed' },
-];
+const EMPTY_PROJECT_BOQUIRA = {
+  target: 0,
+  current: 0,
+  donors: 0,
+  deadline: '',
+  impactReports: [] as Array<{ date: string; text: string; image: string }>,
+};
 
-export function FinanceView() {
+interface FinanceViewProps {
+  userData?: any;
+}
+
+export function FinanceView({ userData }: FinanceViewProps) {
   const [activeTab, setActiveTab] = useState<'tithes' | 'missions' | 'history'>('tithes');
   const [donateAmount, setDonateAmount] = useState('100');
   const [donateType, setDonateType] = useState('dizimo');
   const [showPix, setShowPix] = useState(false);
-  const [history, setHistory] = useState(MOCK_HISTORY);
+  const [history, setHistory] = useState<any[]>([]);
+
+  const tenantId = userData?.tenantId || 'tenant-1';
+
+  useEffect(() => {
+    if (!userData?.id) return;
+    const q = query(
+      collection(db, 'transactions'),
+      where('userId', '==', userData.id),
+      where('tenantId', '==', tenantId)
+    );
+    const unsub = onSnapshot(q, (snap) => {
+      const txs = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+      txs.sort((a: any, b: any) => {
+        const da = a.createdAt?.seconds || 0;
+        const dbVal = b.createdAt?.seconds || 0;
+        return dbVal - da;
+      });
+      setHistory(txs);
+    });
+    return () => unsub();
+  }, [userData?.id, tenantId]);
 
   const handleSimulatePayment = () => {
     setShowPix(true);
   };
 
-  const confirmPayment = () => {
-    alert("Pagamento/Doação simulado com sucesso!");
+  const confirmPayment = async () => {
+    if (!userData?.id) {
+      alert("Você precisa estar logado!");
+      return;
+    }
+    try {
+      await addDoc(collection(db, 'transactions'), {
+        userId: userData.id,
+        amount: Number(donateAmount),
+        type: donateType === 'dizimo' ? 'Dízimo' : 'Oferta',
+        itemId: donateType === 'dizimo' ? 'dizimo' : 'oferta',
+        status: 'completed',
+        date: new Date().toISOString().split('T')[0],
+        method: 'pix',
+        tenantId,
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp()
+      });
+      alert("Contribuição confirmada e registrada com sucesso!");
+    } catch(e) {
+      console.error(e);
+      alert("Erro ao salvar contribuição: " + (e as Error).message);
+    }
     setShowPix(false);
-    setHistory([{ id: `h${Date.now()}`, date: new Date().toISOString().split('T')[0], type: donateType === 'dizimo' ? 'Dízimo' : 'Oferta/Missões', amount: Number(donateAmount), status: 'completed' }, ...history]);
   };
 
-  const projectProgress = (MOCK_PROJECT_BOQUIRA.current / MOCK_PROJECT_BOQUIRA.target) * 100;
+  const projectBoquira = import.meta.env.DEV ? DEV_PROJECT_BOQUIRA : EMPTY_PROJECT_BOQUIRA;
+  const projectProgress = projectBoquira.target > 0 ? (projectBoquira.current / projectBoquira.target) * 100 : 0;
 
   return (
     <div className="space-y-8 pb-20">
@@ -185,8 +236,8 @@ export function FinanceView() {
                     <CardContent className="space-y-6">
                       <div className="space-y-2">
                         <div className="flex justify-between text-sm font-bold">
-                          <span className="text-primary">R$ {MOCK_PROJECT_BOQUIRA.current.toLocaleString('pt-BR')} arrecadados</span>
-                          <span className="text-white/60">Meta: R$ {MOCK_PROJECT_BOQUIRA.target.toLocaleString('pt-BR')}</span>
+                          <span className="text-primary">R$ {projectBoquira.current.toLocaleString('pt-BR')} arrecadados</span>
+                          <span className="text-white/60">Meta: R$ {projectBoquira.target.toLocaleString('pt-BR')}</span>
                         </div>
                         <div className="h-4 bg-black rounded-full overflow-hidden border border-white/5">
                           <motion.div 
@@ -202,11 +253,11 @@ export function FinanceView() {
                       <div className="flex flex-wrap gap-4 pt-4 border-t border-white/10">
                         <div className="flex items-center gap-2">
                           <Users className="w-4 h-4 text-white/40" />
-                          <span className="text-sm">{MOCK_PROJECT_BOQUIRA.donors} Pessoas doaram</span>
+                          <span className="text-sm">{projectBoquira.donors} Pessoas doaram</span>
                         </div>
                         <div className="flex items-center gap-2">
                           <Calendar className="w-4 h-4 text-white/40" />
-                          <span className="text-sm">Encerra em {new Date(MOCK_PROJECT_BOQUIRA.deadline).toLocaleDateString('pt-BR')}</span>
+                          <span className="text-sm">{projectBoquira.deadline ? `Encerra em ${new Date(projectBoquira.deadline).toLocaleDateString('pt-BR')}` : 'Sem prazo cadastrado'}</span>
                         </div>
                       </div>
                       <Button onClick={() => { setActiveTab('tithes'); setDonateType('oferta'); }} className="w-full bg-primary text-black font-bold h-12">
@@ -219,7 +270,7 @@ export function FinanceView() {
                   <div className="space-y-4">
                     <h3 className="text-xl font-bold">Transparência em Ação</h3>
                     <div className="space-y-4">
-                      {MOCK_PROJECT_BOQUIRA.impactReports.map((report, idx) => (
+                      {projectBoquira.impactReports.map((report, idx) => (
                         <div key={idx} className="flex flex-col md:flex-row gap-4 bg-zinc-900 p-4 rounded-2xl border border-white/10">
                           <img src={report.image} alt="Impact" className="w-full md:w-48 h-32 object-cover rounded-xl grayscale hover:grayscale-0 transition-all" />
                           <div className="space-y-2">
@@ -315,24 +366,42 @@ export function FinanceView() {
               exit={{ opacity: 0, scale: 0.95 }}
               className="bg-zinc-900 border border-white/10 rounded-3xl max-w-md w-full overflow-hidden p-8 text-center space-y-6"
             >
-              <div className="w-16 h-16 bg-primary/20 text-primary rounded-full flex items-center justify-center mx-auto mb-2">
-                <QrCode className="w-8 h-8" />
+              <div className="w-12 h-12 bg-primary/20 text-primary rounded-full flex items-center justify-center mx-auto mb-2">
+                <QrCode className="w-6 h-6" />
               </div>
-              <h3 className="text-2xl font-bold">Pagar via PIX</h3>
+              <h3 className="text-2xl font-bold font-serif italic text-white">Contribuição via PIX</h3>
               <p className="text-white/60">
-                Valor: <span className="font-bold text-white text-xl">R$ {Number(donateAmount).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</span>
+                Valor: <span className="font-bold text-primary text-xl">R$ {Number(donateAmount).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</span>
               </p>
               
-              <div className="bg-white p-4 rounded-xl inline-block mx-auto">
-                <QrCode className="w-48 h-48 text-black" />
+              <div className="bg-white p-4 rounded-2xl w-48 h-48 mx-auto flex items-center justify-center">
+                <ReactQrCode value={`00020101021226850014br.gov.bcb.pix2563pix.coroado.org/contrib?amount=${donateAmount}&type=${donateType}`} size={160} />
+              </div>
+              
+              <div className="space-y-2 text-left">
+                <label className="text-xs font-bold text-white/40 uppercase">Código PIX Copie e Cole</label>
+                <div className="flex gap-2">
+                  <Input 
+                    readOnly 
+                    value={`00020101021226850014br.gov.bcb.pix2563pix.coroado.org/contrib?amount=${donateAmount}&type=${donateType}`} 
+                    className="bg-black border-white/10 text-xs text-white/60"
+                  />
+                  <Button size="icon" variant="outline" className="border-white/10 shrink-0 hover:bg-white/5" onClick={() => {
+                    navigator.clipboard.writeText(`00020101021226850014br.gov.bcb.pix2563pix.coroado.org/contrib?amount=${donateAmount}&type=${donateType}`);
+                    alert("Código PIX copiado com sucesso!");
+                  }}>
+                    <Copy className="w-4 h-4" />
+                  </Button>
+                </div>
+              </div>
+
+              <div className="rounded-xl border border-primary/20 bg-primary/5 p-4 text-xs text-white/60">
+                Escaneie o QR Code acima no aplicativo do seu banco. Para fins de simulação, clique no botão abaixo para confirmar e registrar seu pagamento.
               </div>
 
               <div className="space-y-3 pt-4">
-                <Button variant="outline" className="w-full flex items-center gap-2 border-white/20 h-12">
-                  <Copy className="w-4 h-4" /> Copiar Código Copia e Cola
-                </Button>
                 <Button onClick={confirmPayment} className="w-full bg-primary text-black font-bold h-12">
-                  Já paguei / Simular Sucesso
+                  Confirmar Pagamento Simulado
                 </Button>
                 <Button variant="ghost" onClick={() => setShowPix(false)} className="w-full text-white/40 hover:text-white">
                   Cancelar

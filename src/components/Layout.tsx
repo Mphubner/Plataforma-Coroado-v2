@@ -1,6 +1,6 @@
 import * as React from "react"
 import { motion, AnimatePresence } from "motion/react"
-import { 
+import {
   Home, 
   ShoppingBag, 
   GraduationCap, 
@@ -21,10 +21,18 @@ import {
   Gift,
   Calendar
 } from "lucide-react"
+import type { LucideIcon } from "lucide-react"
 import { Button, buttonVariants } from "@/components/ui/button"
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { cn } from "@/lib/utils"
+import {
+  appRoutes,
+  visibleRoutes,
+  type RouteConfig,
+  type RouteId,
+  type UserProfile,
+} from "@/src/lib/permissions"
 import { 
   DropdownMenu, 
   DropdownMenuContent, 
@@ -40,53 +48,82 @@ interface LayoutProps {
   activeTab: string
   setActiveTab: (tab: string) => void
   isLoggedIn?: boolean
-  userRole?: 'member' | 'leader' | 'pastor'
+  userRole?: string
+  onLoginClick?: () => void
+  onLogoutClick?: () => void
+  userData?: UserProfile | null
 }
 
-const navItems = [
-  { id: "home", label: "Início", icon: Home, category: "public" },
-  { id: "pastors", label: "Pastores", icon: Users, category: "public" },
-  { id: "units", label: "Unidades", icon: MapPin, category: "public" },
-  { id: "cell", label: "Célula", icon: Users, category: "public" },
-  { id: "social", label: "Social", icon: Heart, category: "public" },
-  { id: "media", label: "Mídia", icon: Radio, category: "public" },
-  { id: "events", label: "Eventos", icon: Calendar, category: "public" },
-  { id: "finance", label: "Contribuições", icon: Gift, category: "member" },
-  { id: "store", label: "Loja", icon: ShoppingBag, category: "public" },
-  { id: "school", label: "IDE", icon: GraduationCap, category: "member" },
-  { id: "jornada", label: "A Jornada", icon: Gamepad2, category: "member" },
-  { id: "ministries", label: "Ministérios", icon: Users, category: "member" },
-  { id: "members", label: "Membros", icon: Users, category: "member" },
-  { id: "admin", label: "Gestão", icon: LayoutDashboard, category: "admin" },
-  { id: "pastoral", label: "Cuidado Pastoral", icon: Users, category: "admin" },
+type NavItem = RouteConfig & { icon: LucideIcon }
+
+const iconByRoute: Record<RouteId, LucideIcon> = {
+  home: Home,
+  cell: Users,
+  school: GraduationCap,
+  members: Users,
+  ministries: Users,
+  admin: LayoutDashboard,
+  pastoral: Users,
+  events: Calendar,
+  finance: Gift,
+  jornada: Gamepad2,
+  units: MapPin,
+  pastors: Users,
+  social: Heart,
+  store: ShoppingBag,
+  media: Radio,
+}
+
+const routeOrder: RouteId[] = [
+  "home",
+  "cell",
+  "school",
+  "members",
+  "ministries",
+  "events",
+  "finance",
+  "jornada",
+  "admin",
+  "pastoral",
+  "units",
+  "pastors",
+  "social",
+  "store",
+  "media",
 ]
 
-export function Layout({ children, activeTab, setActiveTab, isLoggedIn = true, userRole = 'leader' }: LayoutProps) {
+export function Layout({ children, activeTab, setActiveTab, isLoggedIn = true, userRole = 'Membro', onLoginClick, onLogoutClick, userData }: LayoutProps) {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = React.useState(false)
 
-  // Navigation Logic
-  const getBottomNavItems = () => {
-    if (!isLoggedIn) {
-      return ["home", "events", "units", "cell", "social"]
-    }
-    const base = ["cell", "school", "events", "finance"]
-    const last = (userRole === 'leader' || userRole === 'pastor') ? "admin" : "jornada"
-    return [...base, last]
-  }
+  const getInitials = (name?: string) => {
+    if (!name) return "U";
+    return name.split(' ').map(n => n[0]).slice(0, 2).join('').toUpperCase();
+  };
+
+  const permittedNav = React.useMemo<NavItem[]>(() => {
+    const routes = isLoggedIn
+      ? visibleRoutes(userData)
+      : appRoutes.filter(route => route.id === "home" || route.capability === "view:public")
+
+    return routeOrder
+      .map(routeId => routes.find(route => route.id === routeId))
+      .filter((route): route is RouteConfig => Boolean(route))
+      .map(route => ({ ...route, icon: iconByRoute[route.id] || Home }))
+  }, [isLoggedIn, userData])
+
+  const getBottomNavItems = () => permittedNav.filter(item => item.bottom).slice(0, 5).map(item => item.id)
 
   const getDesktopPrimaryItems = () => {
-    if (!isLoggedIn) {
-      return ["home", "pastors", "events", "units", "cell", "social", "store", "media"]
-    }
-    const adminItems = userRole === 'pastor' || userRole === 'leader' ? ["admin", "pastoral"] : []
-    return ["home", "cell", "school", "ministries", "events", "finance", "jornada", "members", ...adminItems]
+    const preferred: RouteId[] = ["home", "cell", "school", "members", "ministries", "events", "finance", "jornada", "admin", "pastoral"]
+    const permittedIds = new Set(permittedNav.map(item => item.id))
+    return preferred.filter(id => permittedIds.has(id))
   }
 
   const bottomNavIds = getBottomNavItems()
   const desktopPrimaryIds = getDesktopPrimaryItems()
 
-  const primaryNav = navItems.filter(item => desktopPrimaryIds.includes(item.id))
-  const secondaryNav = navItems.filter(item => !desktopPrimaryIds.includes(item.id) && (isLoggedIn || item.category === 'public'))
+  const primaryNav = permittedNav.filter(item => desktopPrimaryIds.includes(item.id))
+  const secondaryNav = permittedNav.filter(item => !desktopPrimaryIds.includes(item.id))
 
   return (
     <div className="min-h-screen bg-black text-white font-sans selection:bg-primary selection:text-black scroll-smooth">
@@ -100,8 +137,8 @@ export function Layout({ children, activeTab, setActiveTab, isLoggedIn = true, u
               whileTap={{ scale: 0.98 }}
               onClick={() => setActiveTab("home")}
             >
-              <img src="https://i.imgur.com/QVg57L1.png" alt="Coroado Logo" className="h-10 w-auto object-contain" />
-              <img src="https://i.imgur.com/ItH3qGm.png" alt="Coroado" className="h-5 w-auto object-contain hidden lg:block mt-1" />
+              <img src="/simbolob.png" alt="Coroado Icon" className="h-10 w-auto object-contain text-white" />
+              <img src="/logomarcab.png" alt="Coroado" className="h-5 w-auto object-contain hidden lg:block mt-1 text-white" />
             </motion.div>
             
             <nav className="hidden md:flex items-center gap-1">
@@ -157,7 +194,7 @@ export function Layout({ children, activeTab, setActiveTab, isLoggedIn = true, u
 
           <div className="flex items-center gap-2">
             {!isLoggedIn ? (
-              <Button variant="outline" className="border-primary/50 text-primary hover:bg-primary hover:text-black rounded-full px-6">
+              <Button onClick={() => onLoginClick && onLoginClick()} variant="outline" className="border-primary/50 text-primary hover:bg-primary hover:text-black rounded-full px-6">
                 <LogIn className="mr-2 h-4 w-4" />
                 Área do Membro
               </Button>
@@ -170,29 +207,22 @@ export function Layout({ children, activeTab, setActiveTab, isLoggedIn = true, u
                 <DropdownMenu>
                   <DropdownMenuTrigger className="relative h-8 w-8 rounded-full outline-none focus-visible:ring-2 focus-visible:ring-primary">
                     <Avatar className="h-8 w-8 border border-white/10">
-                      <AvatarImage src="https://picsum.photos/seed/user/200" alt="User" />
-                      <AvatarFallback>JD</AvatarFallback>
+                      <AvatarImage src={userData?.photoURL || ""} alt={userData?.name || "User"} />
+                      <AvatarFallback>{getInitials(userData?.name)}</AvatarFallback>
                     </Avatar>
                   </DropdownMenuTrigger>
                   <DropdownMenuContent className="w-56 bg-zinc-900 border-white/10 text-white" align="end">
                     <DropdownMenuGroup>
                       <DropdownMenuLabel className="font-normal">
                         <div className="flex flex-col space-y-1">
-                          <p className="text-sm font-medium leading-none">João Silva</p>
-                          <p className="text-xs leading-none text-white/50">Membro • Célula Hope</p>
+                          <p className="text-sm font-medium leading-none">{userData?.name || 'Carregando...'}</p>
+                          <p className="text-xs leading-none text-white/50">
+                            {userRole}
+                          </p>
                         </div>
                       </DropdownMenuLabel>
                       <DropdownMenuSeparator className="bg-white/10" />
-                      <DropdownMenuItem className="hover:bg-white/5 focus:bg-white/5 cursor-pointer">
-                        <User className="mr-2 h-4 w-4" />
-                        <span>Perfil</span>
-                      </DropdownMenuItem>
-                      <DropdownMenuItem className="hover:bg-white/5 focus:bg-white/5 cursor-pointer">
-                        <Settings className="mr-2 h-4 w-4" />
-                        <span>Configurações</span>
-                      </DropdownMenuItem>
-                      <DropdownMenuSeparator className="bg-white/10" />
-                      <DropdownMenuItem className="hover:bg-white/5 focus:bg-white/5 text-red-400 cursor-pointer">
+                      <DropdownMenuItem onClick={() => onLogoutClick && onLogoutClick()} className="hover:bg-white/5 focus:bg-white/5 text-red-400 cursor-pointer">
                         <LogOut className="mr-2 h-4 w-4" />
                         <span>Sair</span>
                       </DropdownMenuItem>
@@ -210,39 +240,58 @@ export function Layout({ children, activeTab, setActiveTab, isLoggedIn = true, u
                 <div className="flex flex-col h-full">
                   <div className="p-6 border-b border-white/10 flex items-center justify-between">
                     <div className="flex items-center gap-2">
-                      <img src="https://i.imgur.com/QVg57L1.png" alt="Coroado Logo" className="h-6 w-auto object-contain" />
-                      <img src="https://i.imgur.com/ItH3qGm.png" alt="Coroado" className="h-3 w-auto object-contain mt-0.5" />
+                      <img src="/simbolob.png" alt="Coroado Icon" className="h-6 w-auto object-contain text-white" />
+                      <img src="/logomarcab.png" alt="Coroado" className="h-3 w-auto object-contain mt-0.5 text-white" />
                     </div>
                     <Button variant="ghost" size="icon" onClick={() => setIsMobileMenuOpen(false)}>
                       <X className="h-6 w-6" />
                     </Button>
                   </div>
-                  <nav className="flex-1 p-4 space-y-2 overflow-y-auto">
-                    {navItems.filter(item => isLoggedIn || item.category === 'public').map((item) => (
-                      <Button
-                        key={item.id}
-                        variant="ghost"
-                        className={`w-full justify-start gap-4 h-12 text-lg ${
-                          activeTab === item.id ? "text-primary bg-white/5" : "text-white/60"
-                        }`}
-                        onClick={() => {
-                          setActiveTab(item.id)
-                          setIsMobileMenuOpen(false)
-                        }}
-                      >
-                        <item.icon className="h-5 w-5" />
-                        {item.label}
-                      </Button>
-                    ))}
+                  <nav className="flex-1 p-4 space-y-6 overflow-y-auto">
+                    {(() => {
+                      const visibleItems = permittedNav;
+
+                      const categories = [
+                        { id: 'main', label: 'Principal', items: visibleItems.filter(i => ['home', 'jornada', 'events'].includes(i.id)) },
+                        { id: 'igreja', label: 'Conexão & Igreja', items: visibleItems.filter(i => ['cell', 'members', 'ministries', 'pastoral'].includes(i.id)) },
+                        { id: 'estudos', label: 'Crescimento', items: visibleItems.filter(i => ['school', 'finance', 'store'].includes(i.id)) },
+                        { id: 'public', label: 'Institucional', items: visibleItems.filter(i => ['units', 'social', 'media'].includes(i.id)) },
+                        { id: 'admin', label: 'Gestão', items: visibleItems.filter(i => ['admin'].includes(i.id)) }
+                      ];
+
+                      return categories.map(cat => (
+                        cat.items.length > 0 && (
+                          <div key={cat.id} className="space-y-1">
+                            <h4 className="text-xs font-bold text-white/40 uppercase tracking-wider mb-2 px-4">{cat.label}</h4>
+                            {cat.items.map((item) => (
+                              <Button
+                                key={item.id}
+                                variant="ghost"
+                                className={`w-full justify-start gap-4 h-11 text-base font-medium rounded-xl ${
+                                  activeTab === item.id ? "text-primary bg-primary/10" : "text-white/70 hover:text-white hover:bg-white/5"
+                                }`}
+                                onClick={() => {
+                                  setActiveTab(item.id)
+                                  setIsMobileMenuOpen(false)
+                                }}
+                              >
+                                <item.icon className="h-5 w-5" />
+                                {item.label}
+                              </Button>
+                            ))}
+                          </div>
+                        )
+                      ));
+                    })()}
                   </nav>
                   <div className="p-6 border-t border-white/10">
                     {isLoggedIn ? (
-                      <Button variant="outline" className="w-full border-white/10 hover:bg-white/5">
+                      <Button onClick={() => onLogoutClick && onLogoutClick()} variant="outline" className="w-full border-white/10 hover:bg-white/5">
                         <LogOut className="mr-2 h-4 w-4" />
                         Sair da Conta
                       </Button>
                     ) : (
-                      <Button className="w-full bg-primary text-black hover:bg-primary/90">
+                      <Button onClick={() => onLoginClick && onLoginClick()} className="w-full bg-primary text-black hover:bg-primary/90">
                         <LogIn className="mr-2 h-4 w-4" />
                         Faça Login
                       </Button>
@@ -274,7 +323,7 @@ export function Layout({ children, activeTab, setActiveTab, isLoggedIn = true, u
       {/* Mobile Bottom Nav */}
       <nav className="fixed bottom-0 left-0 right-0 z-50 md:hidden border-t border-white/10 bg-black/90 backdrop-blur-xl pb-[env(safe-area-inset-bottom)]">
         <div className="flex items-center justify-around h-16 px-1">
-          {navItems.filter(item => bottomNavIds.includes(item.id)).map((item) => {
+          {permittedNav.filter(item => bottomNavIds.includes(item.id)).map((item) => {
             const isActive = activeTab === item.id;
             return (
               <button

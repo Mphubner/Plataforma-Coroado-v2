@@ -4,6 +4,9 @@ import { Users, Calendar, CheckCircle2, AlertCircle, Plus, Search, ChevronRight,
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
+import { db } from "@/lib/firebase";
+import { collection, query, where, onSnapshot, getDoc, doc, addDoc, updateDoc, deleteDoc, serverTimestamp } from "firebase/firestore";
+import { can } from "@/src/lib/permissions";
 
 // Types
 export type BriefingStatus = 'todo' | 'in-progress' | 'done';
@@ -17,6 +20,7 @@ export type Briefing = {
   deadline: string;
   status: BriefingStatus;
   assigneeId?: string;
+  tenantId?: string;
 };
 
 export type CalendarEvent = {
@@ -25,6 +29,7 @@ export type CalendarEvent = {
   title: string;
   date: string;
   type: 'post' | 'event' | 'meeting';
+  tenantId?: string;
 };
 
 export type MemberMetrics = {
@@ -34,11 +39,11 @@ export type MemberMetrics = {
 };
 
 export type MinistryMember = {
-  id: string;
+  id: string; // user id
   name: string;
   role: string;
   joinDate: string;
-  metrics: MemberMetrics;
+  metrics?: MemberMetrics;
   avatar?: string;
 };
 
@@ -59,6 +64,7 @@ export type Scale = {
   assignments: ScaleAssignment[];
   notes?: string;
   setlist?: string[];
+  tenantId?: string;
 };
 
 export type RequiredTrack = {
@@ -74,8 +80,9 @@ export type Ministry = {
   leaderId: string;
   leaderName: string;
   icon: string;
-  requiredTracks: RequiredTrack[];
-  members: MinistryMember[];
+  requiredTracks?: RequiredTrack[];
+  members?: MinistryMember[];
+  tenantId?: string;
 };
 
 // Mock Data
@@ -239,13 +246,15 @@ const getHealthBg = (score: number) => {
   return "bg-red-400";
 };
 
-export function MinistriesView() {
+export function MinistriesView({ isLoggedIn = true, userData }: { isLoggedIn?: boolean; userData?: any }) {
+  const [ministries, setMinistries] = React.useState<Ministry[]>([]);
   const [selectedMinistry, setSelectedMinistry] = React.useState<Ministry | null>(null);
   const [activeTab, setActiveTab] = React.useState("overview");
   const [searchQuery, setSearchQuery] = React.useState("");
-  const [scales, setScales] = React.useState<Scale[]>(MOCK_SCALES);
-  const [briefings, setBriefings] = React.useState<Briefing[]>(MOCK_BRIEFINGS);
-  const [calendarEvents, setCalendarEvents] = React.useState<CalendarEvent[]>(MOCK_CALENDAR);
+  const [scales, setScales] = React.useState<Scale[]>([]);
+  const [briefings, setBriefings] = React.useState<Briefing[]>([]);
+  const [calendarEvents, setCalendarEvents] = React.useState<CalendarEvent[]>([]);
+  
   const [showBriefingForm, setShowBriefingForm] = React.useState(false);
   const [showScaleForm, setShowScaleForm] = React.useState(false);
   const [newScale, setNewScale] = React.useState<Partial<Scale>>({
@@ -255,6 +264,15 @@ export function MinistriesView() {
     setlist: [],
     assignments: []
   });
+  const [showNewMinistryForm, setShowNewMinistryForm] = React.useState(false);
+  const [newMinistry, setNewMinistry] = React.useState<Partial<Ministry>>({
+    name: '',
+    description: '',
+    leaderName: '',
+    icon: 'users',
+    members: [],
+    requiredTracks: []
+  });
   const [newBriefing, setNewBriefing] = React.useState<Partial<Briefing>>({
     title: '',
     description: '',
@@ -263,26 +281,127 @@ export function MinistriesView() {
     status: 'todo'
   });
 
-  // Simulate current user (e.g., Pedro Oliveira, Baterista in Louvor)
-  const currentUserId = "m2";
+  const handleCreateMinistry = async () => {
+    if (!newMinistry.name) return;
+    try {
+      await addDoc(collection(db, 'ministries'), {
+        ...newMinistry,
+        leaderId: userData?.id || '',
+        tenantId: userData?.tenantId,
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp()
+      });
+      setShowNewMinistryForm(false);
+      setNewMinistry({ name: '', description: '', leaderName: '', icon: 'users', members: [], requiredTracks: [] });
+    } catch (e) {
+      console.error(e);
+      alert("Erro ao criar ministério: " + (e as Error).message);
+    }
+  };
 
-  const filteredMinistries = MOCK_MINISTRIES.filter(m => 
-    m.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    m.leaderName.toLowerCase().includes(searchQuery.toLowerCase())
+  const tenantId = userData?.tenantId;
+  const currentUserId = userData?.id;
+  const isLeader = React.useMemo(() => {
+    if (!selectedMinistry || !currentUserId) return false;
+    return selectedMinistry.leaderId === currentUserId || can(userData, 'manage:ministry');
+  }, [selectedMinistry, currentUserId, userData]);
+
+  React.useEffect(() => {
+    if (!tenantId) return;
+    const unsub = onSnapshot(query(collection(db, 'ministries'), where('tenantId', '==', tenantId)), (snap) => {
+      if (snap.empty && import.meta.env.DEV) {
+        setMinistries(MOCK_MINISTRIES);
+      } else if (snap.empty) {
+        setMinistries([]);
+      } else {
+        const mins = snap.docs.map(doc => ({ id: doc.id, ...doc.data() } as Ministry));
+        setMinistries(mins);
+      }
+    });
+    return () => unsub();
+  }, [tenantId]);
+
+  React.useEffect(() => {
+    if (!selectedMinistry?.id || !tenantId) return;
+
+    const unsubScales = onSnapshot(query(collection(db, 'scales'), where('tenantId', '==', tenantId), where('ministryId', '==', selectedMinistry.id)), (snap) => {
+      setScales(snap.docs.map(doc => ({ id: doc.id, ...doc.data() } as Scale)));
+    });
+
+    const unsubBriefings = onSnapshot(query(collection(db, 'briefings'), where('tenantId', '==', tenantId), where('ministryId', '==', selectedMinistry.id)), (snap) => {
+      setBriefings(snap.docs.map(doc => ({ id: doc.id, ...doc.data() } as Briefing)));
+    });
+
+    const unsubEvents = onSnapshot(query(collection(db, 'ministry_events'), where('tenantId', '==', tenantId), where('ministryId', '==', selectedMinistry.id)), (snap) => {
+      setCalendarEvents(snap.docs.map(doc => ({ id: doc.id, ...doc.data() } as CalendarEvent)));
+    });
+
+    return () => {
+      unsubScales();
+      unsubBriefings();
+      unsubEvents();
+    };
+  }, [selectedMinistry?.id, tenantId]);
+
+  const filteredMinistries = ministries.filter(m => 
+    m.name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    m.leaderName?.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
-  const handleStatusChange = (scaleId: string, memberId: string, newStatus: ScaleStatus) => {
-    setScales(prev => prev.map(scale => {
-      if (scale.id === scaleId) {
-        return {
-          ...scale,
-          assignments: scale.assignments.map(a => 
-            a.memberId === memberId ? { ...a, status: newStatus } : a
-          )
-        };
-      }
-      return scale;
-    }));
+  if (!isLoggedIn) {
+    return (
+      <div className="container mx-auto px-4 py-24 max-w-6xl space-y-12">
+        <div className="text-center max-w-2xl mx-auto space-y-4">
+          <h1 className="text-5xl font-black font-serif italic tracking-tight">Nossos Ministérios</h1>
+          <p className="text-white/60 text-lg">Descubra como você pode servir, se conectar e fazer a diferença na nossa comunidade local.</p>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+          {filteredMinistries.map(ministry => (
+            <motion.div
+              key={ministry.id}
+              whileHover={{ y: -5 }}
+              className="group"
+            >
+              <Card className="bg-zinc-900 border-white/10 h-full overflow-hidden hover:border-primary/50 transition-colors">
+                <CardContent className="p-0 border-none">
+                  <div className="p-8 space-y-6">
+                    <div className="w-16 h-16 rounded-2xl bg-primary/10 text-primary flex items-center justify-center group-hover:scale-110 transition-transform">
+                      {getIcon(ministry.icon)}
+                    </div>
+                    <div>
+                      <h3 className="text-2xl font-black font-serif italic mb-3 text-white group-hover:text-primary transition-colors">{ministry.name}</h3>
+                      <p className="text-white/60 leading-relaxed min-h-[4rem]">{ministry.description}</p>
+                    </div>
+                    <Button variant="outline" className="w-full border-white/20 hover:bg-primary hover:text-black hover:border-primary font-bold uppercase tracking-wider text-xs h-12" onClick={() => document.getElementById('novo-aqui-modal')?.classList.remove('hidden')}>
+                      Quero Participar
+                    </Button>
+                  </div>
+                </CardContent>
+              </Card>
+            </motion.div>
+          ))}
+        </div>
+      </div>
+    );
+  }
+
+  const handleStatusChange = async (scaleId: string, memberId: string, newStatus: ScaleStatus) => {
+    try {
+      const scaleRef = doc(db, 'scales', scaleId);
+      const scale = scales.find(s => s.id === scaleId);
+      if (!scale) return;
+      const updatedAssignments = scale.assignments.map(a => 
+        a.memberId === memberId ? { ...a, status: newStatus } : a
+      );
+      await updateDoc(scaleRef, {
+        assignments: updatedAssignments,
+        updatedAt: serverTimestamp()
+      });
+    } catch (e) {
+      console.error(e);
+      alert("Erro ao atualizar status: " + (e as Error).message);
+    }
   };
 
   const renderStatusBadge = (status: ScaleStatus) => {
@@ -838,11 +957,22 @@ export function MinistriesView() {
                 </div>
                 <div className="flex gap-3 pt-4">
                   <Button className="flex-1 bg-white/10 text-white hover:bg-white/20" onClick={() => setShowBriefingForm(false)}>Cancelar</Button>
-                  <Button className="flex-1 bg-primary text-black font-bold" onClick={() => {
+                  <Button className="flex-1 bg-primary text-black font-bold" onClick={async () => {
                     if (newBriefing.title && newBriefing.deadline) {
-                      setBriefings([...briefings, { ...newBriefing, id: `br-${Date.now()}`, ministryId: selectedMinistry.id } as Briefing]);
-                      setShowBriefingForm(false);
-                      setNewBriefing({ title: '', description: '', requesterMinistry: '', deadline: '', status: 'todo' });
+                      try {
+                        await addDoc(collection(db, 'briefings'), {
+                          ...newBriefing,
+                          ministryId: selectedMinistry.id,
+                          tenantId: tenantId,
+                          createdAt: serverTimestamp(),
+                          updatedAt: serverTimestamp()
+                        });
+                        setShowBriefingForm(false);
+                        setNewBriefing({ title: '', description: '', requesterMinistry: '', deadline: '', status: 'todo' });
+                      } catch (e) {
+                        console.error(e);
+                        alert("Erro ao criar briefing: " + (e as Error).message);
+                      }
                     }
                   }}>Enviar Solicitação</Button>
                 </div>
@@ -924,11 +1054,22 @@ export function MinistriesView() {
                 </div>
                 <div className="flex gap-3 pt-4">
                   <Button className="flex-1 bg-white/10 text-white hover:bg-white/20" onClick={() => setShowScaleForm(false)}>Cancelar</Button>
-                  <Button className="flex-1 bg-primary text-black font-bold" onClick={() => {
+                  <Button className="flex-1 bg-primary text-black font-bold" onClick={async () => {
                     if (newScale.eventName && newScale.date && newScale.time) {
-                      setScales([...scales, { ...newScale, id: `sc-${Date.now()}`, ministryId: selectedMinistry.id } as Scale]);
-                      setShowScaleForm(false);
-                      setNewScale({ eventName: '', date: '', time: '', setlist: [], assignments: [] });
+                      try {
+                        await addDoc(collection(db, 'scales'), {
+                          ...newScale,
+                          ministryId: selectedMinistry.id,
+                          tenantId: tenantId,
+                          createdAt: serverTimestamp(),
+                          updatedAt: serverTimestamp()
+                        });
+                        setShowScaleForm(false);
+                        setNewScale({ eventName: '', date: '', time: '', setlist: [], assignments: [] });
+                      } catch (e) {
+                        console.error(e);
+                        alert("Erro ao salvar escala: " + (e as Error).message);
+                      }
                     }
                   }}>Salvar Escala</Button>
                 </div>
@@ -958,12 +1099,77 @@ export function MinistriesView() {
               onChange={(e) => setSearchQuery(e.target.value)}
             />
           </div>
-          <Button className="bg-primary text-black font-bold whitespace-nowrap">
+          <Button className="bg-primary text-black font-bold whitespace-nowrap" onClick={() => setShowNewMinistryForm(true)}>
             <Plus className="w-4 h-4 mr-2" />
             Novo Ministério
           </Button>
         </div>
       </div>
+
+      {showNewMinistryForm && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80">
+          <motion.div 
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            className="bg-zinc-900 border border-white/10 rounded-xl max-w-lg w-full overflow-hidden"
+          >
+            <div className="p-6 space-y-4">
+              <h3 className="text-xl font-bold">Novo Ministério</h3>
+              <p className="text-sm text-white/60">Cadastre um novo ministério na igreja.</p>
+              <div className="space-y-4">
+                <div className="space-y-2">
+                  <label className="text-sm font-bold">Nome do Ministério</label>
+                  <Input 
+                    placeholder="Ex: Louvor" 
+                    className="bg-black border-white/10"
+                    value={newMinistry.name}
+                    onChange={(e) => setNewMinistry({...newMinistry, name: e.target.value})}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <label className="text-sm font-bold">Descrição</label>
+                  <textarea 
+                    placeholder="Resumo do propósito..." 
+                    className="w-full bg-black border border-white/10 rounded-md p-3 text-sm min-h-[80px]"
+                    value={newMinistry.description}
+                    onChange={(e) => setNewMinistry({...newMinistry, description: e.target.value})}
+                  />
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <label className="text-sm font-bold">Nome do Líder</label>
+                    <Input 
+                      placeholder="Ex: João" 
+                      className="bg-black border-white/10"
+                      value={newMinistry.leaderName}
+                      onChange={(e) => setNewMinistry({...newMinistry, leaderName: e.target.value})}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-sm font-bold">Ícone</label>
+                    <select
+                      className="w-full bg-black border border-white/10 rounded-md p-3 text-sm h-10"
+                      value={newMinistry.icon}
+                      onChange={(e) => setNewMinistry({...newMinistry, icon: e.target.value})}
+                    >
+                      <option value="music">Música</option>
+                      <option value="camera">Câmera</option>
+                      <option value="coffee">Café</option>
+                      <option value="heart">Coração</option>
+                      <option value="shield">Escudo</option>
+                      <option value="users">Usuários</option>
+                    </select>
+                  </div>
+                </div>
+              </div>
+              <div className="flex gap-3 pt-4">
+                <Button className="flex-1 bg-white/10 text-white hover:bg-white/20" onClick={() => setShowNewMinistryForm(false)}>Cancelar</Button>
+                <Button className="flex-1 bg-primary text-black font-bold" onClick={handleCreateMinistry}>Criar Ministério</Button>
+              </div>
+            </div>
+          </motion.div>
+        </div>
+      )}
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
         {filteredMinistries.map(ministry => (
