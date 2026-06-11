@@ -85,143 +85,7 @@ export type Ministry = {
   tenantId?: string;
 };
 
-// Mock Data
-const MOCK_BRIEFINGS: Briefing[] = [
-  {
-    id: "br1",
-    ministryId: "min2",
-    requesterMinistry: "Eventos",
-    title: "Arte Culto de Jovens",
-    description: "Post para o Instagram e slide para o telão.",
-    deadline: "2023-11-10",
-    status: "todo",
-  },
-  {
-    id: "br2",
-    ministryId: "min2",
-    requesterMinistry: "Louvor",
-    title: "Gravação de Ensaio",
-    description: "Cobertura em vídeo do ensaio aberto.",
-    deadline: "2023-11-15",
-    status: "in-progress",
-    assigneeId: "m4"
-  },
-  {
-    id: "br3",
-    ministryId: "min1",
-    requesterMinistry: "Pastoral",
-    title: "Música Especial Santa Ceia",
-    description: "Preparar arranjo para o hino da ceia.",
-    deadline: "2023-11-12",
-    status: "todo",
-  }
-];
-
-const MOCK_CALENDAR: CalendarEvent[] = [
-  { id: "ce1", ministryId: "min2", title: "Post: Resumo do Culto", date: "2023-11-06", type: "post" },
-  { id: "ce2", ministryId: "min2", title: "Reels: Bastidores", date: "2023-11-08", type: "post" },
-  { id: "ce3", ministryId: "min1", title: "Ensaio Geral", date: "2023-11-09", type: "meeting" },
-];
-
-const MOCK_SCALES: Scale[] = [
-  {
-    id: "sc1",
-    ministryId: "min1",
-    eventName: "Culto de Celebração",
-    date: "2023-11-05",
-    time: "18:00",
-    assignments: [
-      { memberId: "m1", role: "Vocal Principal", status: "accepted" },
-      { memberId: "m2", role: "Bateria", status: "pending" },
-      { memberId: "m3", role: "Teclado", status: "accepted" },
-    ],
-    setlist: ["Leão (Kari Jobe)", "Ruja o Leão", "Lindo És"]
-  },
-  {
-    id: "sc2",
-    ministryId: "min1",
-    eventName: "Culto de Ensino",
-    date: "2023-11-08",
-    time: "20:00",
-    assignments: [
-      { memberId: "m1", role: "Vocal", status: "declined" },
-      { memberId: "m3", role: "Teclado", status: "accepted" },
-    ],
-    setlist: ["Vem me Buscar", "Maranata"]
-  },
-  {
-    id: "sc3",
-    ministryId: "min2",
-    eventName: "Culto de Celebração",
-    date: "2023-11-05",
-    time: "18:00",
-    assignments: [
-      { memberId: "m4", role: "Fotografia", status: "accepted" },
-      { memberId: "m5", role: "Transmissão", status: "pending" },
-    ]
-  }
-];
-const MOCK_MINISTRIES: Ministry[] = [
-  {
-    id: "min1",
-    name: "Louvor",
-    description: "Ministério de adoração e música da igreja.",
-    leaderId: "lead1",
-    leaderName: "João Silva",
-    icon: "music",
-    requiredTracks: [
-      { id: "trk1", name: "Fundamentos da Adoração", description: "Obrigatório para todos os músicos e vocais." },
-      { id: "trk2", name: "Prática de Banda", description: "Alinhamento técnico e espiritual." }
-    ],
-    members: [
-      { id: "m1", name: "Ana Costa", role: "Vocal", joinDate: "2023-01-15", metrics: { cellAttendance: 100, ideProgress: 90, scalePresence: 95 }, avatar: "https://i.pravatar.cc/150?u=m1" },
-      { id: "m2", name: "Pedro Oliveira", role: "Baterista", joinDate: "2023-03-20", metrics: { cellAttendance: 80, ideProgress: 60, scalePresence: 100 }, avatar: "https://i.pravatar.cc/150?u=m2" },
-      { id: "m3", name: "Lucas Santos", role: "Tecladista", joinDate: "2023-06-10", metrics: { cellAttendance: 50, ideProgress: 40, scalePresence: 90 }, avatar: "https://i.pravatar.cc/150?u=m3" },
-    ]
-  },
-  {
-    id: "min2",
-    name: "Comunicação",
-    description: "Responsável pelas mídias sociais, fotos e vídeos.",
-    leaderId: "lead2",
-    leaderName: "Maria Souza",
-    icon: "camera",
-    requiredTracks: [
-      { id: "trk3", name: "Comunicação do Reino", description: "Princípios de comunicação cristã." }
-    ],
-    members: [
-      { id: "m4", name: "Carlos Mendes", role: "Fotógrafo", joinDate: "2023-02-10", metrics: { cellAttendance: 90, ideProgress: 80, scalePresence: 85 }, avatar: "https://i.pravatar.cc/150?u=m4" },
-      { id: "m5", name: "Julia Lima", role: "Social Media", joinDate: "2023-05-05", metrics: { cellAttendance: 100, ideProgress: 100, scalePresence: 70 }, avatar: "https://i.pravatar.cc/150?u=m5" },
-    ]
-  },
-  {
-    id: "min3",
-    name: "Recepção",
-    description: "Acolhimento e boas-vindas aos visitantes e membros.",
-    leaderId: "lead3",
-    leaderName: "Marcos Paulo",
-    icon: "coffee",
-    requiredTracks: [],
-    members: [
-      { id: "m6", name: "Fernanda Silva", role: "Recepcionista", joinDate: "2023-04-12", metrics: { cellAttendance: 80, ideProgress: 70, scalePresence: 75 }, avatar: "https://i.pravatar.cc/150?u=m6" },
-    ]
-  },
-  {
-    id: "min4",
-    name: "Kids",
-    description: "Ensino e cuidado com as crianças durante os cultos.",
-    leaderId: "lead4",
-    leaderName: "Pra. Ana",
-    icon: "heart",
-    requiredTracks: [
-      { id: "trk4", name: "Ministério Infantil", description: "Didática e cuidado com os pequeninos." }
-    ],
-    members: [
-      { id: "m7", name: "Beatriz Costa", role: "Professora", joinDate: "2023-01-20", metrics: { cellAttendance: 100, ideProgress: 100, scalePresence: 100 }, avatar: "https://i.pravatar.cc/150?u=m7" },
-      { id: "m8", name: "Rafael Gomes", role: "Apoio", joinDate: "2023-07-01", metrics: { cellAttendance: 40, ideProgress: 30, scalePresence: 80 }, avatar: "https://i.pravatar.cc/150?u=m8" },
-    ]
-  }
-];
+// Mocks removed
 
 const getIcon = (iconName: string) => {
   switch (iconName) {
@@ -309,14 +173,8 @@ export function MinistriesView({ isLoggedIn = true, userData }: { isLoggedIn?: b
   React.useEffect(() => {
     if (!tenantId) return;
     const unsub = onSnapshot(query(collection(db, 'ministries'), where('tenantId', '==', tenantId)), (snap) => {
-      if (snap.empty && import.meta.env.DEV) {
-        setMinistries(MOCK_MINISTRIES);
-      } else if (snap.empty) {
-        setMinistries([]);
-      } else {
-        const mins = snap.docs.map(doc => ({ id: doc.id, ...doc.data() } as Ministry));
-        setMinistries(mins);
-      }
+      const mins = snap.docs.map(doc => ({ id: doc.id, ...doc.data() } as Ministry));
+      setMinistries(mins);
     });
     return () => unsub();
   }, [tenantId]);

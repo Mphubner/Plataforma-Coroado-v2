@@ -42,24 +42,7 @@ export type RiskAlert = {
   tenantId?: string;
 };
 
-// Mocks
-const MOCK_LEADS: VisitorLead[] = [
-  { id: 'v1', name: 'Ricardo Almeida', phone: '27 99999-1111', neighborhood: 'Centro', dateVisited: '2023-11-05', source: 'Instagram', status: 'new' },
-  { id: 'v2', name: 'Laura Mendonça', phone: '27 99999-2222', neighborhood: 'Muquiçaba', dateVisited: '2023-11-05', source: 'Amigo (Indicação)', status: 'contacted', notes: 'Ligamos ontem, ela amou o culto.' },
-  { id: 'v3', name: 'Thiago Costa', phone: '27 99999-3333', neighborhood: 'Praia do Morro', dateVisited: '2023-10-29', source: 'Site', status: 'assigned', assignedCellId: '2' },
-];
-
-const MOCK_PRAYERS: PrayerRequest[] = [
-  { id: 'p1', authorName: 'Carlos Silva', date: '2023-11-06', reason: 'Cirurgia do pai', details: 'Meu pai fará cateterismo amanha as 8h.', isPrivate: false, status: 'praying' },
-  { id: 'p2', authorName: 'Anônimo (Membro 12)', date: '2023-11-05', reason: 'Crise conjugal', details: 'Peço oração pelo meu casamento. Muita briga.', isPrivate: true, status: 'open' },
-  { id: 'p3', authorName: 'Juliana Paes', date: '2023-11-02', reason: 'Emprego', details: 'Fiz a entrevista final, orem por porta aberta!', isPrivate: false, status: 'answered' },
-];
-
-const MOCK_ALERTS: RiskAlert[] = [
-  { id: 'a1', memberId: 'm7', memberName: 'Roberto Dias', weeksAbsent: 4, lastCellDate: '2023-10-05', riskLevel: 'high' },
-  { id: 'a2', memberId: 'm8', memberName: 'Sônia Freitas', weeksAbsent: 3, lastCellDate: '2023-10-12', riskLevel: 'medium' },
-  { id: 'a3', memberId: 'm9', memberName: 'Luiz Fernando', weeksAbsent: 6, lastCellDate: '2023-09-21', riskLevel: 'critical' },
-];
+// No mocks anymore
 
 export function PastoralCareView({ isLoggedIn = true, userData }: { isLoggedIn?: boolean; userData?: any }) {
   const [activeTab, setActiveTab] = useState<'visitors' | 'prayers' | 'alerts'>('visitors');
@@ -74,21 +57,15 @@ export function PastoralCareView({ isLoggedIn = true, userData }: { isLoggedIn?:
     if (!tenantId) return;
 
     const unsubLeads = onSnapshot(query(collection(db, 'visitor_leads'), where('tenantId', '==', tenantId)), (snap) => {
-      if (snap.empty && import.meta.env.DEV) setLeads(MOCK_LEADS);
-      else if (snap.empty) setLeads([]);
-      else setLeads(snap.docs.map(doc => ({ id: doc.id, ...doc.data() } as VisitorLead)));
+      setLeads(snap.docs.map(doc => ({ id: doc.id, ...doc.data() } as VisitorLead)));
     });
 
     const unsubPrayers = onSnapshot(query(collection(db, 'prayer_requests'), where('tenantId', '==', tenantId)), (snap) => {
-      if (snap.empty && import.meta.env.DEV) setPrayers(MOCK_PRAYERS);
-      else if (snap.empty) setPrayers([]);
-      else setPrayers(snap.docs.map(doc => ({ id: doc.id, ...doc.data() } as PrayerRequest)));
+      setPrayers(snap.docs.map(doc => ({ id: doc.id, ...doc.data() } as PrayerRequest)));
     });
 
     const unsubAlerts = onSnapshot(query(collection(db, 'risk_alerts'), where('tenantId', '==', tenantId)), (snap) => {
-      if (snap.empty && import.meta.env.DEV) setAlerts(MOCK_ALERTS);
-      else if (snap.empty) setAlerts([]);
-      else setAlerts(snap.docs.map(doc => ({ id: doc.id, ...doc.data() } as RiskAlert)));
+      setAlerts(snap.docs.map(doc => ({ id: doc.id, ...doc.data() } as RiskAlert)));
     });
 
     return () => {

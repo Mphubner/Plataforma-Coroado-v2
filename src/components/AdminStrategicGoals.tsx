@@ -100,13 +100,7 @@ export function AdminStrategicGoals({ userData }: { userData?: any }) {
     setShowModal(true);
   };
 
-  const defaultMockGoals = [
-    { title: "Crescer", desc: "Ganhar pessoas para Jesus", sub: "100.000 vidas", period: "META LIDERANÇA", color: "border-red-500/50", progress: 65 },
-    { title: "Cuidar", desc: "Consolidar a nova vida em Cristo", sub: "Retenção de 85%", period: "CÉLULAS", color: "border-blue-500/50", progress: 80 },
-    { title: "Consolidar", desc: "Discipulado cristão e maturidade", sub: "Formar 500 novos líderes", period: "ESCOLA IDE", color: "border-green-500/50", progress: 40 },
-    { title: "Celebrar", desc: "Estatística de Cultos Saudáveis", sub: "4 mil pessoas/mês", period: "EVENTOS", color: "border-yellow-500/50", progress: 95 },
-  ];
-
+  // Mocks removed
   return (
     <div className="space-y-6">
       <AnimatePresence>
@@ -209,13 +203,13 @@ export function AdminStrategicGoals({ userData }: { userData?: any }) {
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-        {goals.length === 0 ? defaultMockGoals.map((g, i) => (
-           <Card key={i} className={`bg-zinc-900 border border-white/10 border-t-2 ${g.color} opacity-50`}>
+        {goals.length === 0 ? (
+           <Card className={`bg-zinc-900 border border-white/10 border-t-2 opacity-50 col-span-full`}>
               <CardContent className="p-4 text-center text-sm text-white/40">
-                Mock Padrão. Clique em 'Nova Meta' para começar.
+                Nenhuma meta criada. Clique em 'Nova Meta' para começar.
               </CardContent>
            </Card>
-        )) : goals.map((goal, i) => (
+        ) : goals.map((goal, i) => (
           <Card key={goal.id} className={`bg-zinc-900 border border-white/10 border-t-2 ${goal.color} cursor-pointer hover:bg-white/5 transition-colors group`} onClick={() => openEdit(goal)}>
             <CardHeader className="pb-2">
               <div className="flex justify-between items-start">

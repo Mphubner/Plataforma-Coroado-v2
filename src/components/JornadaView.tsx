@@ -8,23 +8,15 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { ZONES, SQUARES, PATH, QS, CHALLENGES, BLESSINGS, SETBACKS, PCOLORS } from '../lib/jornada-data';
 import { drawRoad, drawTile, drawDirectionArrows, drawZoneLabels, drawPawns, drawZoneStrip, getBoardBounds, PGRID_SORTED, isoXY, sqStyle } from '../lib/jornada-engine';
+import { db } from '@/lib/firebase';
+import { collection, query, where, getDocs } from 'firebase/firestore';
 
-// Mock data for church members
-const MOCK_MEMBERS = [
-  { id: 1, name: "João Silva", role: "Membro", cell: "Esperança", avatar: "https://i.pravatar.cc/150?u=1" },
-  { id: 2, name: "Maria Santos", role: "Líder", cell: "Esperança", avatar: "https://i.pravatar.cc/150?u=2" },
-  { id: 3, name: "Pedro Costa", role: "Membro", cell: "Esperança", avatar: "https://i.pravatar.cc/150?u=3" },
-  { id: 4, name: "Ana Oliveira", role: "Supervisor", cell: "Fé", avatar: "https://i.pravatar.cc/150?u=4" },
-  { id: 5, name: "Lucas Ferreira", role: "Líder", cell: "Amor", avatar: "https://i.pravatar.cc/150?u=5" },
-  { id: 6, name: "Julia Rodrigues", role: "Membro", cell: "Fé", avatar: "https://i.pravatar.cc/150?u=6" },
-  { id: 7, name: "Marcos Paulo", role: "Membro", cell: "Amor", avatar: "https://i.pravatar.cc/150?u=7" },
-  { id: 8, name: "Fernanda Lima", role: "Líder", cell: "Fé", avatar: "https://i.pravatar.cc/150?u=8" },
-];
+// Mocks removed
 
 type Screen = 'intro' | 'setup' | 'game' | 'victory';
 type Phase = 'roll' | 'moving' | 'card' | 'wait';
 
-export function JornadaView() {
+export function JornadaView({ isLoggedIn = true, userData }: { isLoggedIn?: boolean; userData?: any }) {
   const [screen, setScreen] = useState<Screen>('intro');
   const [players, setPlayers] = useState<any[]>([]);
   const [cur, setCur] = useState(0);
@@ -428,6 +420,17 @@ export function JornadaView() {
   // Setup Screen Component
   const SetupScreen = () => {
     const [selectedMembers, setSelectedMembers] = useState<any[]>([]);
+    const [availableMembers, setAvailableMembers] = useState<any[]>([]);
+
+    useEffect(() => {
+      const fetchMembers = async () => {
+        if (!userData?.tenantId) return;
+        const q = query(collection(db, 'members'), where('tenantId', '==', userData.tenantId));
+        const snap = await getDocs(q);
+        setAvailableMembers(snap.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+      };
+      fetchMembers();
+    }, [userData?.tenantId]);
 
     const toggleMember = (member: any) => {
       if (selectedMembers.find(m => m.id === member.id)) {
@@ -441,8 +444,8 @@ export function JornadaView() {
 
     const selectGroup = (group: string) => {
       let toSelect: any[] = [];
-      if (group === 'celula') toSelect = MOCK_MEMBERS.filter(m => m.cell === 'Esperança');
-      if (group === 'lideres') toSelect = MOCK_MEMBERS.filter(m => m.role === 'Líder' || m.role === 'Supervisor');
+      if (group === 'celula') toSelect = availableMembers.filter(m => m.cell === 'Esperança');
+      if (group === 'lideres') toSelect = availableMembers.filter(m => m.role === 'Líder' || m.role === 'Supervisor' || m.role === 'leader' || m.role === 'admin');
       
       const newSelection = [...selectedMembers];
       toSelect.forEach(m => {
@@ -504,7 +507,8 @@ export function JornadaView() {
               </div>
 
               <div className="bg-black/40 rounded-[2rem] border border-white/5 p-6 max-h-72 overflow-y-auto space-y-3 custom-scrollbar">
-                {MOCK_MEMBERS.map(member => {
+                {availableMembers.length === 0 && <p className="text-white/40 text-center py-4">Nenhum membro encontrado.</p>}
+                {availableMembers.map(member => {
                   const isSelected = selectedMembers.find(m => m.id === member.id);
                   return (
                     <motion.div 
@@ -517,12 +521,12 @@ export function JornadaView() {
                     >
                       <div className="flex items-center gap-4">
                         <Avatar className="h-12 w-12 border-2 border-white/10">
-                          <AvatarImage src={member.avatar} />
-                          <AvatarFallback className="bg-zinc-800 text-white font-bold">{member.name[0]}</AvatarFallback>
+                          <AvatarImage src={member.avatar || member.photoUrl} />
+                          <AvatarFallback className="bg-zinc-800 text-white font-bold">{member.name?.[0]}</AvatarFallback>
                         </Avatar>
                         <div>
                           <p className="text-base font-bold text-white">{member.name}</p>
-                          <p className="text-xs text-white/40 font-medium uppercase tracking-widest">{member.role} • {member.cell}</p>
+                          <p className="text-xs text-white/40 font-medium uppercase tracking-widest">{member.role} {member.cell ? `• ${member.cell}` : ''}</p>
                         </div>
                       </div>
                       {isSelected && (
