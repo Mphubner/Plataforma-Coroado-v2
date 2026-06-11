@@ -1,10 +1,10 @@
 # Estágio 1: Build da aplicação React/Vite
-FROM node:18-alpine AS builder
+FROM node:20-alpine AS builder
 
 WORKDIR /app
 
-# Instalar as dependências
-COPY package*.json ./
+# Copiar apenas o package.json primeiro para evitar bugs de plataforma do lockfile
+COPY package.json ./
 RUN npm install
 
 # Copiar todo o código-fonte e compilar
