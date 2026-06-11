@@ -138,21 +138,23 @@ export default function App() {
     );
   }
 
-  if (authState !== 'approved') {
-    return (
-      <AuthView
-        currentUserData={userData}
-        initialState={authState === 'onboarding' ? 'onboarding' : authState === 'pending' ? 'pending' : 'login'}
-        onLoginComplete={refreshProfile}
-      />
-    );
-  }
+  // Ocultamos AuthView global apenas se estivermos "signedOut" ou "approved".
+  // Se estiver "onboarding" ou "pending", forçamos a tela de Auth para finalizar cadastro.
+  const isAuthLocked = authState === 'onboarding' || authState === 'pending';
 
   return (
     <BrowserRouter>
       <SchoolProvider>
         <CellProvider>
-          <AppShell userData={userData} onLogout={() => signOut(auth)} />
+          {isAuthLocked ? (
+            <AuthView
+              currentUserData={userData}
+              initialState={authState === 'onboarding' ? 'onboarding' : 'pending'}
+              onLoginComplete={refreshProfile}
+            />
+          ) : (
+            <AppShell userData={userData} authState={authState} onLogout={() => signOut(auth)} refreshProfile={refreshProfile} />
+          )}
         </CellProvider>
       </SchoolProvider>
     </BrowserRouter>
@@ -163,7 +165,7 @@ export default function App() {
 // App Shell — Layout + Routes
 // =====================================================
 
-function AppShell({ userData, onLogout }: { userData: UserProfile | null; onLogout: () => Promise<void> }) {
+function AppShell({ userData, authState, onLogout, refreshProfile }: { userData: UserProfile | null; authState: AuthGateState; onLogout: () => Promise<void>; refreshProfile: () => void }) {
   const location = useLocation();
   const navigate = useNavigate();
   const activeRoute = routeForPath(location.pathname);
@@ -175,14 +177,26 @@ function AppShell({ userData, onLogout }: { userData: UserProfile | null; onLogo
     [navigate],
   );
 
+  // Se o usuário acessar a rota /login diretamente
+  if (location.pathname === '/login' && authState === 'signedOut') {
+    return <AuthView currentUserData={userData} initialState="login" onLoginComplete={() => {
+      refreshProfile();
+      navigate('/');
+    }} />;
+  }
+
   return (
     <Layout
       activeTab={activeRoute.id}
       setActiveTab={navigateToTab}
-      isLoggedIn
+      isLoggedIn={authState === 'approved'}
       userData={userData}
       userRole={roleLabel(userData)}
-      onLogoutClick={onLogout}
+      onLoginClick={() => navigate('/login')}
+      onLogoutClick={async () => {
+        await onLogout();
+        navigate('/');
+      }}
     >
       <Routes>
         <Route path="/" element={<HomeView onTabChange={navigateToTab} userData={userData} />} />

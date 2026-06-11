@@ -262,7 +262,7 @@ const capabilitiesByRole: Record<ChurchRole, Capability[]> = {
 };
 
 export const appRoutes: RouteConfig[] = [
-  { id: "home", path: "/", label: "Inicio", capability: "view:home", navGroup: "main", bottom: true },
+  { id: "home", path: "/", label: "Inicio", capability: "view:public", navGroup: "main", bottom: true },
   { id: "cell", path: "/celulas", label: "Celulas", capability: "view:cells", navGroup: "church", bottom: true },
   { id: "school", path: "/escola", label: "Escola IDE", capability: "view:school", navGroup: "growth", bottom: true },
   { id: "members", path: "/membros", label: "Membros", capability: "view:members", navGroup: "church" },
