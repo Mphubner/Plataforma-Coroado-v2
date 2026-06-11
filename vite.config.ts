@@ -29,17 +29,18 @@ export default defineConfig(({mode}) => {
             if (!id.includes('node_modules')) return undefined;
 
             if (id.includes('firebase')) return 'vendor-firebase';
-            if (id.includes('react') || id.includes('scheduler')) return 'vendor-react';
+            if (id.includes('lucide-react')) return 'vendor-icons';
+            if (id.includes('@radix-ui') || id.includes('@base-ui') || id.includes('embla-carousel')) return 'vendor-ui';
             if (id.includes('recharts') || id.includes('d3-')) return 'vendor-charts';
             if (id.includes('leaflet') || id.includes('html5-qrcode')) return 'vendor-maps-checkin';
             if (id.includes('motion')) return 'vendor-motion';
-            if (id.includes('lucide-react')) return 'vendor-icons';
-            if (id.includes('@radix-ui') || id.includes('@base-ui') || id.includes('embla-carousel')) return 'vendor-ui';
+            if (id.includes('node_modules/react/') || id.includes('node_modules/react-dom/') || id.includes('scheduler') || id.includes('react-router-dom')) return 'vendor-react';
 
             return 'vendor-misc';
           },
         },
       },
+      chunkSizeWarningLimit: 1000,
     },
   };
 });
