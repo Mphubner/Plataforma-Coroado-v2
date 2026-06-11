@@ -3,7 +3,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { AlertTriangle, TrendingUp, Users, DollarSign, Activity, Settings, X, Plus } from 'lucide-react';
+import { AlertTriangle, TrendingUp, Users, DollarSign, Target, Settings, X, Plus } from 'lucide-react';
 import { XAxis, YAxis, CartesianGrid, ResponsiveContainer, Tooltip as RechartsTooltip, AreaChart, Area } from 'recharts';
 import { auth, db } from "@/lib/firebase";
 import { collection, query, where, onSnapshot, addDoc, updateDoc, doc, serverTimestamp, getDocs } from "firebase/firestore";
@@ -200,7 +200,7 @@ export function AdminDashboardMetrics({ userData }: { userData?: any }) {
               {activeModal === 'service' && (
                 <>
                   <div className="flex justify-between items-center border-b border-white/10 pb-4">
-                    <h3 className="text-xl font-bold flex items-center gap-2"><Activity className="w-5 h-5"/> Lançar Relatório de Culto</h3>
+                    <h3 className="text-xl font-bold flex items-center gap-2"><Target className="w-5 h-5"/> Lançar Relatório de Culto</h3>
                     <Button variant="ghost" size="icon" onClick={() => setActiveModal(null)}><X className="w-5 h-5"/></Button>
                   </div>
                   <div className="space-y-4 grid grid-cols-2 gap-4">
@@ -266,7 +266,7 @@ export function AdminDashboardMetrics({ userData }: { userData?: any }) {
       {/* KPI Cards */}
       <div className="grid md:grid-cols-4 gap-4">
         {[
-          { id: 'cells', label: "Células Ativas", value: activeCells.toString(), meta: `Meta: ${targets.activeCells}`, progress: targets.activeCells ? Math.min((activeCells/targets.activeCells)*100, 100).toFixed(0) : 0, color: "text-primary", icon: Activity, action: () => setActiveModal('targets') },
+          { id: 'cells', label: "Células Ativas", value: activeCells.toString(), meta: `Meta: ${targets.activeCells}`, progress: targets.activeCells ? Math.min((activeCells/targets.activeCells)*100, 100).toFixed(0) : 0, color: "text-primary", icon: Target, action: () => setActiveModal('targets') },
           { id: 'attendance', label: "Frequência Cultos Máx", value: maxAttendance.toString(), meta: `Meta Avg: ${targets.attendanceAvg}`, progress: Math.min((maxAttendance/targets.attendanceAvg)*100, 100).toFixed(0), color: "text-secondary", icon: Users, action: () => setActiveModal('service') },
           { id: 'visitors', label: "Novos Visitantes", value: totalVisitors.toString(), meta: `Meta: ${targets.visitorsTarget}`, progress: targets.visitorsTarget ? Math.min((totalVisitors/targets.visitorsTarget)*100, 100).toFixed(0) : 0, color: "text-primary", icon: TrendingUp, action: () => setActiveModal('service') },
           { id: 'finance', label: "Receita (Dízimos/Off)", value: `R$ ${(totalFinancial/1000).toFixed(1)}k`, meta: `Meta: R$ ${(targets.revenueTarget/1000).toFixed(1)}k`, progress: targets.revenueTarget ? Math.min((totalFinancial/targets.revenueTarget)*100, 100).toFixed(0) : 0, color: "text-secondary", icon: DollarSign, action: () => setActiveModal('financial') },
