@@ -10,6 +10,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { db, auth } from '@/lib/firebase';
 import { collection, query, where, onSnapshot, getDoc, doc, getDocs, addDoc, serverTimestamp, updateDoc, deleteDoc } from 'firebase/firestore';
 import { can } from '@/src/lib/permissions';
+import { CellManagementDashboard } from './CellManagementDashboard';
 
 export function CellProvider({ children }: { children: React.ReactNode }) {
   // We keep this to not break App.tsx, but make it invisible/noop.
@@ -47,7 +48,7 @@ export function CellView({ isLoggedIn, isLeader, onTabChange, userData }: { isLo
     return <CellPublicView onTabChange={onTabChange} userData={userData} />;
   }
 
-  return <CellManagementView isLeader={isLeader || can(userData, 'manage:cell')} cell={userCell} userData={userData} />;
+  return <CellManagementDashboard isLeader={isLeader || can(userData, 'manage:cell')} cell={userCell} userData={userData} />;
 }
 
 function CellPublicView({ onTabChange, userData }: { onTabChange: (tab: string) => void; userData: any }) {
@@ -192,123 +193,4 @@ function CellPublicView({ onTabChange, userData }: { onTabChange: (tab: string) 
   );
 }
 
-function CellManagementView({ isLeader, cell, userData }: { isLeader: boolean; cell: any; userData: any }) {
-  const [activeTab, setActiveTab] = useState("dashboard");
-  const [members, setMembers] = useState<any[]>([]);
-  const [reports, setReports] = useState<any[]>([]);
 
-  useEffect(() => {
-    if (!cell?.id || !userData?.tenantId) return;
-    const qM = query(collection(db, 'users'), where('tenantId', '==', userData.tenantId), where('cellId', '==', cell.id));
-    const unsubM = onSnapshot(qM, (snap) => setMembers(snap.docs.map(d => ({id: d.id, ...d.data()}))));
-    
-    const qR = query(collection(db, 'cell_reports'), where('tenantId', '==', userData.tenantId), where('cellId', '==', cell.id));
-    const unsubR = onSnapshot(qR, (snap) => setReports(snap.docs.map(d => ({id: d.id, ...d.data()}))));
-
-    return () => { unsubM(); unsubR(); };
-  }, [cell?.id, userData?.tenantId]);
-
-  return (
-    <div className="space-y-8 pb-20">
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-        <div>
-          <h1 className="text-4xl font-black font-serif italic">{cell.name}</h1>
-          <p className="text-white/60 flex items-center gap-2 mt-2">
-            <MapPin className="w-4 h-4" /> {cell.neighborhood} • <Clock className="w-4 h-4 ml-2" /> {cell.day} às {cell.time}
-          </p>
-        </div>
-        <div className="flex gap-2">
-          {isLeader && (
-            <Button className="bg-primary text-black font-bold">
-              <CheckSquare className="mr-2 h-4 w-4" /> Novo Relatório
-            </Button>
-          )}
-        </div>
-      </div>
-
-      <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-8">
-        <TabsList className="bg-zinc-900 border border-white/10 p-1 rounded-full flex w-fit">
-          <TabsTrigger value="dashboard" className="rounded-full px-6 data-[state=active]:bg-primary data-[state=active]:text-black">Resumo</TabsTrigger>
-          <TabsTrigger value="members" className="rounded-full px-6 data-[state=active]:bg-primary data-[state=active]:text-black">Membros ({members.length})</TabsTrigger>
-          {isLeader && <TabsTrigger value="reports" className="rounded-full px-6 data-[state=active]:bg-primary data-[state=active]:text-black">Relatórios</TabsTrigger>}
-        </TabsList>
-
-        <TabsContent value="dashboard" className="space-y-8 mt-6">
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-            <Card className="bg-zinc-900 border-white/10">
-              <CardContent className="p-6">
-                <p className="text-[10px] uppercase font-bold text-white/40 mb-2">Membros Ativos</p>
-                <p className="text-4xl font-black text-primary">{members.length}</p>
-              </CardContent>
-            </Card>
-            <Card className="bg-zinc-900 border-white/10">
-              <CardContent className="p-6">
-                <p className="text-[10px] uppercase font-bold text-white/40 mb-2">Aulas Concluídas na Escola IDE</p>
-                <p className="text-4xl font-black text-white">45</p>
-              </CardContent>
-            </Card>
-            <Card className="bg-zinc-900 border-white/10">
-              <CardContent className="p-6">
-                <p className="text-[10px] uppercase font-bold text-white/40 mb-2">Última Reunião</p>
-                <p className="text-xl font-bold mt-2">
-                  {reports.length > 0 ? new Date(Math.max(...reports.map(r => new Date(r.date).getTime()))).toLocaleDateString() : "Nenhum registro"}
-                </p>
-              </CardContent>
-            </Card>
-          </div>
-        </TabsContent>
-
-        <TabsContent value="members" className="mt-6">
-          <Card className="bg-zinc-900 border-white/10">
-            <CardHeader><CardTitle>Nossa Família</CardTitle></CardHeader>
-            <CardContent>
-              <div className="space-y-4">
-                {members.map(m => (
-                  <div key={m.id} className="flex justify-between items-center p-4 bg-white/5 border border-white/10 rounded-xl">
-                    <div className="flex items-center gap-4">
-                      <Avatar className="w-10 h-10 border border-white/10">
-                        <AvatarFallback>{m.name?.[0]}</AvatarFallback>
-                      </Avatar>
-                      <div>
-                        <p className="font-bold">{m.name}</p>
-                        <p className="text-xs text-white/60">{m.roles?.join(', ')}</p>
-                      </div>
-                    </div>
-                    <div>
-                        <Button variant="ghost" size="sm" className="text-primary hover:bg-primary/20 hover:text-primary">Ver Perfil</Button>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </CardContent>
-          </Card>
-        </TabsContent>
-        
-        {isLeader && (
-          <TabsContent value="reports" className="mt-6">
-             <Card className="bg-zinc-900 border-white/10">
-               <CardHeader><CardTitle>Histórico de Relatórios</CardTitle></CardHeader>
-               <CardContent>
-                 <div className="space-y-4">
-                   {reports.length === 0 ? (
-                     <div className="text-center p-6 text-white/40 italic text-sm">Nenhum relatório lançado ainda.</div>
-                   ) : (
-                     reports.map(r => (
-                       <div key={r.id} className="p-4 bg-white/5 border border-white/10 rounded-xl flex justify-between items-center">
-                         <div>
-                           <p className="font-bold">{new Date(r.date).toLocaleDateString()}</p>
-                           <p className="text-sm text-white/60">Presentes: {r.present} | Visitantes: {r.visitors}</p>
-                         </div>
-                         <Button variant="outline" size="sm" className="border-white/10">Abrir</Button>
-                       </div>
-                     ))
-                   )}
-                 </div>
-               </CardContent>
-             </Card>
-          </TabsContent>
-        )}
-      </Tabs>
-    </div>
-  );
-}
