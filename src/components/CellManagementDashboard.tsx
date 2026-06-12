@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Users, Calendar, MapPin, Plus, Target, CheckSquare, Clock, Phone, AlertCircle, Edit, ListTodo, Trophy, BadgeAlert } from 'lucide-react';
+import { Users, Calendar, MapPin, Plus, Target, CheckSquare, Clock, Phone, AlertCircle, Edit, ListTodo, Trophy, BadgeAlert, Share2, QrCode, BookOpen, Heart } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -150,6 +150,69 @@ function ResumoTab({ cell, members, reports }: { cell: any, members: any[], repo
              </CardContent>
            </Card>
         </div>
+      </div>
+    </div>
+  )
+}
+
+function ResumoMembroTab({ cell, userData }: { cell: any, userData: any }) {
+  return (
+    <div className="space-y-6">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <Card className="bg-zinc-900 border-white/10 rounded-[2rem]">
+          <CardHeader>
+            <CardTitle className="text-xl font-bold font-serif italic">Meu Engajamento</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-6">
+            <div className="space-y-2">
+              <div className="flex justify-between text-sm">
+                <span className="font-bold text-white/80">Minha Frequência</span>
+                <span className="text-green-400 font-bold">100%</span>
+              </div>
+              <div className="h-2 bg-black/50 rounded-full overflow-hidden">
+                <div className="h-full bg-green-400 w-[100%]"></div>
+              </div>
+              <p className="text-[10px] text-white/40 uppercase tracking-widest mt-1">Últimas 4 semanas</p>
+            </div>
+            
+            <div className="space-y-3">
+              <p className="text-[10px] uppercase font-bold text-white/40 tracking-widest border-b border-white/10 pb-2">Minhas Escalas</p>
+              <div className="p-3 border border-white/5 rounded-xl bg-black/20 flex justify-between items-center">
+                <div className="flex items-center gap-3">
+                  <div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center">
+                     <Target className="w-4 h-4 text-primary"/>
+                  </div>
+                  <div>
+                    <p className="text-xs font-bold">Louvor e Adoração</p>
+                    <p className="text-[10px] text-white/50">Próximo Encontro</p>
+                  </div>
+                </div>
+                <Badge variant="outline" className="border-primary/20 text-primary text-[10px]">Confirmado</Badge>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card className="bg-gradient-to-br from-primary/20 to-zinc-900 border-primary/20 rounded-[2rem] relative overflow-hidden">
+          <div className="absolute top-0 right-0 p-6 opacity-20"><QrCode className="w-32 h-32" /></div>
+          <CardHeader className="relative z-10">
+            <CardTitle className="text-xl font-bold font-serif italic text-white flex items-center gap-2">
+               <Share2 className="w-5 h-5 text-primary" /> Convidar Visitantes
+            </CardTitle>
+            <p className="text-sm text-white/70">Compartilhe o link da célula para amigos e interessados.</p>
+          </CardHeader>
+          <CardContent className="space-y-3 relative z-10">
+            <Button className="w-full bg-primary text-black font-bold h-12 rounded-xl hover:bg-primary/90">
+              Copiar Link Compartilhável
+            </Button>
+            <Button variant="outline" className="w-full border-white/10 hover:bg-white/5 h-12 rounded-xl text-white">
+              <QrCode className="w-4 h-4 mr-2" /> Mostrar QR Code
+            </Button>
+            <Button variant="outline" className="w-full border-white/10 hover:bg-white/5 h-12 rounded-xl text-white">
+              <Phone className="w-4 h-4 mr-2" /> Nosso Instagram
+            </Button>
+          </CardContent>
+        </Card>
       </div>
     </div>
   )
@@ -385,7 +448,11 @@ export function CellManagementDashboard({ isLeader, cell, userData }: { isLeader
         </TabsList>
 
         <TabsContent value="resumo" className="mt-6 focus-visible:outline-none">
-          <ResumoTab cell={cell} members={members} reports={reports} />
+          {isLeader ? (
+            <ResumoTab cell={cell} members={members} reports={reports} />
+          ) : (
+            <ResumoMembroTab cell={cell} userData={userData} />
+          )}
         </TabsContent>
 
         <TabsContent value="members" className="mt-6 focus-visible:outline-none">
