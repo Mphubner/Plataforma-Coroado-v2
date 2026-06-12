@@ -210,7 +210,7 @@ function AppShell({ userData, authState, onLogout, refreshProfile }: { userData:
         <Route path="/ministerios" element={<ProtectedPage user={userData} capability="view:public"><MinistriesView isLoggedIn={authState === 'approved'} userData={userData} onLoginClick={() => navigate('/login')} /></ProtectedPage>} />
         <Route path="/cuidado-pastoral" element={<ProtectedPage user={userData} capability="view:pastoral"><PastoralCareView isLoggedIn userData={userData} /></ProtectedPage>} />
         <Route path="/financeiro" element={<ProtectedPage user={userData} capability="view:finance"><FinanceView userData={userData} /></ProtectedPage>} />
-        <Route path="/eventos" element={<ProtectedPage user={userData} capability="view:public"><EventsView userData={userData} /></ProtectedPage>} />
+        <Route path="/eventos" element={<ProtectedPage user={userData} capability="view:public"><EventsView isLoggedIn={authState === 'approved'} userData={userData} onLoginClick={() => navigate('/login')} /></ProtectedPage>} />
         <Route path="/escola" element={<ProtectedPage user={userData} capability="view:school"><SchoolView userRole={normalizeRoles(userData?.roles)} /></ProtectedPage>} />
         <Route path="/membros" element={<ProtectedPage user={userData} capability="view:members"><MembersView userData={userData} /></ProtectedPage>} />
         <Route

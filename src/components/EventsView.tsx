@@ -33,7 +33,7 @@ type EventEnrollment = {
   kids?: { id: string, name: string, age: string, obs: string, checkedIn: boolean }[];
 };
 
-export function EventsView({ userData }: { userData?: any }) {
+export function EventsView({ isLoggedIn = false, userData, onLoginClick }: { isLoggedIn?: boolean; userData?: any; onLoginClick?: () => void }) {
   const [activeTab, setActiveTab] = useState<'upcoming' | 'mytickets' | 'admin'>('upcoming');
   const [selectedEvent, setSelectedEvent] = useState<EventInfo | null>(null);
   const [events, setEvents] = useState<EventInfo[]>([]);
@@ -42,6 +42,8 @@ export function EventsView({ userData }: { userData?: any }) {
   const [scannedUser, setScannedUser] = useState<any>(null);
   const scannerRef = useRef<Html5QrcodeScanner | null>(null);
   const [enrollKids, setEnrollKids] = useState<{name: string, age: string, obs: string}[]>([]);
+  const [viewMode, setViewMode] = useState<'list' | 'calendar'>('list');
+  const [dateFilter, setDateFilter] = useState('');
 
   const [offlineQueue, setOfflineQueue] = useState<string[]>([]);
 
@@ -272,7 +274,10 @@ export function EventsView({ userData }: { userData?: any }) {
           </div>
         </button>
         <button 
-          onClick={() => setActiveTab("mytickets")}
+          onClick={() => {
+            if (!isLoggedIn && onLoginClick) return onLoginClick();
+            setActiveTab("mytickets");
+          }}
           className={`px-4 py-2 text-sm font-medium rounded-md transition-colors whitespace-nowrap ${activeTab === "mytickets" ? "bg-white/10 text-white" : "text-white/60 hover:text-white hover:bg-white/5"}`}
         >
           <div className="flex items-center gap-2">
@@ -299,53 +304,123 @@ export function EventsView({ userData }: { userData?: any }) {
            exit={{ opacity: 0, y: -10 }}
            transition={{ duration: 0.2 }}
         >
-          {activeTab === 'upcoming' && (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              {events.map(event => {
-                const occupancy = (event.enrolled / event.capacity) * 100;
-                const isFull = event.enrolled >= event.capacity;
-                const alreadyEnrolled = enrollments.some(e => e.eventId === event.id);
-                return (
-                  <Card key={event.id} className="bg-zinc-900 border-white/10 overflow-hidden flex flex-col group">
-                    <div className="relative h-48 overflow-hidden">
-                      <div className="absolute inset-0 bg-black/40 z-10" />
-                      <img src={event.image} alt={event.title} className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110 grayscale group-hover:grayscale-0" />
-                      <Badge className="absolute top-4 left-4 z-20 bg-primary/20 text-primary border-none">{event.type}</Badge>
-                      <Badge className="absolute top-4 right-4 z-20 bg-black/60 text-white border-white/20 backdrop-blur-md">
-                        {new Date(event.date).toLocaleDateString('pt-BR')}
-                      </Badge>
-                    </div>
-                    <CardHeader>
-                      <CardTitle className="text-xl line-clamp-1">{event.title}</CardTitle>
-                      <CardDescription className="flex items-center gap-2 mt-2 font-medium">
-                        <MapPin className="w-3 h-3 text-primary shrink-0" /> <span className="truncate">{event.location}</span>
-                        <Clock className="w-3 h-3 text-primary shrink-0 ml-2" /> <span>{event.time}</span>
-                      </CardDescription>
-                    </CardHeader>
-                    <CardContent className="flex-1 flex flex-col justify-end space-y-4">
-                      <div className="space-y-2">
-                        <div className="flex justify-between text-xs font-bold text-white/60">
-                          <span>Vagas: {event.enrolled} preenchidas</span>
-                          <span>Capacidade: {event.capacity}</span>
+          {activeTab === 'upcoming' && (() => {
+            const filteredEvents = dateFilter ? events.filter(e => e.date.startsWith(dateFilter)) : events;
+            
+            const groupedEvents = filteredEvents.reduce((acc, event) => {
+               if (!acc[event.date]) acc[event.date] = [];
+               acc[event.date].push(event);
+               return acc;
+            }, {} as Record<string, EventInfo[]>);
+
+            return (
+            <div className="space-y-6">
+              <div className="flex flex-col sm:flex-row justify-between gap-4 items-center bg-black/40 p-2 rounded-2xl border border-white/10">
+                <div className="flex gap-2 w-full sm:w-auto overflow-x-auto">
+                   <Button variant="ghost" className={`rounded-xl px-6 ${viewMode === 'list' ? 'bg-primary text-black font-bold' : 'text-white/60 hover:text-white'}`} onClick={() => setViewMode('list')}>Cards</Button>
+                   <Button variant="ghost" className={`rounded-xl px-6 ${viewMode === 'calendar' ? 'bg-primary text-black font-bold' : 'text-white/60 hover:text-white'}`} onClick={() => setViewMode('calendar')}>Calendário Diário</Button>
+                </div>
+                <div className="w-full sm:w-auto flex items-center gap-2 pr-4 pl-4 sm:pl-0 border-t sm:border-t-0 border-white/10 pt-2 sm:pt-0">
+                   <Calendar className="w-5 h-5 text-primary" />
+                   <input type="month" value={dateFilter} onChange={(e) => setDateFilter(e.target.value)} className="bg-transparent text-white outline-none font-bold placeholder-white/30" />
+                </div>
+              </div>
+
+              {viewMode === 'list' ? (
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                  {filteredEvents.map(event => {
+                    const occupancy = (event.enrolled / event.capacity) * 100;
+                    const isFull = event.enrolled >= event.capacity;
+                    const alreadyEnrolled = enrollments.some(e => e.eventId === event.id);
+                    return (
+                      <Card key={event.id} className="bg-zinc-900 border-white/10 overflow-hidden flex flex-col group">
+                        <div className="relative h-48 overflow-hidden">
+                          <div className="absolute inset-0 bg-black/40 z-10" />
+                          <img src={event.image} alt={event.title} className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110 grayscale group-hover:grayscale-0" />
+                          <Badge className="absolute top-4 left-4 z-20 bg-primary/20 text-primary border-none">{event.type}</Badge>
+                          <Badge className="absolute top-4 right-4 z-20 bg-black/60 text-white border-white/20 backdrop-blur-md">
+                            {new Date(event.date + 'T00:00:00').toLocaleDateString('pt-BR')}
+                          </Badge>
                         </div>
-                        <div className="h-1.5 bg-black rounded-full overflow-hidden">
-                          <div className={`h-full ${isFull ? 'bg-red-500' : occupancy > 80 ? 'bg-yellow-500' : 'bg-primary'}`} style={{ width: `${occupancy}%` }} />
-                        </div>
-                        {isFull && !alreadyEnrolled && <p className="text-xs text-red-500 font-bold">Lotação Esgotada</p>}
-                      </div>
-                      <Button 
-                        onClick={() => !alreadyEnrolled && setSelectedEvent(event)}
-                        disabled={isFull && !alreadyEnrolled}
-                        className={`w-full font-bold ${(isFull && !alreadyEnrolled) ? 'bg-zinc-800 text-white/40' : alreadyEnrolled ? 'bg-primary/20 text-primary border-primary hover:bg-primary/30' : 'bg-white/10 hover:bg-white/20 text-white border border-white/10'}`}
-                      >
-                        {alreadyEnrolled ? 'Já Inscrito' : isFull ? 'Esgotado' : 'Garantir Vaga'}
-                      </Button>
-                    </CardContent>
-                  </Card>
-                )
-              })}
+                        <CardHeader>
+                          <CardTitle className="text-xl line-clamp-1">{event.title}</CardTitle>
+                          <CardDescription className="flex items-center gap-2 mt-2 font-medium">
+                            <MapPin className="w-3 h-3 text-primary shrink-0" /> <span className="truncate">{event.location}</span>
+                            <Clock className="w-3 h-3 text-primary shrink-0 ml-2" /> <span>{event.time}</span>
+                          </CardDescription>
+                        </CardHeader>
+                        <CardContent className="flex-1 flex flex-col justify-end space-y-4">
+                          <div className="space-y-2">
+                            <div className="flex justify-between text-xs font-bold text-white/60">
+                              <span>Vagas: {event.enrolled} preenchidas</span>
+                              <span>Capacidade: {event.capacity}</span>
+                            </div>
+                            <div className="h-1.5 bg-black rounded-full overflow-hidden">
+                              <div className={`h-full ${isFull ? 'bg-red-500' : occupancy > 80 ? 'bg-yellow-500' : 'bg-primary'}`} style={{ width: `${occupancy}%` }} />
+                            </div>
+                            {isFull && !alreadyEnrolled && <p className="text-xs text-red-500 font-bold">Lotação Esgotada</p>}
+                          </div>
+                          <Button 
+                            onClick={() => {
+                              if (!isLoggedIn && onLoginClick) return onLoginClick();
+                              if (!alreadyEnrolled) setSelectedEvent(event);
+                            }}
+                            disabled={isFull && !alreadyEnrolled}
+                            className={`w-full font-bold ${(isFull && !alreadyEnrolled) ? 'bg-zinc-800 text-white/40' : alreadyEnrolled ? 'bg-primary/20 text-primary border-primary hover:bg-primary/30' : 'bg-white/10 hover:bg-white/20 text-white border border-white/10'}`}
+                          >
+                            {alreadyEnrolled ? 'Já Inscrito' : isFull ? 'Esgotado' : 'Garantir Vaga'}
+                          </Button>
+                        </CardContent>
+                      </Card>
+                    )
+                  })}
+                  {filteredEvents.length === 0 && <div className="col-span-full py-12 text-center text-white/40 border border-dashed border-white/10 rounded-2xl">Nenhum evento agendado para esta data.</div>}
+                </div>
+              ) : (
+                <div className="bg-zinc-900 border border-white/10 rounded-[2rem] p-6 lg:p-8 space-y-8">
+                   {Object.entries(groupedEvents).map(([date, dayEvents]) => (
+                     <div key={date}>
+                       <h3 className="text-2xl font-black font-serif italic text-primary mb-4 flex items-center gap-3">
+                         <div className="w-10 h-10 bg-primary/20 rounded-full flex items-center justify-center not-italic font-sans text-sm">{new Date(date + 'T00:00:00').getDate()}</div>
+                         {new Date(date + 'T00:00:00').toLocaleDateString('pt-BR', { weekday: 'long', month: 'long' }).replace(/^\w/, c => c.toUpperCase())}
+                       </h3>
+                       <div className="space-y-3">
+                         {(dayEvents as any[]).map(event => {
+                            const alreadyEnrolled = enrollments.some(e => e.eventId === event.id);
+                            return (
+                             <div key={event.id} className="flex flex-col sm:flex-row gap-4 items-center bg-black/40 hover:bg-white/5 transition-colors p-4 rounded-2xl border border-white/5 group">
+                               <div className="text-center px-6 border-b sm:border-b-0 sm:border-r border-white/10 pb-4 sm:pb-0 shrink-0 w-full sm:w-auto">
+                                 <p className="text-3xl font-black">{event.time}</p>
+                               </div>
+                               <div className="flex-1 text-center sm:text-left">
+                                 <h4 className="font-bold text-lg mb-1">{event.title}</h4>
+                                 <p className="text-white/60 text-sm flex items-center justify-center sm:justify-start gap-1"><MapPin className="w-3 h-3 text-primary" /> {event.location}</p>
+                               </div>
+                               <div className="w-full sm:w-auto mt-4 sm:mt-0">
+                                 <Button 
+                                   onClick={() => { 
+                                     if (!isLoggedIn && onLoginClick) return onLoginClick(); 
+                                     if (!alreadyEnrolled) setSelectedEvent(event); 
+                                   }} 
+                                   className={`w-full sm:w-auto font-bold ${alreadyEnrolled ? 'bg-primary/20 text-primary hover:bg-primary/30' : 'bg-primary text-black'}`}
+                                 >
+                                   {alreadyEnrolled ? 'Inscrito' : 'Garantir Vaga'}
+                                 </Button>
+                               </div>
+                             </div>
+                            )
+                         })}
+                       </div>
+                     </div>
+                   ))}
+                   {Object.keys(groupedEvents).length === 0 && (
+                     <div className="text-center py-12 text-white/40">Nenhum evento neste mês.</div>
+                   )}
+                </div>
+              )}
             </div>
-          )}
+            );
+          })()}
 
           {activeTab === 'mytickets' && (
             <div className="space-y-6">
