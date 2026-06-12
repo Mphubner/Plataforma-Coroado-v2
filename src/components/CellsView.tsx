@@ -55,8 +55,10 @@ function CellPublicView({ onTabChange, userData }: { onTabChange: (tab: string) 
   const [search, setSearch] = useState("");
 
   useEffect(() => {
-    if (!userData?.tenantId) return;
-    const q = query(collection(db, 'cells'), where('tenantId', '==', userData.tenantId));
+    const q = userData?.tenantId 
+      ? query(collection(db, 'cells'), where('tenantId', '==', userData.tenantId))
+      : query(collection(db, 'cells')); // Se não logado, busca todas da igreja
+      
     const unsub = onSnapshot(q, (snap) => setCells(snap.docs.map(d => ({id: d.id, ...d.data()}))));
     return () => unsub();
   }, [userData?.tenantId]);
@@ -86,35 +88,43 @@ function CellPublicView({ onTabChange, userData }: { onTabChange: (tab: string) 
       </section>
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        {filteredCells.map(cell => (
-          <Card key={cell.id} className="bg-zinc-900 border-white/10 overflow-hidden group hover:border-primary/50 transition-colors">
-            <CardHeader className="pb-4">
-              <CardTitle className="flex justify-between items-start">
-                <span className="font-serif italic text-2xl group-hover:text-primary transition-colors">{cell.name}</span>
-                <Badge variant="outline" className="border-white/20">{cell.day}</Badge>
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="flex items-center gap-3 text-sm text-white/60">
-                <MapPin className="w-4 h-4 text-primary" /> {cell.neighborhood}
-              </div>
-              <div className="flex items-center gap-3 text-sm text-white/60">
-                <Clock className="w-4 h-4 text-primary" /> {cell.time}
-              </div>
-              <div className="pt-4 border-t border-white/10 flex justify-end">
-                <Button 
-                  className="bg-primary text-black font-bold w-full"
-                  onClick={() => {
-                    const message = encodeURIComponent(`Olá! Quero conhecer mais sobre a ${cell.name}.`);
-                    window.open(`https://wa.me/${cell.phone || ''}?text=${message}`);
-                  }}
-                >
-                  Entrar em Contato
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
-        ))}
+        {filteredCells.map(cell => {
+           const mapLink = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(cell.neighborhood + " " + (cell.city || "Guarapari"))}`;
+           return (
+            <Card key={cell.id} className="bg-zinc-900 border-white/10 overflow-hidden group hover:border-primary/50 transition-colors">
+              <CardHeader className="pb-4">
+                <CardTitle className="flex justify-between items-start">
+                  <span className="font-serif italic text-2xl group-hover:text-primary transition-colors">{cell.name}</span>
+                  <Badge variant="outline" className="border-white/20">{cell.day}</Badge>
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-3 text-sm text-white/60">
+                    <MapPin className="w-4 h-4 text-primary" /> {cell.neighborhood}
+                  </div>
+                  <Button variant="ghost" size="sm" className="text-primary hover:bg-primary/20 hover:text-primary h-8" onClick={() => window.open(mapLink, '_blank')}>
+                    <MapPin className="w-3 h-3 mr-1" /> Ver Rota
+                  </Button>
+                </div>
+                <div className="flex items-center gap-3 text-sm text-white/60">
+                  <Clock className="w-4 h-4 text-primary" /> {cell.time}
+                </div>
+                <div className="pt-4 border-t border-white/10 flex justify-end">
+                  <Button 
+                    className="bg-primary text-black font-bold w-full"
+                    onClick={() => {
+                      const message = encodeURIComponent(`Olá! Quero conhecer mais sobre a ${cell.name} localizada em ${cell.neighborhood}.`);
+                      window.open(`https://wa.me/${cell.phone || ''}?text=${message}`);
+                    }}
+                  >
+                    Entrar em Contato
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+          );
+        })}
         {filteredCells.length === 0 && (
           <div className="col-span-full py-12 text-center text-white/40 border border-dashed border-white/10 rounded-2xl">
             Nenhuma célula encontrada para esta pesquisa.

@@ -4,6 +4,8 @@ import { MapPin, Clock, Phone, Navigation } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
+import { db } from '@/lib/firebase';
+import { collection, query, where, onSnapshot } from 'firebase/firestore';
 
 const UNITS = [
   {
@@ -28,7 +30,24 @@ const UNITS = [
   }
 ];
 
-export function UnitsView() {
+export function UnitsView({ isAdmin, userData }: { isAdmin?: boolean; userData?: any }) {
+  const [unitsList, setUnitsList] = React.useState<any[]>(UNITS);
+
+  React.useEffect(() => {
+    const q = userData?.tenantId
+      ? query(collection(db, 'units'), where('tenantId', '==', userData.tenantId))
+      : query(collection(db, 'units'));
+
+    const unsub = onSnapshot(q, (snap) => {
+      if (!snap.empty) {
+        setUnitsList(snap.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+      } else {
+        setUnitsList(UNITS); // Fallback para lista mock
+      }
+    });
+    return () => unsub();
+  }, [userData?.tenantId]);
+
   return (
     <div className="space-y-20 pb-20">
       <div className="space-y-6">
@@ -41,8 +60,16 @@ export function UnitsView() {
         </p>
       </div>
 
+      <div className="space-y-6">
+        {isAdmin && (
+          <div className="flex justify-end">
+             <Button variant="outline" className="border-white/10" onClick={() => alert("Gerenciamento de Unidades será integrado ao painel Gestão")}>
+                + Adicionar Unidade
+             </Button>
+          </div>
+        )}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-10">
-        {UNITS.map((unit, index) => (
+        {unitsList.map((unit, index) => (
           <motion.div
             key={unit.id}
             initial={{ opacity: 0, y: 20 }}

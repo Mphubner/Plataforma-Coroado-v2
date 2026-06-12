@@ -204,8 +204,12 @@ export function HomeView({ onTabChange, userData }: { onTabChange: (tab: string)
       <section className="space-y-6">
         <div className="flex items-end justify-between gap-4">
           <div>
-            <h2 className="text-3xl font-black tracking-tight font-serif italic text-white">Seu painel</h2>
-            <p className="text-white/50">Atalhos liberados para o seu perfil atual.</p>
+            <h2 className="text-3xl font-black tracking-tight font-serif italic text-white">
+              {userData?.id ? "Seu painel" : "Quero conhecer Mais"}
+            </h2>
+            <p className="text-white/50">
+              {userData?.id ? "Atalhos liberados para o seu perfil atual." : "Nossas programações, Células, escola de ensino e muito mais!"}
+            </p>
           </div>
           <Badge variant="outline" className="border-white/10 text-white/60">{homeSections.length} areas</Badge>
         </div>

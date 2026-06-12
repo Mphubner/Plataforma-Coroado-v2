@@ -6,7 +6,7 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
 
-export function SocialView() {
+export function SocialView({ onLoginClick, isLoggedIn = false }: { onLoginClick?: () => void; isLoggedIn?: boolean }) {
   return (
     <div className="space-y-20 pb-20">
       {/* Hero Section */}
@@ -42,7 +42,13 @@ export function SocialView() {
             </p>
             <div className="flex flex-wrap gap-4 pt-4">
               <Button 
-                onClick={() => window.open('https://wa.me/5527999999999?text=Olá! Gostaria de ser um voluntário no Coroado Social.', '_blank')}
+                onClick={() => {
+                  if (isLoggedIn) {
+                    window.open('https://wa.me/5527999999999?text=Olá! Gostaria de ser um voluntário no Coroado Social.', '_blank')
+                  } else {
+                    onLoginClick?.();
+                  }
+                }}
                 className="bg-primary text-black hover:bg-primary/90 font-black px-10 h-14 rounded-full shadow-lg shadow-primary/20 transition-all hover:scale-105 active:scale-95"
               >
                 <Heart className="mr-2 w-5 h-5" /> Seja um Voluntário

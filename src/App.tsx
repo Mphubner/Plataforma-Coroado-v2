@@ -202,12 +202,12 @@ function AppShell({ userData, authState, onLogout, refreshProfile }: { userData:
         <Route path="/" element={<HomeView onTabChange={navigateToTab} userData={userData} />} />
         <Route path="/gestao" element={<ProtectedPage user={userData} capability="view:admin"><AdminView userData={userData} /></ProtectedPage>} />
         <Route path="/jornada" element={<ProtectedPage user={userData} capability="view:jornada"><JornadaView /></ProtectedPage>} />
-        <Route path="/pastores" element={<ProtectedPage user={userData} capability="view:public"><PastorsView /></ProtectedPage>} />
-        <Route path="/social" element={<ProtectedPage user={userData} capability="view:public"><SocialView /></ProtectedPage>} />
-        <Route path="/unidades" element={<ProtectedPage user={userData} capability="view:public"><UnitsView /></ProtectedPage>} />
+        <Route path="/pastores" element={<ProtectedPage user={userData} capability="view:public"><PastorsView isAdmin={can(userData, 'view:admin')} userData={userData} /></ProtectedPage>} />
+        <Route path="/social" element={<ProtectedPage user={userData} capability="view:public"><SocialView isLoggedIn={authState === 'approved'} onLoginClick={() => navigate('/login')} /></ProtectedPage>} />
+        <Route path="/unidades" element={<ProtectedPage user={userData} capability="view:public"><UnitsView isAdmin={can(userData, 'view:admin')} userData={userData} /></ProtectedPage>} />
         <Route path="/midia" element={<ProtectedPage user={userData} capability="view:public"><SocialMediaView /></ProtectedPage>} />
         <Route path="/loja" element={<ProtectedPage user={userData} capability="view:public"><StoreView isAdmin={can(userData, 'manage:finance')} userData={userData} /></ProtectedPage>} />
-        <Route path="/ministerios" element={<ProtectedPage user={userData} capability="view:ministries"><MinistriesView isLoggedIn userData={userData} /></ProtectedPage>} />
+        <Route path="/ministerios" element={<ProtectedPage user={userData} capability="view:public"><MinistriesView isLoggedIn={authState === 'approved'} userData={userData} onLoginClick={() => navigate('/login')} /></ProtectedPage>} />
         <Route path="/cuidado-pastoral" element={<ProtectedPage user={userData} capability="view:pastoral"><PastoralCareView isLoggedIn userData={userData} /></ProtectedPage>} />
         <Route path="/financeiro" element={<ProtectedPage user={userData} capability="view:finance"><FinanceView userData={userData} /></ProtectedPage>} />
         <Route path="/eventos" element={<ProtectedPage user={userData} capability="view:events"><EventsView userData={userData} /></ProtectedPage>} />

@@ -110,7 +110,7 @@ const getHealthBg = (score: number) => {
   return "bg-red-400";
 };
 
-export function MinistriesView({ isLoggedIn = true, userData }: { isLoggedIn?: boolean; userData?: any }) {
+export function MinistriesView({ isLoggedIn = true, userData, onLoginClick }: { isLoggedIn?: boolean; userData?: any; onLoginClick?: () => void }) {
   const [ministries, setMinistries] = React.useState<Ministry[]>([]);
   const [selectedMinistry, setSelectedMinistry] = React.useState<Ministry | null>(null);
   const [activeTab, setActiveTab] = React.useState("overview");
@@ -171,8 +171,11 @@ export function MinistriesView({ isLoggedIn = true, userData }: { isLoggedIn?: b
   }, [selectedMinistry, currentUserId, userData]);
 
   React.useEffect(() => {
-    if (!tenantId) return;
-    const unsub = onSnapshot(query(collection(db, 'ministries'), where('tenantId', '==', tenantId)), (snap) => {
+    const q = tenantId 
+      ? query(collection(db, 'ministries'), where('tenantId', '==', tenantId))
+      : query(collection(db, 'ministries'));
+      
+    const unsub = onSnapshot(q, (snap) => {
       const mins = snap.docs.map(doc => ({ id: doc.id, ...doc.data() } as Ministry));
       setMinistries(mins);
     });
@@ -231,8 +234,8 @@ export function MinistriesView({ isLoggedIn = true, userData }: { isLoggedIn?: b
                       <h3 className="text-2xl font-black font-serif italic mb-3 text-white group-hover:text-primary transition-colors">{ministry.name}</h3>
                       <p className="text-white/60 leading-relaxed min-h-[4rem]">{ministry.description}</p>
                     </div>
-                    <Button variant="outline" className="w-full border-white/20 hover:bg-primary hover:text-black hover:border-primary font-bold uppercase tracking-wider text-xs h-12" onClick={() => document.getElementById('novo-aqui-modal')?.classList.remove('hidden')}>
-                      Quero Participar
+                    <Button variant="outline" className="w-full border-white/20 hover:bg-primary hover:text-black hover:border-primary font-bold uppercase tracking-wider text-xs h-12" onClick={() => onLoginClick?.()}>
+                      Como Fazer Parte
                     </Button>
                   </div>
                 </CardContent>

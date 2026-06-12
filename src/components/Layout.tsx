@@ -114,9 +114,12 @@ export function Layout({ children, activeTab, setActiveTab, isLoggedIn = true, u
   const getBottomNavItems = () => permittedNav.filter(item => item.bottom).slice(0, 5).map(item => item.id)
 
   const getDesktopPrimaryItems = () => {
-    const preferred: RouteId[] = ["home", "cell", "school", "members", "ministries", "events", "finance", "jornada", "admin", "pastoral"]
-    const permittedIds = new Set(permittedNav.map(item => item.id))
-    return preferred.filter(id => permittedIds.has(id))
+    const preferredLogged: RouteId[] = ["home", "cell", "school", "members", "ministries", "events", "finance", "jornada", "admin", "pastoral"];
+    const preferredPublic: RouteId[] = ["home", "cell", "ministries", "units", "pastors", "social", "events"];
+    const preferred = isLoggedIn ? preferredLogged : preferredPublic;
+    
+    const permittedIds = new Set(permittedNav.map(item => item.id));
+    return preferred.filter(id => permittedIds.has(id));
   }
 
   const bottomNavIds = getBottomNavItems()
@@ -251,12 +254,16 @@ export function Layout({ children, activeTab, setActiveTab, isLoggedIn = true, u
                     {(() => {
                       const visibleItems = permittedNav;
 
-                      const categories = [
+                      const categories = isLoggedIn ? [
                         { id: 'main', label: 'Principal', items: visibleItems.filter(i => ['home', 'jornada', 'events'].includes(i.id)) },
                         { id: 'igreja', label: 'Conexão & Igreja', items: visibleItems.filter(i => ['cell', 'members', 'ministries', 'pastoral'].includes(i.id)) },
                         { id: 'estudos', label: 'Crescimento', items: visibleItems.filter(i => ['school', 'finance', 'store'].includes(i.id)) },
                         { id: 'public', label: 'Institucional', items: visibleItems.filter(i => ['units', 'social', 'media'].includes(i.id)) },
                         { id: 'admin', label: 'Gestão', items: visibleItems.filter(i => ['admin'].includes(i.id)) }
+                      ] : [
+                        { id: 'public', label: 'Conheça a Igreja', items: visibleItems.filter(i => ['home', 'cell', 'ministries', 'events'].includes(i.id)) },
+                        { id: 'institucional', label: 'Institucional', items: visibleItems.filter(i => ['pastors', 'units', 'social'].includes(i.id)) },
+                        { id: 'media', label: 'Mídia & Loja', items: visibleItems.filter(i => ['media', 'store'].includes(i.id)) }
                       ];
 
                       return categories.map(cat => (

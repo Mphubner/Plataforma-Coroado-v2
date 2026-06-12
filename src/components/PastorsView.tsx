@@ -4,6 +4,8 @@ import { Facebook, Instagram, Youtube, Mail, ChevronRight, Calendar } from 'luci
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
+import { db } from '@/lib/firebase';
+import { collection, query, where, onSnapshot } from 'firebase/firestore';
 
 const PASTORS = [
   {
@@ -44,7 +46,24 @@ const PASTORS = [
   }
 ];
 
-export function PastorsView() {
+export function PastorsView({ isAdmin, userData }: { isAdmin?: boolean; userData?: any }) {
+  const [pastorsList, setPastorsList] = React.useState<any[]>(PASTORS);
+
+  React.useEffect(() => {
+    const q = userData?.tenantId
+      ? query(collection(db, 'pastors'), where('tenantId', '==', userData.tenantId))
+      : query(collection(db, 'pastors'));
+
+    const unsub = onSnapshot(q, (snap) => {
+      if (!snap.empty) {
+        setPastorsList(snap.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+      } else {
+        setPastorsList(PASTORS); // Fallback para lista mock enquanto não há pastores no DB
+      }
+    });
+    return () => unsub();
+  }, [userData?.tenantId]);
+
   return (
     <div className="space-y-20 pb-20">
       {/* Hero Section */}
@@ -82,9 +101,16 @@ export function PastorsView() {
       </section>
 
       {/* Pastors Grid */}
-      <section>
+      <section className="space-y-6">
+        {isAdmin && (
+          <div className="flex justify-end">
+             <Button variant="outline" className="border-white/10" onClick={() => alert("Gerenciamento de Pastores será integrado ao painel Gestão")}>
+                + Adicionar Pastor
+             </Button>
+          </div>
+        )}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
-          {PASTORS.map((pastor, index) => (
+          {pastorsList.map((pastor, index) => (
             <motion.div
               key={pastor.id}
               initial={{ opacity: 0, y: 20 }}
