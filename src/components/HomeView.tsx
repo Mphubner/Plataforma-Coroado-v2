@@ -10,6 +10,7 @@ import { collection, query, onSnapshot, orderBy, limit, updateDoc, doc } from "f
 import { handleFirestoreError, OperationType } from '@/lib/firestoreUtils';
 import { CalendarCheck, Music } from 'lucide-react';
 import { getHomeSections, routeById, type RouteId } from '@/src/lib/permissions';
+import { HomeDashboard } from './HomeDashboard';
 
 export function HomeView({ onTabChange, userData }: { onTabChange: (tab: string) => void, userData?: any }) {
   const [selectedEvent, setSelectedEvent] = React.useState<any>(null);
@@ -20,37 +21,37 @@ export function HomeView({ onTabChange, userData }: { onTabChange: (tab: string)
   const homeSections = getHomeSections(userData).filter((routeId): routeId is RouteId => Boolean(routeById[routeId]));
 
   useEffect(() => {
-     // Fetch generic events
-     const qEvents = query(collection(db, 'events'), limit(3));
-     const unEv = onSnapshot(qEvents, (snap) => {
-        setDbEvents(snap.docs.map(d => ({id: d.id, ...d.data()})).sort((a:any, b:any) => a.date?.localeCompare(b.date)));
-     }, (error) => {
-        handleFirestoreError(error, OperationType.LIST, 'events');
-     });
-     
-     // Fetch ministries
-     const qMin = query(collection(db, 'ministries'), limit(8));
-     const unMin = onSnapshot(qMin, (snap) => {
-        setDbMinistries(snap.docs.map(d => ({id: d.id, ...d.data()})));
-     }, (error) => {
-        handleFirestoreError(error, OperationType.LIST, 'ministries');
-     });
+    // Fetch generic events
+    const qEvents = query(collection(db, 'events'), limit(3));
+    const unEv = onSnapshot(qEvents, (snap) => {
+      setDbEvents(snap.docs.map(d => ({ id: d.id, ...d.data() })).sort((a: any, b: any) => a.date?.localeCompare(b.date)));
+    }, (error) => {
+      handleFirestoreError(error, OperationType.LIST, 'events');
+    });
 
-     // Fetch scales if logged in
-     let unScales: any = null;
-     if (userData?.id) {
-       const qScales = query(collection(db, 'scales'));
-       unScales = onSnapshot(qScales, (snap) => {
-          const all = snap.docs.map(d => ({id: d.id, ...d.data()}));
-          // Filter scales where this user is assigned
-          const userScales = all.filter(s => s.assignments?.some((a:any) => a.memberId === userData.id));
-          // Sort by date upcoming
-          userScales.sort((a,b) => new Date(a.date).getTime() - new Date(b.date).getTime());
-          setMyScales(userScales);
-       });
-     }
+    // Fetch ministries
+    const qMin = query(collection(db, 'ministries'), limit(8));
+    const unMin = onSnapshot(qMin, (snap) => {
+      setDbMinistries(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+    }, (error) => {
+      handleFirestoreError(error, OperationType.LIST, 'ministries');
+    });
 
-     return () => { unEv(); unMin(); if (unScales) unScales(); }
+    // Fetch scales if logged in
+    let unScales: any = null;
+    if (userData?.id) {
+      const qScales = query(collection(db, 'scales'));
+      unScales = onSnapshot(qScales, (snap) => {
+        const all = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+        // Filter scales where this user is assigned
+        const userScales = all.filter(s => s.assignments?.some((a: any) => a.memberId === userData.id));
+        // Sort by date upcoming
+        userScales.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+        setMyScales(userScales);
+      });
+    }
+
+    return () => { unEv(); unMin(); if (unScales) unScales(); }
   }, [userData]);
 
   const handleStatusChange = async (scaleId: string, status: string) => {
@@ -58,7 +59,7 @@ export function HomeView({ onTabChange, userData }: { onTabChange: (tab: string)
     if (!scale || !userData?.id) return;
     try {
       const oldAssignments = scale.assignments || [];
-      const newAssignments = oldAssignments.map((a: any) => 
+      const newAssignments = oldAssignments.map((a: any) =>
         a.memberId === userData.id ? { ...a, status } : a
       );
       await updateDoc(doc(db, 'scales', scaleId), { assignments: newAssignments });
@@ -75,32 +76,36 @@ export function HomeView({ onTabChange, userData }: { onTabChange: (tab: string)
   ];
 
   const events = dbEvents.length > 0 ? dbEvents.map(e => ({
-     title: e.title, date: e.date, loc: e.location || 'Presencial', type: e.category || 'Evento', desc: e.description || ''
+    title: e.title, date: e.date, loc: e.location || 'Presencial', type: e.category || 'Evento', desc: e.description || ''
   })) : [
-     { title: "Nenhum evento próximo", date: "-", loc: "-", type: "-", desc: "Aguarde novidades em breve." }
+    { title: "Nenhum evento próximo", date: "-", loc: "-", type: "-", desc: "Aguarde novidades em breve." }
   ];
+
+  if (userData?.id) {
+    return <HomeDashboard userData={userData} events={events} myScales={myScales} />;
+  }
 
   return (
     <div className="space-y-20 pb-20">
       <AnimatePresence>
         {selectedEvent && (
           <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
-            <motion.div 
+            <motion.div
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
               onClick={() => setSelectedEvent(null)}
               className="absolute inset-0 bg-black/80 backdrop-blur-sm"
             />
-            <motion.div 
+            <motion.div
               initial={{ opacity: 0, scale: 0.9, y: 20 }}
               animate={{ opacity: 1, scale: 1, y: 0 }}
               exit={{ opacity: 0, scale: 0.9, y: 20 }}
               className="relative w-full max-w-lg glass-card p-8 md:p-12 rounded-[2.5rem] space-y-8"
             >
-              <Button 
-                variant="ghost" 
-                size="icon" 
+              <Button
+                variant="ghost"
+                size="icon"
                 onClick={() => setSelectedEvent(null)}
                 className="absolute top-6 right-6 rounded-full hover:bg-white/10"
               >
@@ -142,8 +147,8 @@ export function HomeView({ onTabChange, userData }: { onTabChange: (tab: string)
               Bem-vindo à Igreja Coroado
             </Badge>
           </motion.div>
-          
-          <motion.h1 
+
+          <motion.h1
             className="text-6xl md:text-8xl font-black tracking-tighter leading-[0.9] font-serif"
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
@@ -152,32 +157,32 @@ export function HomeView({ onTabChange, userData }: { onTabChange: (tab: string)
             UM LUGAR PARA <br />
             <span className="text-primary italic font-light">PERTENCER</span>
           </motion.h1>
-          
-          <motion.p 
+
+          <motion.p
             className="text-xl text-white/60 leading-relaxed max-w-xl font-medium"
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.4 }}
           >
-            Nós somos uma igreja em células, apaixonada por Jesus e comprometida em transformar vidas através do amor e do serviço.
+            Nós somos uma igreja em células, apaixonada por Jesus para transformar o mundo.
           </motion.p>
-          
-          <motion.div 
+
+          <motion.div
             className="flex flex-wrap gap-4 pt-4"
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.5 }}
           >
-            <Button 
-              size="lg" 
+            <Button
+              size="lg"
               onClick={() => onTabChange("cell")}
               className="bg-primary text-black hover:bg-primary/90 rounded-full px-10 h-14 text-lg font-bold shadow-lg shadow-primary/20 transition-all hover:scale-105 active:scale-95"
             >
               Encontrar uma Célula
             </Button>
-            <Button 
-              size="lg" 
-              variant="outline" 
+            <Button
+              size="lg"
+              variant="outline"
               onClick={() => document.getElementById('novo-aqui-modal')?.classList.remove('hidden')}
               className="border-primary/50 text-primary hover:bg-primary/10 rounded-full px-10 h-14 text-lg font-bold backdrop-blur-sm transition-all hover:scale-105 active:scale-95 flex items-center gap-2"
             >
@@ -185,16 +190,16 @@ export function HomeView({ onTabChange, userData }: { onTabChange: (tab: string)
             </Button>
           </motion.div>
         </div>
-        
+
         {/* Decorative elements */}
         <div className="absolute top-0 right-0 w-full md:w-2/3 h-full opacity-40 pointer-events-none">
           <div className="absolute inset-0 bg-gradient-to-r from-black via-black/50 to-transparent z-10" />
-          <motion.img 
+          <motion.img
             initial={{ scale: 1.1, opacity: 0 }}
             animate={{ scale: 1, opacity: 0.4 }}
             transition={{ duration: 1.5 }}
-            src="https://images.unsplash.com/photo-1438232992991-995b7058bbb3?q=80&w=1200&auto=format&fit=crop" 
-            alt="Background" 
+            src="https://images.unsplash.com/photo-1438232992991-995b7058bbb3?q=80&w=1200&auto=format&fit=crop"
+            alt="Background"
             className="w-full h-full object-cover grayscale"
             referrerPolicy="no-referrer"
           />
@@ -237,7 +242,7 @@ export function HomeView({ onTabChange, userData }: { onTabChange: (tab: string)
 
       <AnimatePresence>
         {true && (
-          <motion.section 
+          <motion.section
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             className="space-y-6"
@@ -249,21 +254,21 @@ export function HomeView({ onTabChange, userData }: { onTabChange: (tab: string)
               </span>
               <h2 className="text-3xl font-black tracking-tight font-serif italic text-white">Culto Ao Vivo</h2>
             </div>
-            
+
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
               <div className="lg:col-span-2 overflow-hidden rounded-[2rem] bg-zinc-900 border border-red-500/20 aspect-video relative">
-                <iframe 
+                <iframe
                   className="w-full h-full absolute inset-0"
-                  src="https://www.youtube.com/embed/jfKfPfyJRdk?autoplay=1&mute=1&controls=1" 
-                  title="Culto Ao Vivo" 
-                  allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" 
+                  src="https://www.youtube.com/embed/jfKfPfyJRdk?autoplay=1&mute=1&controls=1"
+                  title="Culto Ao Vivo"
+                  allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
                   allowFullScreen
                 ></iframe>
               </div>
               <div className="bg-zinc-900 rounded-[2rem] border border-white/10 p-6 flex flex-col h-full">
                 <h3 className="text-xl font-bold mb-4 font-serif italic">Minhas Notas</h3>
                 <p className="text-sm text-white/50 mb-4">Anotações são salvas localmente enquanto você assiste.</p>
-                <textarea 
+                <textarea
                   value={sermonNotes}
                   onChange={(event) => setSermonNotes(event.target.value)}
                   className="flex-1 w-full bg-black/50 border border-white/5 rounded-xl p-4 text-white placeholder-white/30 resize-none focus:outline-none focus:ring-2 focus:ring-primary/50 transition-all font-sans text-sm"
@@ -287,7 +292,7 @@ export function HomeView({ onTabChange, userData }: { onTabChange: (tab: string)
       {/* Minhas Escalas */}
       <AnimatePresence>
         {myScales.length > 0 && (
-          <motion.section 
+          <motion.section
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             className="space-y-6"
@@ -296,56 +301,56 @@ export function HomeView({ onTabChange, userData }: { onTabChange: (tab: string)
               <CalendarCheck className="w-8 h-8 text-primary" />
               <h2 className="text-3xl font-black tracking-tight font-serif italic text-white">Minhas Escalas</h2>
             </div>
-            
+
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
               {myScales.map(scale => {
-                 const myAssign = scale.assignments?.find((a:any) => a.memberId === userData?.id);
-                 return (
-                   <div key={scale.id} className="relative overflow-hidden rounded-[2rem] bg-zinc-900 border border-primary/20 p-6 flex flex-col justify-between group hover:border-primary/50 transition-colors">
-                     <div className="absolute top-0 right-0 w-32 h-32 bg-primary/5 rounded-bl-full pointer-events-none" />
-                     <div className="space-y-4">
-                       <div>
-                         <h3 className="text-xl font-bold mb-1">{scale.eventName}</h3>
-                         <p className="text-sm text-white/50">{new Date(scale.date).toLocaleDateString('pt-BR')} às {scale.time}</p>
-                       </div>
-                       
-                       <div className="bg-black/30 p-4 rounded-xl border border-white/5">
-                         <p className="text-xs font-bold text-white/40 uppercase tracking-widest mb-1">Minha Função</p>
-                         <p className="font-medium text-primary">{myAssign?.role || 'Servidor'}</p>
-                       </div>
-                       
-                       {scale.setlist && scale.setlist.length > 0 && (
-                         <div className="bg-black/30 p-4 rounded-xl border border-white/5">
-                           <p className="text-xs font-bold text-white/40 uppercase tracking-widest mb-2">Repertório</p>
-                           <ul className="space-y-1">
-                             {scale.setlist.slice(0, 3).map((s: string, idx: number) => (
-                               <li key={idx} className="flex items-center gap-2 text-sm text-white/70">
-                                 <Music className="w-3 h-3 text-primary" />
-                                 <span className="truncate">{s}</span>
-                               </li>
-                             ))}
-                             {scale.setlist.length > 3 && <li className="text-xs text-white/40 italic">+{scale.setlist.length - 3} músicas</li>}
-                           </ul>
-                         </div>
-                       )}
-                     </div>
+                const myAssign = scale.assignments?.find((a: any) => a.memberId === userData?.id);
+                return (
+                  <div key={scale.id} className="relative overflow-hidden rounded-[2rem] bg-zinc-900 border border-primary/20 p-6 flex flex-col justify-between group hover:border-primary/50 transition-colors">
+                    <div className="absolute top-0 right-0 w-32 h-32 bg-primary/5 rounded-bl-full pointer-events-none" />
+                    <div className="space-y-4">
+                      <div>
+                        <h3 className="text-xl font-bold mb-1">{scale.eventName}</h3>
+                        <p className="text-sm text-white/50">{new Date(scale.date).toLocaleDateString('pt-BR')} às {scale.time}</p>
+                      </div>
 
-                     <div className="pt-6 mt-6 border-t border-white/10">
-                       {myAssign?.status === 'pending' ? (
-                         <div className="flex gap-3">
-                           <Button onClick={() => handleStatusChange(scale.id, 'accepted')} className="flex-1 bg-green-500/20 text-green-400 hover:bg-green-500 hover:text-black font-bold">Aceitar</Button>
-                           <Button onClick={() => handleStatusChange(scale.id, 'declined')} variant="outline" className="flex-1 border-white/10 hover:bg-red-500/20 hover:text-red-400 font-bold">Recusar</Button>
-                         </div>
-                       ) : (
-                         <div className="flex justify-center items-center py-2 bg-black/40 rounded-xl">
-                            <span className={`text-sm font-bold uppercase tracking-widest ${myAssign?.status === 'accepted' ? 'text-green-400' : 'text-red-400'}`}>
-                              {myAssign?.status === 'accepted' ? 'Presença Confirmada' : 'Recusado'}
-                            </span>
-                         </div>
-                       )}
-                     </div>
-                   </div>
-                 );
+                      <div className="bg-black/30 p-4 rounded-xl border border-white/5">
+                        <p className="text-xs font-bold text-white/40 uppercase tracking-widest mb-1">Minha Função</p>
+                        <p className="font-medium text-primary">{myAssign?.role || 'Servidor'}</p>
+                      </div>
+
+                      {scale.setlist && scale.setlist.length > 0 && (
+                        <div className="bg-black/30 p-4 rounded-xl border border-white/5">
+                          <p className="text-xs font-bold text-white/40 uppercase tracking-widest mb-2">Repertório</p>
+                          <ul className="space-y-1">
+                            {scale.setlist.slice(0, 3).map((s: string, idx: number) => (
+                              <li key={idx} className="flex items-center gap-2 text-sm text-white/70">
+                                <Music className="w-3 h-3 text-primary" />
+                                <span className="truncate">{s}</span>
+                              </li>
+                            ))}
+                            {scale.setlist.length > 3 && <li className="text-xs text-white/40 italic">+{scale.setlist.length - 3} músicas</li>}
+                          </ul>
+                        </div>
+                      )}
+                    </div>
+
+                    <div className="pt-6 mt-6 border-t border-white/10">
+                      {myAssign?.status === 'pending' ? (
+                        <div className="flex gap-3">
+                          <Button onClick={() => handleStatusChange(scale.id, 'accepted')} className="flex-1 bg-green-500/20 text-green-400 hover:bg-green-500 hover:text-black font-bold">Aceitar</Button>
+                          <Button onClick={() => handleStatusChange(scale.id, 'declined')} variant="outline" className="flex-1 border-white/10 hover:bg-red-500/20 hover:text-red-400 font-bold">Recusar</Button>
+                        </div>
+                      ) : (
+                        <div className="flex justify-center items-center py-2 bg-black/40 rounded-xl">
+                          <span className={`text-sm font-bold uppercase tracking-widest ${myAssign?.status === 'accepted' ? 'text-green-400' : 'text-red-400'}`}>
+                            {myAssign?.status === 'accepted' ? 'Presença Confirmada' : 'Recusado'}
+                          </span>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                );
               })}
             </div>
           </motion.section>
@@ -369,14 +374,14 @@ export function HomeView({ onTabChange, userData }: { onTabChange: (tab: string)
           <CarouselContent className="-ml-4">
             {ministries.map((min, i) => (
               <CarouselItem key={i} className="pl-4 md:basis-1/2 lg:basis-1/3 xl:basis-1/4">
-                <motion.div 
+                <motion.div
                   whileHover={{ y: -10 }}
                   className="group relative aspect-[4/5] overflow-hidden rounded-[2rem] border border-white/10 bg-zinc-900 cursor-pointer"
                   onClick={() => onTabChange(min.tab)}
                 >
-                  <img 
-                    src={min.img} 
-                    alt={min.name} 
+                  <img
+                    src={min.img}
+                    alt={min.name}
                     className="absolute inset-0 h-full w-full object-cover opacity-50 transition-transform duration-500 group-hover:scale-110 grayscale group-hover:grayscale-0"
                     referrerPolicy="no-referrer"
                   />
@@ -384,8 +389,8 @@ export function HomeView({ onTabChange, userData }: { onTabChange: (tab: string)
                   <div className="absolute bottom-0 left-0 right-0 p-8 space-y-2">
                     <h3 className="text-2xl font-black font-serif italic text-primary">{min.name}</h3>
                     <p className="text-sm text-white/70 leading-relaxed font-medium">{min.desc}</p>
-                    <Button 
-                      variant="link" 
+                    <Button
+                      variant="link"
                       onClick={() => onTabChange(min.tab)}
                       className="text-white p-0 h-auto font-bold text-xs uppercase tracking-widest group-hover:text-primary transition-colors"
                     >
@@ -450,19 +455,19 @@ export function HomeView({ onTabChange, userData }: { onTabChange: (tab: string)
           }
         }} />
         <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-full max-w-lg glass-card p-8 rounded-[2.5rem] flex flex-col items-center text-center">
-          <Button 
-            variant="ghost" 
-            size="icon" 
+          <Button
+            variant="ghost"
+            size="icon"
             onClick={() => document.getElementById('novo-aqui-modal')?.classList.add('hidden')}
             className="absolute top-6 right-6 rounded-full hover:bg-white/10"
           >
             <X className="w-5 h-5" />
           </Button>
-          
+
           <div className="w-16 h-16 rounded-full bg-primary/10 text-primary flex items-center justify-center mb-6">
             <Heart className="w-8 h-8" />
           </div>
-          
+
           <h3 className="text-3xl font-black font-serif italic mb-2">Bem-vindo à Família!</h3>
           <p className="text-white/60 mb-8 max-w-sm">
             Que alegria ter você com a gente. Preencha rapidinho para te conhecermos melhor e conectarmos você a uma célula perto de casa!
@@ -481,8 +486,8 @@ export function HomeView({ onTabChange, userData }: { onTabChange: (tab: string)
               <label className="text-xs font-bold text-white/40 uppercase">Onde você mora? (Bairro)</label>
               <Input placeholder="Ex: Muquiçaba..." className="bg-black/50 border-white/10" />
             </div>
-            
-            <Button 
+
+            <Button
               className="w-full h-12 bg-primary text-black font-bold uppercase tracking-wider mt-4"
               onClick={() => {
                 alert("Obrigado! Nossos líderes entrarão em contato com você em breve!");
