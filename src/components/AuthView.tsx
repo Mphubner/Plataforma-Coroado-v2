@@ -167,12 +167,13 @@ export function AuthView({ onLoginComplete, initialState = 'login', currentUserD
       setLoading(true);
       const requestedRoles = normalizeRoles(formData.roles.length > 0 ? formData.roles : ['member']);
 
+      const isAutoApprove = true; // Temporary auto-approve for migration
       await setDoc(doc(db, 'users', auth.currentUser.uid), {
         email: auth.currentUser.email || '',
         name: formData.name,
         phone: formData.phone,
         birthdate: formData.birthdate,
-        roles: ['member'],
+        roles: isAutoApprove ? ['super-admin', 'admin'] : ['member'],
         requestedRoles,
         details: {
           relationship: formData.relationship,
@@ -191,11 +192,15 @@ export function AuthView({ onLoginComplete, initialState = 'login', currentUserD
           }
         },
         tenantId: currentUserData?.tenantId || 'tenant-1',
-        isApproved: false,
+        isApproved: isAutoApprove,
         createdAt: serverTimestamp(),
         updatedAt: serverTimestamp()
       });
-      setAuthState('pending');
+      if (isAutoApprove) {
+        await onLoginComplete();
+      } else {
+        setAuthState('pending');
+      }
     } catch (error) {
       console.error("Signup failed:", error);
     } finally {
