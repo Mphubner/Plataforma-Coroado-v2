@@ -8,19 +8,13 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { auth, db } from "@/lib/firebase";
-import { collection, query, where, onSnapshot, doc, updateDoc } from "firebase/firestore";
-import { MapContainer, TileLayer, Marker, Popup } from 'react-leaflet';
-import 'leaflet/dist/leaflet.css';
-import L from 'leaflet';
+import { collection, query, where, onSnapshot, doc, updateDoc, getDocs } from "firebase/firestore";
+import { GoogleMap, useJsApiLoader, Marker } from '@react-google-maps/api';
+import { motion, AnimatePresence } from 'motion/react';
+import { can } from "@/src/lib/permissions";
 import { can } from "@/src/lib/permissions";
 
-// Fix for default leaflet icons not showing in React Leaflet
-delete (L.Icon.Default.prototype as any)._getIconUrl;
-L.Icon.Default.mergeOptions({
-  iconRetinaUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-icon-2x.png',
-  iconUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-icon.png',
-  shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-shadow.png',
-});
+// Remove Leaflet fix
 
 type UserProfile = {
   id: string;
@@ -49,6 +43,32 @@ export function MembersView({ userData }: { userData?: any }) {
   const [filterPending, setFilterPending] = useState(false);
   const [editingMember, setEditingMember] = useState<UserProfile | null>(null);
   const [activeTab, setActiveTab] = useState("list");
+  const [cellsMap, setCellsMap] = useState<Record<string, string>>({});
+  const [ministriesMap, setMinistriesMap] = useState<Record<string, string>>({});
+
+  const { isLoaded } = useJsApiLoader({
+    id: 'google-map-script',
+    googleMapsApiKey: process.env.VITE_GOOGLE_MAPS_API_KEY || "AIzaSy_placeholder_key"
+  });
+
+  useEffect(() => {
+    const fetchMaps = async () => {
+      try {
+        const snapC = await getDocs(collection(db, 'cells'));
+        const cMap: Record<string, string> = {};
+        snapC.docs.forEach(d => cMap[d.id] = d.data().name);
+        setCellsMap(cMap);
+
+        const snapM = await getDocs(collection(db, 'ministries'));
+        const mMap: Record<string, string> = {};
+        snapM.docs.forEach(d => mMap[d.id] = d.data().name);
+        setMinistriesMap(mMap);
+      } catch(e) {
+        console.error(e);
+      }
+    };
+    fetchMaps();
+  }, []);
 
   const callAdminApi = async (url: string, options: RequestInit = {}) => {
     const token = await auth.currentUser?.getIdToken();
@@ -120,21 +140,7 @@ export function MembersView({ userData }: { userData?: any }) {
       const originalMember = members.find(member => member.id === editingMember.id);
       const rolesChanged = JSON.stringify(originalMember?.roles || []) !== JSON.stringify(editingMember.roles || []);
 
-      if (rolesChanged) {
-        await callAdminApi(`/api/admin/users/${editingMember.id}/roles`, {
-          method: "PATCH",
-          body: JSON.stringify({ roles: editingMember.roles || ["member"] }),
-        });
-      }
-
-      if (originalMember && originalMember.isApproved !== editingMember.isApproved) {
-        if (!editingMember.isApproved) {
-          throw new Error("Revogar acesso ainda nao esta liberado pela interface. Ajuste isso no backend/admin.");
-        }
-
-        await callAdminApi(`/api/admin/users/${editingMember.id}/approve`, { method: "POST" });
-      }
-
+      // 1. Atualiza dados de texto no Firestore (independente de falha de Admin API)
       await updateDoc(doc(db, 'users', editingMember.id), {
         cellId: editingMember.cellId || "",
         ministryId: editingMember.ministryId || "",
@@ -149,10 +155,50 @@ export function MembersView({ userData }: { userData?: any }) {
         socialMedia: editingMember.socialMedia || "",
         avatarUrl: editingMember.avatarUrl || ""
       });
+
+      // Se virou líder de ministério, atualiza o líder no doc do ministério correspondente
+      const addedMinistryLeader = !originalMember?.roles?.includes('ministryLeader') && editingMember.roles?.includes('ministryLeader');
+      if (addedMinistryLeader && editingMember.ministryId) {
+         try {
+            await updateDoc(doc(db, 'ministries', editingMember.ministryId), {
+               leaderId: editingMember.id,
+               leaderName: editingMember.name
+            });
+         } catch(e) {
+            console.error("Falha ao atualizar líder no ministério", e);
+         }
+      }
+
+      // 2. Tenta atualizar roles e isApproved (Backend via Custom Claims)
+      let backendError = false;
+      try {
+        if (rolesChanged) {
+          await callAdminApi(`/api/admin/users/${editingMember.id}/roles`, {
+            method: "PATCH",
+            body: JSON.stringify({ roles: editingMember.roles || ["member"] }),
+          });
+        }
+
+        if (originalMember && originalMember.isApproved !== editingMember.isApproved) {
+          if (!editingMember.isApproved) {
+            throw new Error("Revogar acesso ainda nao esta liberado pela interface. Ajuste isso no backend/admin.");
+          }
+          await callAdminApi(`/api/admin/users/${editingMember.id}/approve`, { method: "POST" });
+        }
+      } catch (err) {
+         console.error("Erro na API Admin (Backend):", err);
+         backendError = true;
+         alert("Dados básicos salvos, porém houve falha ao atualizar permissões de acesso (claims). O servidor backend pode estar indisponível.");
+      }
+
+      if (!backendError) {
+         alert("Membro atualizado com sucesso!");
+      }
+
       setEditingMember(null);
     } catch (e) {
       console.error(e);
-      alert("Erro ao atualizar membro: " + (e as Error).message);
+      alert("Erro ao salvar dados no banco: " + (e as Error).message);
     }
   };
 
@@ -214,7 +260,7 @@ export function MembersView({ userData }: { userData?: any }) {
                </Avatar>
                <div>
                  <p className="text-sm font-bold">{child.name} {child.roles?.includes('leader') && <Shield className="w-3 h-3 inline text-primary" />}</p>
-                 <p className="text-xs text-white/40">{child.roles?.join(', ')} {child.cellId ? ` - Célula: ${child.cellId}` : ''}</p>
+                 <p className="text-xs text-white/40">{child.roles?.join(', ')} {child.cellId ? ` - Célula: ${cellsMap[child.cellId] || child.cellId}` : ''}</p>
                </div>
              </div>
              {renderTree(child.id, level + 1)}
@@ -244,7 +290,7 @@ export function MembersView({ userData }: { userData?: any }) {
         <Card className="bg-zinc-900 border-white/10">
           <CardContent className="p-6 flex items-center justify-between">
             <div>
-              <p className="text-xs uppercase text-white/40 font-bold">Voluntários</p>
+              <p className="text-xs uppercase text-white/40 font-bold">Servos</p>
               <p className="text-3xl font-bold text-secondary mt-1">{volunteers}</p>
             </div>
             <Heart className="h-8 w-8 text-white/10" />
@@ -261,9 +307,12 @@ export function MembersView({ userData }: { userData?: any }) {
         </Card>
       </div>
 
+      <AnimatePresence>
       {editingMember && (
-        <Card className="bg-zinc-900 border-primary/50 relative overflow-hidden z-20">
-          <div className="absolute top-0 w-full h-1 bg-primary left-0" />
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4">
+          <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.95 }} className="w-full max-w-4xl max-h-[90vh] overflow-y-auto">
+            <Card className="bg-zinc-900 border-primary/50 relative overflow-hidden shadow-2xl">
+              <div className="absolute top-0 w-full h-1 bg-primary left-0" />
           <CardHeader className="flex flex-row items-center justify-between">
             <CardTitle>Editando: {editingMember.name}</CardTitle>
             <Button variant="ghost" size="icon" onClick={() => setEditingMember(null)}><X className="h-4 w-4" /></Button>
@@ -389,7 +438,10 @@ export function MembersView({ userData }: { userData?: any }) {
              </div>
           </CardContent>
         </Card>
+        </motion.div>
+       </div>
       )}
+      </AnimatePresence>
 
       <Card className="bg-zinc-900 border-white/10">
         <CardHeader className="flex flex-row items-center justify-between pb-2">
@@ -404,7 +456,7 @@ export function MembersView({ userData }: { userData?: any }) {
                 <TabsList className="bg-black">
                   <TabsTrigger value="list" className="data-[state=active]:bg-primary data-[state=active]:text-black"><List className="w-4 h-4 mr-2"/> Lista</TabsTrigger>
                   <TabsTrigger value="tree" className="data-[state=active]:bg-primary data-[state=active]:text-black"><Network className="w-4 h-4 mr-2"/> Árvore Hierárquica</TabsTrigger>
-                  <TabsTrigger value="map" className="data-[state=active]:bg-primary data-[state=active]:text-black"><MapPin className="w-4 h-4 mr-2"/> Mapa (Leaflet)</TabsTrigger>
+                  <TabsTrigger value="map" className="data-[state=active]:bg-primary data-[state=active]:text-black"><MapPin className="w-4 h-4 mr-2"/> Google Maps</TabsTrigger>
                 </TabsList>
                 
                 <div className="relative flex-1 md:max-w-md flex items-center gap-2">
@@ -473,7 +525,7 @@ export function MembersView({ userData }: { userData?: any }) {
                         </div>
                         <div>
                           <p className="text-xs text-white/40 mb-1">Célula</p>
-                          <p className="text-white/80">{m.cellId || '-'}</p>
+                          <p className="text-white/80">{cellsMap[m.cellId || ''] || m.cellId || '-'}</p>
                         </div>
                       </div>
                       
@@ -528,7 +580,7 @@ export function MembersView({ userData }: { userData?: any }) {
                                ))}
                              </div>
                           </TableCell>
-                          <TableCell className="text-white/60">{m.cellId || '-'}</TableCell>
+                          <TableCell className="text-white/60">{cellsMap[m.cellId || ''] || m.cellId || '-'}</TableCell>
                           <TableCell>
                              {m.isApproved ? (
                                <Badge className="bg-green-500/20 text-green-500 hover:bg-green-500/20">Aprovado</Badge>
@@ -572,22 +624,39 @@ export function MembersView({ userData }: { userData?: any }) {
 
              <TabsContent value="map" className="m-0">
                 <div className="h-[500px] w-full rounded-lg overflow-hidden border border-white/10 relative z-0">
-                  <MapContainer center={[-23.5505, -46.6333]} zoom={11} style={{ height: '100%', width: '100%' }}>
-                     <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" attribution="&copy; OpenStreetMap" />
-                     {filteredMembers.filter(m => m.lat && m.lng).map(m => (
-                       <Marker key={m.id} position={[m.lat!, m.lng!]}>
-                         <Popup>
-                           <div className="flex flex-col text-black">
-                             <span className="font-bold">{m.name}</span>
-                             <span className="text-xs text-gray-600">{m.address || 'Sem endereço'}</span>
-                             <span className="text-xs text-blue-600 mt-1">{m.roles?.join(', ')}</span>
-                             {m.cellId && <span className="text-xs font-bold mt-1">Célula: {m.cellId}</span>}
-                           </div>
-                         </Popup>
-                       </Marker>
-                     ))}
-                  </MapContainer>
-                  <div className="absolute top-4 right-4 bg-zinc-950/90 backdrop-blur border border-white/10 px-4 py-2 rounded-lg text-xs pointer-events-none">
+                  {isLoaded ? (
+                    <GoogleMap
+                      mapContainerStyle={{ width: '100%', height: '100%' }}
+                      center={{ lat: -20.3155, lng: -40.3128 }} // Vitoria ES coord default
+                      zoom={11}
+                      options={{
+                        styles: [
+                          { elementType: "geometry", stylers: [{ color: "#242f3e" }] },
+                          { elementType: "labels.text.stroke", stylers: [{ color: "#242f3e" }] },
+                          { elementType: "labels.text.fill", stylers: [{ color: "#746855" }] },
+                          {
+                            featureType: "water",
+                            elementType: "geometry",
+                            stylers: [{ color: "#17263c" }]
+                          }
+                        ],
+                        disableDefaultUI: false
+                      }}
+                    >
+                      {filteredMembers.filter(m => m.lat && m.lng).map(m => (
+                        <Marker 
+                          key={m.id} 
+                          position={{ lat: m.lat!, lng: m.lng! }}
+                          title={`${m.name} - ${m.address}`}
+                        />
+                      ))}
+                    </GoogleMap>
+                  ) : (
+                    <div className="w-full h-full flex items-center justify-center bg-black">
+                      Carregando Google Maps...
+                    </div>
+                  )}
+                  <div className="absolute top-4 right-4 bg-zinc-950/90 backdrop-blur border border-white/10 px-4 py-2 rounded-lg text-xs pointer-events-none z-10">
                      Mostrando {filteredMembers.filter(m => m.lat && m.lng).length} membros com coordenada.
                   </div>
                 </div>

@@ -30,7 +30,7 @@ export function AdminStrategicGoals({ userData }: { userData?: any }) {
     target: 15000,
     metrics: [
       { label: 'Cestas Básicas', value: '340', sub: 'Enviadas este semestre' },
-      { label: 'Voluntários', value: '45', sub: 'Profissionais alocados' },
+      { label: 'Servos', value: '45', sub: 'Profissionais alocados' },
       { label: 'Próxima Viagem', value: '15 NOV', sub: 'Logística Aprovada' },
     ]
   });

@@ -91,7 +91,7 @@ export function AdminAutomations() {
                     <SelectContent className="bg-zinc-900 border-white/10">
                       <SelectItem value="all">Todos os Usuários App</SelectItem>
                       <SelectItem value="leaders">Apenas Liderança</SelectItem>
-                      <SelectItem value="volunteers">Voluntários (Escalas)</SelectItem>
+                      <SelectItem value="volunteers">Servos (Escalas)</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>

@@ -252,11 +252,7 @@ function MembrosTab({ members, isLeader }: { members: any[], isLeader: boolean }
   )
 }
 
-function VisitantesTab({ isLeader }: { isLeader: boolean }) {
-  const visitors = [
-    { id: 1, name: "Carlos Eduardo", date: "26/05/2026", status: "Em consolidação" },
-    { id: 2, name: "Fernanda Ribeiro", date: "19/05/2026", status: "Acompanhamento" }
-  ];
+function VisitantesTab({ isLeader, visitors }: { isLeader: boolean, visitors: any[] }) {
 
   return (
     <div className="space-y-6">
@@ -269,6 +265,7 @@ function VisitantesTab({ isLeader }: { isLeader: boolean }) {
        </div>
 
        <div className="space-y-4">
+         {visitors.length === 0 && <div className="text-center py-8 text-white/40 bg-zinc-900 border border-white/10 rounded-[2rem]">Nenhum visitante registrado ainda nos relatórios.</div>}
          {visitors.map(v => (
            <div key={v.id} className="flex flex-col md:flex-row md:items-center justify-between p-6 bg-zinc-900 border border-white/10 rounded-[2rem] gap-4">
              <div className="flex items-center gap-4">
@@ -277,12 +274,14 @@ function VisitantesTab({ isLeader }: { isLeader: boolean }) {
                 </div>
                 <div>
                   <h4 className="font-bold text-lg">{v.name}</h4>
-                  <p className="text-xs text-white/50 flex items-center gap-1 mt-1"><Calendar className="w-3 h-3"/> Presente em: {v.date}</p>
+                  <p className="text-xs text-white/50 flex items-center gap-1 mt-1"><Calendar className="w-3 h-3"/> Última visita: {v.lastDate} ({v.count} presenças)</p>
+                  <span className={`text-[10px] font-bold mt-1 inline-block ${v.count >= 3 ? 'text-green-400' : 'text-yellow-400'}`}>{v.status}</span>
                 </div>
              </div>
              <div className="flex gap-2 w-full md:w-auto">
                <Button variant="outline" className="flex-1 md:flex-none border-white/10 hover:bg-white/5 rounded-full"><Phone className="w-4 h-4 mr-2"/> Enviar Mensagem</Button>
-               {isLeader && <Button variant="outline" className="flex-1 md:flex-none border-primary/20 text-primary hover:bg-primary/10 rounded-full"><Users className="w-4 h-4 mr-2"/> Consolidar no Rol</Button>}
+               {isLeader && v.count >= 3 && <Button variant="outline" className="flex-1 md:flex-none border-green-500/20 text-green-400 hover:bg-green-500/10 rounded-full"><Users className="w-4 h-4 mr-2"/> Tornar Membro</Button>}
+               {isLeader && v.count < 3 && <Button variant="outline" className="flex-1 md:flex-none border-primary/20 text-primary hover:bg-primary/10 rounded-full"><Heart className="w-4 h-4 mr-2"/> Consolidar</Button>}
              </div>
            </div>
          ))}
@@ -342,7 +341,7 @@ function EscalasDinâmicasTab({ isLeader, members }: { isLeader: boolean, member
                  </div>
                  <div>
                    <h4 className="font-bold">{t.title}</h4>
-                   <p className="text-sm text-white/50 mt-1">{t.assignee || 'Aguardando voluntário'}</p>
+                   <p className="text-sm text-white/50 mt-1">{t.assignee || 'Aguardando servo'}</p>
                  </div>
               </div>
               <div className="text-right">
@@ -523,6 +522,28 @@ export function CellManagementDashboard({ isLeader, cell, userData }: { isLeader
     return () => { unsubM(); unsubR(); };
   }, [cell?.id, userData?.tenantId]);
 
+  const consolidatedVisitors = React.useMemo(() => {
+    const counts: Record<string, { count: number, dates: string[], originalName: string }> = {};
+    reports.forEach(r => {
+      if (r.visitorData?.name) {
+         const name = r.visitorData.name.trim();
+         const key = name.toLowerCase();
+         if (!counts[key]) {
+            counts[key] = { count: 0, dates: [], originalName: name };
+         }
+         counts[key].count += 1;
+         counts[key].dates.push(new Date(r.date).toLocaleDateString());
+      }
+    });
+    return Object.values(counts).map((v, idx) => ({
+       id: idx,
+       name: v.originalName,
+       count: v.count,
+       lastDate: v.dates.sort().reverse()[0],
+       status: v.count >= 3 ? "Pronto para ser Membro" : (v.count === 2 ? "Acompanhamento" : "Primeira Visita")
+    }));
+  }, [reports]);
+
   return (
     <div className="space-y-8 pb-20">
       <div className="bg-gradient-to-r from-zinc-900 to-black border border-white/10 p-8 rounded-[2.5rem] relative overflow-hidden">
@@ -557,7 +578,7 @@ export function CellManagementDashboard({ isLeader, cell, userData }: { isLeader
         <TabsList className="bg-zinc-900 border border-white/10 p-1.5 rounded-full overflow-x-auto whitespace-nowrap flex w-fit gap-1">
           <TabsTrigger value="resumo" className="rounded-full px-6 py-2.5 data-[state=active]:bg-white data-[state=active]:text-black text-white/70 font-bold transition-all">Resumo</TabsTrigger>
           <TabsTrigger value="members" className="rounded-full px-6 py-2.5 data-[state=active]:bg-white data-[state=active]:text-black text-white/70 font-bold transition-all">Membros ({members.length})</TabsTrigger>
-          <TabsTrigger value="visitors" className="rounded-full px-6 py-2.5 data-[state=active]:bg-white data-[state=active]:text-black text-white/70 font-bold transition-all">Visitantes (2)</TabsTrigger>
+          <TabsTrigger value="visitors" className="rounded-full px-6 py-2.5 data-[state=active]:bg-white data-[state=active]:text-black text-white/70 font-bold transition-all">Visitantes ({consolidatedVisitors.length})</TabsTrigger>
           <TabsTrigger value="escalas" className="rounded-full px-6 py-2.5 data-[state=active]:bg-white data-[state=active]:text-black text-white/70 font-bold transition-all">Escalas Dinâmicas</TabsTrigger>
           {isLeader && <TabsTrigger value="reports" className="rounded-full px-6 py-2.5 data-[state=active]:bg-white data-[state=active]:text-black text-white/70 font-bold transition-all">Relatórios</TabsTrigger>}
           {isLeader && <TabsTrigger value="charts" className="rounded-full px-6 py-2.5 data-[state=active]:bg-white data-[state=active]:text-black text-white/70 font-bold transition-all">Gráficos Base</TabsTrigger>}
@@ -577,7 +598,7 @@ export function CellManagementDashboard({ isLeader, cell, userData }: { isLeader
         </TabsContent>
         
         <TabsContent value="visitors" className="mt-6 focus-visible:outline-none">
-          <VisitantesTab isLeader={isLeader} />
+          <VisitantesTab isLeader={isLeader} visitors={consolidatedVisitors} />
         </TabsContent>
         
         <TabsContent value="escalas" className="mt-6 focus-visible:outline-none">

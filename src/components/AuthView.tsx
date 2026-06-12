@@ -7,7 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { CheckCircle2, ChevronRight, Mail, Phone, MapPin, Users, User, Heart, ShieldAlert } from "lucide-react";
 
 import { getRedirectResult, signInWithPopup, signInWithRedirect, signOut, type User as FirebaseUser } from 'firebase/auth';
-import { doc, getDoc, setDoc, serverTimestamp } from 'firebase/firestore';
+import { doc, getDoc, setDoc, serverTimestamp, collection, getDocs, query } from 'firebase/firestore';
 import { auth, db, googleProvider } from '@/lib/firebase';
 import { normalizeRoles, type UserProfile } from '@/src/lib/permissions';
 
@@ -36,10 +36,30 @@ export function AuthView({ onLoginComplete, initialState = 'login', currentUserD
     city: '',
     state: '',
     roles: [] as string[],
-    cellName: '',
-    ministryName: '',
+    cellId: '',
+    ministryId: '',
+    newCell: { name: '', cep: '', street: '', number: '', neighborhood: '', city: '', state: '', instagram: '' },
+    newMinistry: { name: '', description: '', howToJoin: '' },
     selectedLeader: ''
   });
+
+  const [cells, setCells] = useState<any[]>([]);
+  const [ministries, setMinistries] = useState<any[]>([]);
+
+  useEffect(() => {
+    async function fetchOptions() {
+      try {
+        const cSnap = await getDocs(query(collection(db, 'cells')));
+        setCells(cSnap.docs.map(d => ({id: d.id, ...d.data()})));
+        
+        const mSnap = await getDocs(query(collection(db, 'ministries')));
+        setMinistries(mSnap.docs.map(d => ({id: d.id, ...d.data()})));
+      } catch (e) {
+        console.error("Erro ao carregar opções:", e);
+      }
+    }
+    fetchOptions();
+  }, []);
 
   useEffect(() => {
     setAuthState(initialState);
@@ -167,13 +187,12 @@ export function AuthView({ onLoginComplete, initialState = 'login', currentUserD
       setLoading(true);
       const requestedRoles = normalizeRoles(formData.roles.length > 0 ? formData.roles : ['member']);
 
-      const isAutoApprove = true; // Temporary auto-approve for migration
       await setDoc(doc(db, 'users', auth.currentUser.uid), {
         email: auth.currentUser.email || '',
         name: formData.name,
         phone: formData.phone,
         birthdate: formData.birthdate,
-        roles: isAutoApprove ? ['super-admin', 'admin'] : ['member'],
+        roles: ['member'],
         requestedRoles,
         details: {
           relationship: formData.relationship,
@@ -186,21 +205,19 @@ export function AuthView({ onLoginComplete, initialState = 'login', currentUserD
             state: formData.state,
           },
           leadership: {
-            cellName: formData.cellName,
-            ministryName: formData.ministryName,
+            cellId: formData.cellId,
+            ministryId: formData.ministryId,
+            newCell: formData.cellId === 'other' ? formData.newCell : null,
+            newMinistry: formData.ministryId === 'other' ? formData.newMinistry : null,
             selectedLeader: formData.selectedLeader
           }
         },
         tenantId: currentUserData?.tenantId || 'tenant-1',
-        isApproved: isAutoApprove,
+        isApproved: false,
         createdAt: serverTimestamp(),
         updatedAt: serverTimestamp()
       });
-      if (isAutoApprove) {
-        await onLoginComplete();
-      } else {
-        setAuthState('pending');
-      }
+      setAuthState('pending');
     } catch (error) {
       console.error("Signup failed:", error);
     } finally {
@@ -312,26 +329,47 @@ export function AuthView({ onLoginComplete, initialState = 'login', currentUserD
                     </div>
 
                     {(formData.roles.includes('Membro') || formData.roles.includes('Líder de Célula')) && (
-                      <div className="space-y-2 mt-4 pt-4 border-t border-white/5">
-                        <label className="text-xs font-bold text-white/40 uppercase">Qual o nome da sua Célula?</label>
-                        <select className="w-full h-10 bg-black border border-white/10 rounded-md px-3 text-white">
-                          <option>Selecione a Célula...</option>
-                          <option>Célula Esperança</option>
-                          <option>Célula Vida</option>
-                          <option>Célula Graça</option>
-                        </select>
+                      <div className="space-y-4 mt-4 pt-4 border-t border-white/5">
+                        <div className="space-y-2">
+                          <label className="text-xs font-bold text-white/40 uppercase">Qual a sua Célula?</label>
+                          <select value={formData.cellId} onChange={e => setFormData({...formData, cellId: e.target.value})} className="w-full h-10 bg-black border border-white/10 rounded-md px-3 text-white">
+                            <option value="">Selecione a Célula...</option>
+                            {cells.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                            <option value="other">Minha célula não está na lista</option>
+                          </select>
+                        </div>
+                        {formData.cellId === 'other' && (
+                          <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} className="space-y-4 p-4 border border-white/10 rounded-xl bg-black/50 overflow-hidden">
+                            <label className="text-sm font-bold text-primary block">Nova Célula (Sujeito a Aprovação)</label>
+                            <Input placeholder="Nome da Célula" value={formData.newCell.name} onChange={e => setFormData({...formData, newCell: {...formData.newCell, name: e.target.value}})} className="bg-black border-white/10" />
+                            <div className="flex gap-2">
+                              <Input placeholder="CEP" value={formData.newCell.cep} onChange={e => setFormData({...formData, newCell: {...formData.newCell, cep: e.target.value}})} className="bg-black border-white/10 max-w-[150px]" />
+                              <Input placeholder="Rua, Número" value={formData.newCell.street} onChange={e => setFormData({...formData, newCell: {...formData.newCell, street: e.target.value}})} className="bg-black border-white/10 flex-1" />
+                            </div>
+                            <Input placeholder="@ do Instagram (Opcional)" value={formData.newCell.instagram} onChange={e => setFormData({...formData, newCell: {...formData.newCell, instagram: e.target.value}})} className="bg-black border-white/10" />
+                          </motion.div>
+                        )}
                       </div>
                     )}
 
                     {formData.roles.includes('Líder de Ministério') && (
-                      <div className="space-y-2 mt-4 pt-4 border-t border-white/5">
-                        <label className="text-xs font-bold text-white/40 uppercase">Qual o nome do seu Ministério?</label>
-                        <select className="w-full h-10 bg-black border border-white/10 rounded-md px-3 text-white">
-                          <option>Selecione o Ministério...</option>
-                          <option>Louvor e Adoração</option>
-                          <option>Kids</option>
-                          <option>Comunicação e Mídia</option>
-                        </select>
+                      <div className="space-y-4 mt-4 pt-4 border-t border-white/5">
+                        <div className="space-y-2">
+                          <label className="text-xs font-bold text-white/40 uppercase">Qual o seu Ministério?</label>
+                          <select value={formData.ministryId} onChange={e => setFormData({...formData, ministryId: e.target.value})} className="w-full h-10 bg-black border border-white/10 rounded-md px-3 text-white">
+                            <option value="">Selecione o Ministério...</option>
+                            {ministries.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
+                            <option value="other">Meu ministério não está na lista</option>
+                          </select>
+                        </div>
+                        {formData.ministryId === 'other' && (
+                          <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} className="space-y-4 p-4 border border-white/10 rounded-xl bg-black/50 overflow-hidden">
+                            <label className="text-sm font-bold text-primary block">Novo Ministério (Sujeito a Aprovação)</label>
+                            <Input placeholder="Nome do Ministério" value={formData.newMinistry.name} onChange={e => setFormData({...formData, newMinistry: {...formData.newMinistry, name: e.target.value}})} className="bg-black border-white/10" />
+                            <Input placeholder="Breve Descrição" value={formData.newMinistry.description} onChange={e => setFormData({...formData, newMinistry: {...formData.newMinistry, description: e.target.value}})} className="bg-black border-white/10" />
+                            <Input placeholder="Como ingressar?" value={formData.newMinistry.howToJoin} onChange={e => setFormData({...formData, newMinistry: {...formData.newMinistry, howToJoin: e.target.value}})} className="bg-black border-white/10" />
+                          </motion.div>
+                        )}
                       </div>
                     )}
                   </div>

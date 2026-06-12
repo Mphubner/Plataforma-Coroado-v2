@@ -1,7 +1,7 @@
 import React from 'react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Users, Activity, Target, ShieldCheck, Heart, Crosshair, ArrowRight, BookOpen } from "lucide-react";
+import { Users, Activity, Target, ShieldCheck, Heart, Crosshair, ArrowRight, BookOpen, Badge } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
 function PersonalDashboard({ events, myScales }: { events: any[], myScales: any[] }) {
@@ -32,7 +32,7 @@ function PersonalDashboard({ events, myScales }: { events: any[], myScales: any[
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-black text-white">Disponível</div>
-            <Button variant="link" className="text-primary p-0 h-auto text-xs mt-1">Ler agora <ArrowRight className="w-3 h-3 ml-1"/></Button>
+            <Button variant="link" className="text-primary p-0 h-auto text-xs mt-1">Ler agora <ArrowRight className="w-3 h-3 ml-1" /></Button>
           </CardContent>
         </Card>
         <Card className="bg-zinc-900 border-white/10">
@@ -51,14 +51,14 @@ function PersonalDashboard({ events, myScales }: { events: any[], myScales: any[
           <h3 className="font-serif italic text-2xl font-black mb-4">Próximos Eventos</h3>
           <div className="space-y-4">
             {events.slice(0, 3).map((ev: any, idx: number) => (
-               <div key={idx} className="flex items-center gap-4 p-4 rounded-xl bg-black/40">
-                 <div className="w-12 h-12 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
-                   <Target className="w-5 h-5 text-primary" />
-                 </div>
-                 <div>
-                   <h4 className="font-bold">{ev.title}</h4>
-                   <p className="text-sm text-white/50">{ev.date} - {ev.loc}</p>
-                 </div>
+              <div key={idx} className="flex items-center gap-4 p-4 rounded-xl bg-black/40">
+                <div className="w-12 h-12 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
+                  <Target className="w-5 h-5 text-primary" />
+                </div>
+                <div>
+                  <h4 className="font-bold">{ev.title}</h4>
+                  <p className="text-sm text-white/50">{ev.date} - {ev.loc}</p>
+                </div>
               </div>
             ))}
           </div>
@@ -69,10 +69,10 @@ function PersonalDashboard({ events, myScales }: { events: any[], myScales: any[
             <h3 className="font-serif italic text-2xl font-black mb-4">Minhas Escalas</h3>
             <div className="space-y-4">
               {myScales.map((scale: any) => (
-                 <div key={scale.id} className="flex flex-col gap-2 p-4 rounded-xl bg-black/40 border border-primary/20">
-                   <h4 className="font-bold">{scale.eventName}</h4>
-                   <p className="text-sm text-primary">{scale.date} às {scale.time}</p>
-                 </div>
+                <div key={scale.id} className="flex flex-col gap-2 p-4 rounded-xl bg-black/40 border border-primary/20">
+                  <h4 className="font-bold">{scale.eventName}</h4>
+                  <p className="text-sm text-primary">{scale.date} às {scale.time}</p>
+                </div>
               ))}
             </div>
           </div>
@@ -119,8 +119,8 @@ function CellLeaderDashboard() {
         <h3 className="font-serif italic text-2xl font-black mb-4">Métricas Pessoais do Líder</h3>
         <p className="text-white/60">Seu engajamento nos treinamentos de liderança e discipulado.</p>
         <div className="mt-4 flex gap-4">
-           <Badge className="bg-primary/20 text-primary hover:bg-primary/30">Discipulado em dia</Badge>
-           <Badge className="bg-green-500/20 text-green-400 hover:bg-green-500/30">IDE Concluído</Badge>
+          <Badge className="bg-primary/20 text-primary hover:bg-primary/30">Discipulado em dia</Badge>
+          <Badge className="bg-green-500/20 text-green-400 hover:bg-green-500/30">IDE Concluído</Badge>
         </div>
       </div>
     </div>
@@ -169,19 +169,19 @@ function MinistryLeaderDashboard() {
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
         <Card className="bg-zinc-900 border-white/10">
           <CardHeader className="pb-2">
-             <CardTitle className="text-sm text-white/60 uppercase tracking-wider">Voluntários Ativos</CardTitle>
+            <CardTitle className="text-sm text-white/60 uppercase tracking-wider">Servos Ativos</CardTitle>
           </CardHeader>
           <CardContent>
-             <div className="text-3xl font-black text-white">25</div>
+            <div className="text-3xl font-black text-white">25</div>
           </CardContent>
         </Card>
         <Card className="bg-zinc-900 border-white/10">
           <CardHeader className="pb-2">
-             <CardTitle className="text-sm text-white/60 uppercase tracking-wider">Escalas Preenchidas</CardTitle>
+            <CardTitle className="text-sm text-white/60 uppercase tracking-wider">Escalas Preenchidas</CardTitle>
           </CardHeader>
           <CardContent>
-             <div className="text-3xl font-black text-green-400">100%</div>
-             <p className="text-xs text-white/50 mt-1">Para o próximo domingo</p>
+            <div className="text-3xl font-black text-green-400">100%</div>
+            <p className="text-xs text-white/50 mt-1">Para o próximo domingo</p>
           </CardContent>
         </Card>
       </div>
@@ -231,11 +231,11 @@ function MacroDashboard() {
 
       <div className="glass-card p-6 rounded-[2rem] border border-white/5">
         <h3 className="font-serif italic text-2xl font-black mb-4 flex items-center gap-2">
-          <ShieldCheck className="text-primary"/> Árvore de Supervisão (Macro)
+          <ShieldCheck className="text-primary" /> Árvore de Supervisão (Macro)
         </h3>
         <p className="text-white/50">Navegue pelas redes, supervisões e células em formato de árvore. (Em desenvolvimento)</p>
         <div className="mt-4 p-8 border border-dashed border-white/10 rounded-xl flex items-center justify-center text-white/30 font-medium">
-           Integração com a base de hierarquia em breve...
+          Integração com a base de hierarquia em breve...
         </div>
       </div>
     </div>

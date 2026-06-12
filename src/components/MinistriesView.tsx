@@ -113,6 +113,7 @@ const getHealthBg = (score: number) => {
 export function MinistriesView({ isLoggedIn = true, userData, onLoginClick }: { isLoggedIn?: boolean; userData?: any; onLoginClick?: () => void }) {
   const [ministries, setMinistries] = React.useState<Ministry[]>([]);
   const [selectedMinistry, setSelectedMinistry] = React.useState<Ministry | null>(null);
+  const [ministryMembers, setMinistryMembers] = React.useState<any[]>([]);
   const [activeTab, setActiveTab] = React.useState("overview");
   const [searchQuery, setSearchQuery] = React.useState("");
   const [scales, setScales] = React.useState<Scale[]>([]);
@@ -170,6 +171,10 @@ export function MinistriesView({ isLoggedIn = true, userData, onLoginClick }: { 
     return selectedMinistry.leaderId === currentUserId || can(userData, 'manage:ministry');
   }, [selectedMinistry, currentUserId, userData]);
 
+  const isMinistryMember = React.useMemo(() => {
+    return isLeader || ministryMembers.some(m => m.id === currentUserId);
+  }, [isLeader, ministryMembers, currentUserId]);
+
   React.useEffect(() => {
     const q = tenantId 
       ? query(collection(db, 'ministries'), where('tenantId', '==', tenantId))
@@ -197,10 +202,15 @@ export function MinistriesView({ isLoggedIn = true, userData, onLoginClick }: { 
       setCalendarEvents(snap.docs.map(doc => ({ id: doc.id, ...doc.data() } as CalendarEvent)));
     });
 
+    const unsubMembers = onSnapshot(query(collection(db, 'users'), where('tenantId', '==', tenantId), where('ministryId', '==', selectedMinistry.id)), (snap) => {
+      setMinistryMembers(snap.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+    });
+
     return () => {
       unsubScales();
       unsubBriefings();
       unsubEvents();
+      unsubMembers();
     };
   }, [selectedMinistry?.id, tenantId]);
 
@@ -278,7 +288,7 @@ export function MinistriesView({ isLoggedIn = true, userData, onLoginClick }: { 
   };
 
   const renderBriefingCard = (briefing: Briefing) => {
-    const assignee = selectedMinistry?.members.find(m => m.id === briefing.assigneeId);
+    const assignee = ministryMembers.find(m => m.id === briefing.assigneeId);
     return (
       <Card key={briefing.id} className="bg-white/5 border-white/10 hover:border-white/20 transition-colors">
         <CardContent className="p-4 space-y-3">
@@ -331,36 +341,12 @@ export function MinistriesView({ isLoggedIn = true, userData, onLoginClick }: { 
 
         <div className="w-full space-y-6">
           <div className="flex gap-2 bg-zinc-900 border border-white/10 p-1 rounded-lg w-fit overflow-x-auto max-w-full">
-            <button 
-              onClick={() => setActiveTab("overview")}
-              className={`px-4 py-2 text-sm font-medium rounded-md transition-colors whitespace-nowrap ${activeTab === "overview" ? "bg-white/10 text-white" : "text-white/60 hover:text-white hover:bg-white/5"}`}
-            >
-              Visão Geral
-            </button>
-            <button 
-              onClick={() => setActiveTab("scales")}
-              className={`px-4 py-2 text-sm font-medium rounded-md transition-colors whitespace-nowrap ${activeTab === "scales" ? "bg-white/10 text-white" : "text-white/60 hover:text-white hover:bg-white/5"}`}
-            >
-              Escalas de Servos
-            </button>
-            <button 
-              onClick={() => setActiveTab("briefings")}
-              className={`px-4 py-2 text-sm font-medium rounded-md transition-colors whitespace-nowrap ${activeTab === "briefings" ? "bg-white/10 text-white" : "text-white/60 hover:text-white hover:bg-white/5"}`}
-            >
-              Briefings (Doc 15)
-            </button>
-            <button 
-              onClick={() => setActiveTab("training")}
-              className={`px-4 py-2 text-sm font-medium rounded-md transition-colors whitespace-nowrap ${activeTab === "training" ? "bg-white/10 text-white" : "text-white/60 hover:text-white hover:bg-white/5"}`}
-            >
-              Treinamento (IDE)
-            </button>
-            <button 
-              onClick={() => setActiveTab("calendar")}
-              className={`px-4 py-2 text-sm font-medium rounded-md transition-colors whitespace-nowrap ${activeTab === "calendar" ? "bg-white/10 text-white" : "text-white/60 hover:text-white hover:bg-white/5"}`}
-            >
-              Calendário
-            </button>
+            <button onClick={() => setActiveTab("overview")} className={`px-4 py-2 text-sm font-medium rounded-md transition-colors whitespace-nowrap ${activeTab === "overview" ? "bg-white/10 text-white" : "text-white/60 hover:text-white hover:bg-white/5"}`}>Visão Geral</button>
+            {isMinistryMember && <button onClick={() => setActiveTab("member_dashboard")} className={`px-4 py-2 text-sm font-medium rounded-md transition-colors whitespace-nowrap ${activeTab === "member_dashboard" ? "bg-white/10 text-white" : "text-white/60 hover:text-white hover:bg-white/5"}`}>Dashboard do Servo</button>}
+            {isLeader && <button onClick={() => setActiveTab("scales")} className={`px-4 py-2 text-sm font-medium rounded-md transition-colors whitespace-nowrap ${activeTab === "scales" ? "bg-white/10 text-white" : "text-white/60 hover:text-white hover:bg-white/5"}`}>Gestão do Líder</button>}
+            <button onClick={() => setActiveTab("briefings")} className={`px-4 py-2 text-sm font-medium rounded-md transition-colors whitespace-nowrap ${activeTab === "briefings" ? "bg-white/10 text-white" : "text-white/60 hover:text-white hover:bg-white/5"}`}>Briefings (Doc 15)</button>
+            <button onClick={() => setActiveTab("training")} className={`px-4 py-2 text-sm font-medium rounded-md transition-colors whitespace-nowrap ${activeTab === "training" ? "bg-white/10 text-white" : "text-white/60 hover:text-white hover:bg-white/5"}`}>Treinamento (IDE)</button>
+            <button onClick={() => setActiveTab("calendar")} className={`px-4 py-2 text-sm font-medium rounded-md transition-colors whitespace-nowrap ${activeTab === "calendar" ? "bg-white/10 text-white" : "text-white/60 hover:text-white hover:bg-white/5"}`}>Calendário</button>
           </div>
 
           {activeTab === "overview" && (
@@ -369,41 +355,46 @@ export function MinistriesView({ isLoggedIn = true, userData, onLoginClick }: { 
                 <Card className="bg-zinc-900 border-white/10">
                   <CardHeader className="flex flex-row items-center justify-between">
                     <div>
-                      <CardTitle>Equipe ({selectedMinistry.members.length})</CardTitle>
+                      <CardTitle>Equipe ({ministryMembers.length})</CardTitle>
                       <CardDescription>Membros ativos neste ministério</CardDescription>
                     </div>
-                    <Button size="sm" className="bg-primary text-black">
-                      <Plus className="w-4 h-4 mr-2" />
-                      Adicionar Servo
-                    </Button>
+                    {isLeader && (
+                      <Button size="sm" className="bg-primary text-black">
+                        <Plus className="w-4 h-4 mr-2" />
+                        Adicionar Servo
+                      </Button>
+                    )}
                   </CardHeader>
               <CardContent>
                 <div className="space-y-4">
-                  {selectedMinistry.members.map(member => {
-                    const healthScore = Math.round((member.metrics.cellAttendance + member.metrics.ideProgress + member.metrics.scalePresence) / 3);
+                  {ministryMembers.map(member => {
+                    const metrics = member.metrics || { cellAttendance: 0, ideProgress: 0, scalePresence: 0 };
+                    const healthScore = Math.round((metrics.cellAttendance + metrics.ideProgress + metrics.scalePresence) / 3) || 0;
                     return (
                       <div key={member.id} className="flex items-center justify-between p-4 rounded-xl bg-white/5 border border-white/10 hover:bg-white/10 transition-colors">
                         <div className="flex items-center gap-4">
                           <div className="w-8 h-8 rounded-full bg-white/10 flex items-center justify-center text-xs font-bold">
-                            {member.name.substring(0, 2).toUpperCase()}
+                            {member.name?.substring(0, 2).toUpperCase() || "U"}
                           </div>
                           <div>
                             <p className="font-bold">{member.name}</p>
-                            <p className="text-xs text-white/60">{member.role} • Desde {new Date(member.joinDate).toLocaleDateString('pt-BR')}</p>
+                            <p className="text-xs text-white/60">{member.role || "Servo"} • Desde {member.joinDate ? new Date(member.joinDate).toLocaleDateString('pt-BR') : "2026"}</p>
                           </div>
                         </div>
-                        <div className="flex flex-col items-end gap-2 w-48">
-                          <div className="flex items-center gap-2">
-                            <span className="text-xs text-white/60">Saúde Geral:</span>
-                            <span className={`text-sm font-bold ${getHealthColor(healthScore)}`}>{healthScore}%</span>
+                        {isLeader && (
+                          <div className="flex flex-col items-end gap-2 w-48">
+                            <div className="flex items-center gap-2">
+                              <span className="text-xs text-white/60">Saúde Geral:</span>
+                              <span className={`text-sm font-bold ${getHealthColor(healthScore)}`}>{healthScore}%</span>
+                            </div>
+                            <div className={`w-full h-2 rounded-full ${getHealthBg(healthScore)}`} />
+                            <div className="flex items-center justify-between w-full text-[10px] text-white/40 mt-1">
+                              <span title="Frequência na Célula" className="flex items-center gap-1"><Home className="w-3 h-3"/> {metrics.cellAttendance}%</span>
+                              <span title="Progresso na IDE" className="flex items-center gap-1"><GraduationCap className="w-3 h-3"/> {metrics.ideProgress}%</span>
+                              <span title="Presença nas Escalas" className="flex items-center gap-1"><CalendarCheck className="w-3 h-3"/> {metrics.scalePresence}%</span>
+                            </div>
                           </div>
-                          <div className={`w-full h-2 rounded-full ${getHealthBg(healthScore)}`} />
-                          <div className="flex items-center justify-between w-full text-[10px] text-white/40 mt-1">
-                            <span title="Frequência na Célula" className="flex items-center gap-1"><Home className="w-3 h-3"/> {member.metrics.cellAttendance}%</span>
-                            <span title="Progresso na IDE" className="flex items-center gap-1"><GraduationCap className="w-3 h-3"/> {member.metrics.ideProgress}%</span>
-                            <span title="Presença nas Escalas" className="flex items-center gap-1"><CalendarCheck className="w-3 h-3"/> {member.metrics.scalePresence}%</span>
-                          </div>
-                        </div>
+                        )}
                       </div>
                     );
                   })}
@@ -460,29 +451,28 @@ export function MinistriesView({ isLoggedIn = true, userData, onLoginClick }: { 
 
                         <div className="space-y-2">
                           <p className="text-xs font-bold text-white/60 uppercase tracking-wider">Equipe Escalada</p>
-                          {scale.assignments.map(assignment => {
-                            const member = selectedMinistry.members.find(m => m.id === assignment.memberId);
-                            if (!member) return null;
-                            const isCurrentUser = member.id === currentUserId;
+                          {scale.assignments.map((assignment, idx) => {
+                            const member = ministryMembers.find(m => m.id === assignment.memberId);
+                            const isCurrentUser = member?.id === currentUserId;
 
                             return (
-                              <div key={assignment.memberId} className="flex items-center justify-between bg-black/20 p-2 rounded-lg">
+                              <div key={`${assignment.memberId}-${idx}`} className="flex items-center justify-between bg-black/20 p-2 rounded-lg">
                                 <div className="flex items-center gap-3">
                                   <div className="w-8 h-8 rounded-full bg-white/10 flex items-center justify-center text-xs font-bold">
-                                    {member.name.substring(0, 2).toUpperCase()}
+                                    {member ? member.name.substring(0, 2).toUpperCase() : "?"}
                                   </div>
                                   <div>
-                                    <p className="text-sm font-medium">{member.name} {isCurrentUser && "(Você)"}</p>
+                                    <p className="text-sm font-medium">{member ? member.name : "Vaga Aberta"} {isCurrentUser && "(Você)"}</p>
                                     <p className="text-xs text-white/60">{assignment.role}</p>
                                   </div>
                                 </div>
                                 <div className="flex items-center gap-2">
                                   {isCurrentUser && assignment.status === 'pending' ? (
                                     <div className="flex gap-1">
-                                      <Button size="sm" variant="outline" className="h-7 px-2 text-xs border-green-500/30 hover:bg-green-500/20 text-green-400" onClick={() => handleStatusChange(scale.id, member.id, 'accepted')}>
+                                      <Button size="sm" variant="outline" className="h-7 px-2 text-xs border-green-500/30 hover:bg-green-500/20 text-green-400" onClick={() => handleStatusChange(scale.id, member!.id, 'accepted')}>
                                         Aceitar
                                       </Button>
-                                      <Button size="sm" variant="outline" className="h-7 px-2 text-xs border-red-500/30 hover:bg-red-500/20 text-red-400" onClick={() => handleStatusChange(scale.id, member.id, 'declined')}>
+                                      <Button size="sm" variant="outline" className="h-7 px-2 text-xs border-red-500/30 hover:bg-red-500/20 text-red-400" onClick={() => handleStatusChange(scale.id, member!.id, 'declined')}>
                                         Recusar
                                       </Button>
                                     </div>
@@ -529,6 +519,96 @@ export function MinistriesView({ isLoggedIn = true, userData, onLoginClick }: { 
             </Card>
           </div>
         </div>
+        )}
+
+        {activeTab === "member_dashboard" && (
+          <div className="space-y-6">
+            <h2 className="text-2xl font-bold">Meu Dashboard no Ministério</h2>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+               <Card className="bg-zinc-900 border-white/10">
+                 <CardHeader className="pb-2"><CardTitle className="text-sm text-white/60 uppercase">Minhas Escalas no Mês</CardTitle></CardHeader>
+                 <CardContent><div className="text-3xl font-black text-white">{ministryScales.filter(s => s.assignments.some(a => a.memberId === currentUserId && new Date(s.date).getMonth() === new Date().getMonth())).length}</div></CardContent>
+               </Card>
+               <Card className="bg-zinc-900 border-white/10">
+                 <CardHeader className="pb-2"><CardTitle className="text-sm text-white/60 uppercase">Faltas Injustificadas</CardTitle></CardHeader>
+                 <CardContent><div className="text-3xl font-black text-red-400">0</div></CardContent>
+               </Card>
+               <Card className="bg-zinc-900 border-white/10">
+                 <CardHeader className="pb-2"><CardTitle className="text-sm text-white/60 uppercase">Taxa de Presença</CardTitle></CardHeader>
+                 <CardContent><div className="text-3xl font-black text-green-400">100%</div></CardContent>
+               </Card>
+            </div>
+            
+            <h3 className="text-xl font-bold mt-8">Painel de Vagas Livres (Eu Quero)</h3>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+               {ministryScales.filter(s => s.assignments.some(a => a.status === 'pending' && !a.memberId)).length === 0 ? (
+                  <p className="text-white/40 col-span-full">Nenhuma escala com vagas abertas no momento.</p>
+               ) : (
+                 ministryScales.map(scale => {
+                   const openAssignments = scale.assignments.filter(a => a.status === 'pending' && !a.memberId);
+                   if (openAssignments.length === 0) return null;
+                   return (
+                     <Card key={scale.id} className="bg-zinc-900 border-white/10 flex flex-col hover:border-primary/50 transition-colors">
+                        <CardHeader className="pb-2">
+                           <CardTitle className="text-lg">{scale.eventName}</CardTitle>
+                           <CardDescription className="flex items-center gap-2 mt-1">
+                             <Calendar className="w-3 h-3" /> {new Date(scale.date).toLocaleDateString('pt-BR')} às {scale.time}
+                           </CardDescription>
+                        </CardHeader>
+                        <CardContent>
+                          <p className="text-xs font-bold text-white/60 mb-2 uppercase">Vagas Disponíveis:</p>
+                          <div className="space-y-2">
+                            {openAssignments.map((a, idx) => (
+                               <div key={idx} className="flex justify-between items-center bg-black/20 p-2 rounded-lg border border-white/5">
+                                  <span className="text-sm font-medium text-white/80">{a.role}</span>
+                                  <Button size="sm" variant="outline" className="h-7 text-xs border-primary/30 text-primary hover:bg-primary/20" onClick={() => {
+                                      const newAssignments = [...scale.assignments];
+                                      const targetIdx = newAssignments.findIndex(x => x === a);
+                                      if(targetIdx > -1) {
+                                         newAssignments[targetIdx] = { ...a, memberId: currentUserId!, status: 'accepted' };
+                                         updateDoc(doc(db, 'scales', scale.id), { assignments: newAssignments });
+                                      }
+                                  }}>Eu Quero</Button>
+                               </div>
+                            ))}
+                          </div>
+                        </CardContent>
+                     </Card>
+                   )
+                 })
+               )}
+            </div>
+            
+            <h3 className="text-xl font-bold mt-8">Minhas Próximas Escalas (Confirmadas/Pendentes)</h3>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+               {ministryScales.filter(s => s.assignments.some(a => a.memberId === currentUserId)).length === 0 ? (
+                  <p className="text-white/40 col-span-full">Você não possui escalas programadas.</p>
+               ) : (
+                 ministryScales.filter(s => s.assignments.some(a => a.memberId === currentUserId)).map(scale => (
+                  <Card key={scale.id} className="bg-zinc-900 border-primary/20 flex flex-col">
+                     <CardHeader className="pb-2">
+                        <CardTitle className="text-lg">{scale.eventName}</CardTitle>
+                        <CardDescription className="flex items-center gap-2 mt-1">
+                          <Calendar className="w-3 h-3" /> {new Date(scale.date).toLocaleDateString('pt-BR')} às {scale.time}
+                        </CardDescription>
+                     </CardHeader>
+                     <CardContent>
+                        {scale.assignments.filter(a => a.memberId === currentUserId).map((a, idx) => (
+                           <div key={idx} className="flex justify-between items-center bg-black/20 p-2 rounded-lg mt-2">
+                              <span className="text-sm font-bold text-primary">{a.role}</span>
+                              {a.status === 'pending' ? (
+                                <div className="flex gap-1">
+                                  <Button size="sm" variant="outline" className="h-7 px-2 text-xs border-green-500/30 text-green-400" onClick={() => handleStatusChange(scale.id, currentUserId!, 'accepted')}>Aceitar</Button>
+                                  <Button size="sm" variant="outline" className="h-7 px-2 text-xs border-red-500/30 text-red-400" onClick={() => handleStatusChange(scale.id, currentUserId!, 'declined')}>Recusar</Button>
+                                </div>
+                              ) : renderStatusBadge(a.status)}
+                           </div>
+                        ))}
+                     </CardContent>
+                  </Card>
+               )))}
+            </div>
+          </div>
         )}
 
         {activeTab === "briefings" && (
@@ -620,17 +700,16 @@ export function MinistriesView({ isLoggedIn = true, userData, onLoginClick }: { 
                       <div className="space-y-3">
                         <p className="text-xs font-bold text-white/60 flex items-center gap-1"><Users className="w-3 h-3" /> Servos Escalados ({scale.assignments.length})</p>
                         <div className="grid gap-2">
-                          {scale.assignments.map(assign => {
-                            const member = selectedMinistry.members.find(m => m.id === assign.memberId);
-                            if (!member) return null;
+                          {scale.assignments.map((assign, idx) => {
+                            const member = ministryMembers.find(m => m.id === assign.memberId);
                             return (
-                              <div key={assign.memberId} className="flex justify-between items-center bg-black/20 p-2 border border-white/5 rounded-lg">
+                              <div key={idx} className="flex justify-between items-center bg-black/20 p-2 border border-white/5 rounded-lg">
                                 <div className="flex items-center gap-2">
                                   <div className="w-6 h-6 rounded-full bg-white/10 flex items-center justify-center text-[10px] font-bold">
-                                    {member.name.substring(0,2).toUpperCase()}
+                                    {member ? member.name.substring(0,2).toUpperCase() : "?"}
                                   </div>
                                   <div>
-                                    <p className="text-xs font-bold leading-tight">{member.name}</p>
+                                    <p className="text-xs font-bold leading-tight">{member ? member.name : "VAGA ABERTA"}</p>
                                     <p className="text-[10px] text-white/40">{assign.role}</p>
                                   </div>
                                 </div>
@@ -731,27 +810,29 @@ export function MinistriesView({ isLoggedIn = true, userData, onLoginClick }: { 
             <div className="space-y-4">
               <h3 className="text-sm font-bold text-white/50 uppercase tracking-widest">Engajamento Escolar da Equipe</h3>
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                {selectedMinistry.members.map(member => (
+                {ministryMembers.map(member => {
+                  const metrics = member.metrics || { ideProgress: 0 };
+                  return (
                   <Card key={member.id} className="bg-zinc-900 border-white/10 hover:border-white/20 transition-all">
                     <CardContent className="p-4 space-y-4">
                       <div className="flex items-center gap-3">
                         <div className="w-10 h-10 rounded-full bg-white/10 flex items-center justify-center text-sm font-bold">
-                          {member.name.substring(0, 2).toUpperCase()}
+                          {member.name?.substring(0, 2).toUpperCase() || "U"}
                         </div>
                         <div>
                           <p className="font-bold text-sm leading-none">{member.name}</p>
-                          <p className="text-[10px] text-white/40 mt-1">{member.role}</p>
+                          <p className="text-[10px] text-white/40 mt-1">{member.role || "Servo"}</p>
                         </div>
                       </div>
                       <div className="space-y-2">
                         <div className="flex justify-between text-xs text-white/60">
                           <span>Progresso Médio na IDE</span>
-                          <span>{member.metrics.ideProgress}%</span>
+                          <span>{metrics.ideProgress}%</span>
                         </div>
                         <div className="h-1.5 bg-black rounded-full overflow-hidden">
-                          <div className={`h-full ${member.metrics.ideProgress > 70 ? 'bg-green-500' : member.metrics.ideProgress > 40 ? 'bg-yellow-500' : 'bg-red-500'}`} style={{ width: `${member.metrics.ideProgress}%` }} />
+                          <div className={`h-full ${metrics.ideProgress > 70 ? 'bg-green-500' : metrics.ideProgress > 40 ? 'bg-yellow-500' : 'bg-red-500'}`} style={{ width: `${metrics.ideProgress}%` }} />
                         </div>
-                        {member.metrics.ideProgress < 40 && (
+                        {metrics.ideProgress < 40 && (
                           <p className="text-[10px] text-red-400 mt-1 flex items-center gap-1">
                             <AlertCircle className="w-3 h-3" /> Requer acompanhamento do líder
                           </p>
@@ -762,7 +843,7 @@ export function MinistriesView({ isLoggedIn = true, userData, onLoginClick }: { 
                       </Button>
                     </CardContent>
                   </Card>
-                ))}
+                )})}
               </div>
             </div>
           </div>
@@ -883,33 +964,35 @@ export function MinistriesView({ isLoggedIn = true, userData, onLoginClick }: { 
                     </div>
                   </div>
                   <div className="space-y-2">
-                    <label className="text-sm font-bold">Adicionar Servos</label>
+                    <label className="text-sm font-bold">Adicionar Posição / Vaga na Escala</label>
+                    <div className="flex gap-2">
+                      <Input id="newRoleInput" placeholder="Ex: Câmera 1, Teclado, Recepção" className="bg-black border-white/10" />
+                      <Button variant="outline" className="border-white/10" onClick={() => {
+                        const val = (document.getElementById('newRoleInput') as HTMLInputElement).value;
+                        if(val) {
+                          setNewScale({
+                            ...newScale,
+                            assignments: [...(newScale.assignments || []), { memberId: '', role: val, status: 'pending' }]
+                          });
+                          (document.getElementById('newRoleInput') as HTMLInputElement).value = '';
+                        }
+                      }}>Add Vaga</Button>
+                    </div>
                     <div className="border border-white/10 rounded-lg max-h-32 overflow-y-auto p-2 bg-black/50 space-y-1">
-                      {selectedMinistry.members.map(member => {
-                        const isSelected = newScale.assignments?.some(a => a.memberId === member.id);
-                        return (
-                          <div key={member.id} className="flex items-center gap-2 p-1">
-                            <input 
-                              type="checkbox" 
-                              checked={isSelected}
-                              onChange={(e) => {
-                                if (e.target.checked) {
-                                  setNewScale({
-                                    ...newScale, 
-                                    assignments: [...(newScale.assignments || []), { memberId: member.id, role: member.role, status: 'pending' }]
-                                  })
-                                } else {
-                                  setNewScale({
-                                    ...newScale, 
-                                    assignments: (newScale.assignments || []).filter(a => a.memberId !== member.id)
-                                  })
-                                }
-                              }}
-                            />
-                            <span className="text-sm">{member.name} - {member.role}</span>
+                      {(newScale.assignments || []).map((a, idx) => (
+                          <div key={idx} className="flex items-center justify-between p-2 bg-white/5 rounded-lg border border-white/5">
+                            <span className="text-sm font-medium">{a.role}</span>
+                            <span className="text-xs text-white/50">{a.memberId ? 'Servo Vinculado' : 'Vaga Aberta (Sorteável)'}</span>
+                            <Button size="sm" variant="ghost" className="h-6 text-red-400 hover:text-red-300" onClick={() => {
+                               const updated = [...newScale.assignments!];
+                               updated.splice(idx, 1);
+                               setNewScale({...newScale, assignments: updated});
+                            }}>X</Button>
                           </div>
-                        )
-                      })}
+                      ))}
+                      {(!newScale.assignments || newScale.assignments.length === 0) && (
+                        <p className="text-xs text-white/40 p-2 text-center">Nenhuma vaga adicionada ainda.</p>
+                      )}
                     </div>
                   </div>
                 </div>
