@@ -130,7 +130,7 @@ function ResumoTab({ cell, members, reports }: { cell: any, members: any[], repo
                <CardTitle className="text-lg font-bold text-red-400 flex items-center gap-2">
                  <AlertCircle className="w-4 h-4" /> Alertas de Cuidado
                </CardTitle>
-               <p className="text-[10px] uppercase text-red-400/50">Membros inativos (Faltas ou IDE parada > 3 sem).</p>
+               <p className="text-[10px] uppercase text-red-400/50">Membros inativos (Faltas ou IDE parada &gt; 3 sem).</p>
              </CardHeader>
              <CardContent className="space-y-3">
                 <div className="p-4 rounded-xl border border-red-500/20 bg-black/20 flex justify-between items-center">
