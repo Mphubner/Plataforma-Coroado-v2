@@ -239,7 +239,7 @@ export function PastorsView({ isAdmin, userData, isLoggedIn, onLoginClick }: { i
           </p>
         </div>
         <Button 
-          onClick={() => setSelectedPastor({ id: 'plantonista', name: 'Pastor Plantonista', role: 'Aconselhamento Geral' })}
+          onClick={() => setSelectedPastor({ isChoosing: true })}
           className="bg-primary text-black hover:bg-primary/90 font-black px-10 h-16 text-lg rounded-full shadow-lg shadow-primary/20 transition-all hover:scale-105 active:scale-95"
         >
           Agendar com Pastor <ChevronRight className="ml-2 w-6 h-6" />
@@ -266,63 +266,89 @@ export function PastorsView({ isAdmin, userData, isLoggedIn, onLoginClick }: { i
               </Button>
 
               <div className="p-8 space-y-6">
-                <div>
-                  <Badge className="bg-primary/20 text-primary border-none mb-3">{selectedPastor.role || 'Aconselhamento'}</Badge>
-                  <h3 className="text-2xl font-black font-serif italic leading-tight mb-2">Agendar com {selectedPastor.name}</h3>
-                  <p className="text-white/60">Selecione um horário disponível para conversar com o pastor. Caso não esteja logado, você será direcionado para o acesso da plataforma.</p>
-                </div>
-                
-                <div className="space-y-4">
+                {selectedPastor.isChoosing ? (
                   <div>
-                    <label className="text-xs font-bold text-white/40 uppercase tracking-widest mb-2 block">Dia Disponível</label>
-                    <div className="flex gap-2 overflow-x-auto pb-2 custom-scrollbar">
-                       {availableDates.map(d => {
-                          const dateStr = d.toISOString().split('T')[0];
-                          return (
-                            <button
-                               key={dateStr}
-                               onClick={() => setSelectedDate(dateStr)}
-                               className={`shrink-0 px-4 py-2 rounded-xl border text-sm font-bold transition-all ${selectedDate === dateStr ? 'bg-primary text-black border-primary' : 'bg-black/40 text-white/60 border-white/10 hover:border-white/30'}`}
-                            >
-                               {d.toLocaleDateString('pt-BR', { weekday: 'short', day: '2-digit', month: '2-digit' }).replace('.', '')}
-                            </button>
-                          )
-                       })}
+                    <h3 className="text-2xl font-black font-serif italic leading-tight mb-2">Escolha um Pastor</h3>
+                    <p className="text-white/60 mb-4">Com quem você gostaria de agendar seu aconselhamento?</p>
+                    
+                    <div className="space-y-2 max-h-[400px] overflow-y-auto custom-scrollbar">
+                       {pastorsList.map(p => (
+                         <div 
+                            key={p.id} 
+                            onClick={() => setSelectedPastor(p)}
+                            className="flex items-center gap-4 p-4 rounded-2xl border border-white/10 hover:border-primary/50 cursor-pointer transition-all hover:bg-white/5 group"
+                         >
+                            <img src={p.image} alt={p.name} className="w-14 h-14 rounded-full object-cover grayscale group-hover:grayscale-0 transition-all" />
+                            <div>
+                               <p className="font-bold text-white group-hover:text-primary transition-colors text-lg">{p.name}</p>
+                               <p className="text-xs text-primary uppercase tracking-widest">{p.role}</p>
+                            </div>
+                            <ChevronRight className="w-5 h-5 text-white/20 group-hover:text-primary ml-auto transition-colors" />
+                         </div>
+                       ))}
                     </div>
                   </div>
-
-                  {selectedDate && (
-                    <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }}>
-                      <label className="text-xs font-bold text-white/40 uppercase tracking-widest mb-2 block mt-2">Horário</label>
-                      <div className="flex flex-wrap gap-2">
-                        {availableTimes.map(t => (
-                          <button
-                             key={t}
-                             onClick={() => setSelectedTime(t)}
-                             className={`px-4 py-2 rounded-xl border text-sm font-bold transition-all ${selectedTime === t ? 'bg-primary text-black border-primary' : 'bg-black/40 text-white/60 border-white/10 hover:border-white/30'}`}
-                          >
-                             {t}
-                          </button>
-                        ))}
+                ) : (
+                  <>
+                    <div>
+                      <Badge className="bg-primary/20 text-primary border-none mb-3">{selectedPastor.role || 'Aconselhamento'}</Badge>
+                      <h3 className="text-2xl font-black font-serif italic leading-tight mb-2">Agendar com {selectedPastor.name}</h3>
+                      <p className="text-white/60">Selecione um horário disponível para conversar com o pastor. Caso não esteja logado, você será direcionado para o acesso da plataforma.</p>
+                    </div>
+                    
+                    <div className="space-y-4">
+                      <div>
+                        <label className="text-xs font-bold text-white/40 uppercase tracking-widest mb-2 block">Dia Disponível</label>
+                        <div className="flex gap-2 overflow-x-auto pb-2 custom-scrollbar">
+                           {availableDates.map(d => {
+                              const dateStr = d.toISOString().split('T')[0];
+                              return (
+                                <button
+                                   key={dateStr}
+                                   onClick={() => setSelectedDate(dateStr)}
+                                   className={`shrink-0 px-4 py-2 rounded-xl border text-sm font-bold transition-all ${selectedDate === dateStr ? 'bg-primary text-black border-primary' : 'bg-black/40 text-white/60 border-white/10 hover:border-white/30'}`}
+                                >
+                                   {d.toLocaleDateString('pt-BR', { weekday: 'short', day: '2-digit', month: '2-digit' }).replace('.', '')}
+                                </button>
+                              )
+                           })}
+                        </div>
                       </div>
-                    </motion.div>
-                  )}
-                </div>
 
-                {!isLoggedIn && (
-                  <div className="bg-blue-500/10 border border-blue-500/20 text-blue-400 p-3 rounded-xl flex items-start gap-3 text-sm">
-                    <AlertCircle className="w-5 h-5 shrink-0" />
-                    <p>Você precisará fazer login ou se cadastrar para confirmar este agendamento.</p>
-                  </div>
+                      {selectedDate && (
+                        <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }}>
+                          <label className="text-xs font-bold text-white/40 uppercase tracking-widest mb-2 block mt-2">Horário</label>
+                          <div className="flex flex-wrap gap-2">
+                            {availableTimes.map(t => (
+                              <button
+                                 key={t}
+                                 onClick={() => setSelectedTime(t)}
+                                 className={`px-4 py-2 rounded-xl border text-sm font-bold transition-all ${selectedTime === t ? 'bg-primary text-black border-primary' : 'bg-black/40 text-white/60 border-white/10 hover:border-white/30'}`}
+                              >
+                                 {t}
+                              </button>
+                            ))}
+                          </div>
+                        </motion.div>
+                      )}
+                    </div>
+
+                    {!isLoggedIn && (
+                      <div className="bg-blue-500/10 border border-blue-500/20 text-blue-400 p-3 rounded-xl flex items-start gap-3 text-sm">
+                        <AlertCircle className="w-5 h-5 shrink-0" />
+                        <p>Você precisará fazer login ou se cadastrar para confirmar este agendamento.</p>
+                      </div>
+                    )}
+
+                    <Button 
+                      onClick={handleBook} 
+                      disabled={!selectedDate || !selectedTime || isSubmitting}
+                      className="w-full h-14 bg-primary text-black font-bold uppercase tracking-wider"
+                    >
+                      {isSubmitting ? 'Reservando...' : (!isLoggedIn ? 'Continuar para Login' : 'Confirmar Agendamento')}
+                    </Button>
+                  </>
                 )}
-
-                <Button 
-                  onClick={handleBook} 
-                  disabled={!selectedDate || !selectedTime || isSubmitting}
-                  className="w-full h-14 bg-primary text-black font-bold uppercase tracking-wider"
-                >
-                  {isSubmitting ? 'Reservando...' : (!isLoggedIn ? 'Continuar para Login' : 'Confirmar Agendamento')}
-                </Button>
               </div>
             </motion.div>
           </div>
