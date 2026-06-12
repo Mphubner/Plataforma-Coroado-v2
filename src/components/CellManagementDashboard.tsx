@@ -7,7 +7,7 @@ import { Badge } from '@/components/ui/badge';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { db } from '@/lib/firebase';
-import { collection, query, where, onSnapshot } from 'firebase/firestore';
+import { collection, query, where, onSnapshot, addDoc, serverTimestamp } from 'firebase/firestore';
 
 function ResumoTab({ cell, members, reports }: { cell: any, members: any[], reports: any[] }) {
   return (
@@ -361,13 +361,56 @@ function EscalasDinâmicasTab({ isLeader, members }: { isLeader: boolean, member
   )
 }
 
-function RelatoriosTab({ isLeader, reports }: { isLeader: boolean, reports: any[] }) {
+function RelatoriosTab({ isLeader, reports, members, cell, userData }: { isLeader: boolean, reports: any[], members: any[], cell: any, userData: any }) {
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
+  const [meetingType, setMeetingType] = useState('Célula');
+  const [presentMembers, setPresentMembers] = useState<string[]>([]);
+  const [hasVisitors, setHasVisitors] = useState(false);
+  const [visitorName, setVisitorName] = useState('');
+  const [submitting, setSubmitting] = useState(false);
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!userData?.tenantId || !cell?.id) return;
+    setSubmitting(true);
+    try {
+      await addDoc(collection(db, 'cell_reports'), {
+        cellId: cell.id,
+        tenantId: userData.tenantId,
+        date,
+        type: 'presence',
+        meetingType,
+        present: presentMembers.length,
+        visitors: hasVisitors && visitorName.trim() !== '' ? 1 : 0,
+        presentMembersIds: presentMembers,
+        visitorData: hasVisitors ? { name: visitorName } : null,
+        createdBy: userData.id,
+        createdAt: serverTimestamp()
+      });
+      setIsModalOpen(false);
+      setPresentMembers([]);
+      setHasVisitors(false);
+      setVisitorName('');
+      alert("Relatório salvo com sucesso!");
+    } catch (error) {
+      console.error(error);
+      alert("Erro ao salvar relatório.");
+    }
+    setSubmitting(false);
+  };
+
+  const toggleMember = (id: string) => {
+    setPresentMembers(prev => prev.includes(id) ? prev.filter(m => m !== id) : [...prev, id]);
+  };
+
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 relative">
       <div className="flex justify-between items-center bg-zinc-900 border border-white/10 p-4 rounded-[2rem]">
-         <h3 className="font-bold font-serif italic text-xl pl-4">Histórico de Relatórios Enviados</h3>
-         {isLeader && <Button className="bg-primary text-black font-bold rounded-full"><Plus className="w-4 h-4 mr-2"/> Lançar Novo</Button>}
+         <h3 className="font-bold font-serif italic text-xl pl-4">Histórico de Relatórios</h3>
+         {isLeader && <Button onClick={() => setIsModalOpen(true)} className="bg-primary text-black font-bold rounded-full"><Plus className="w-4 h-4 mr-2"/> Lançar Novo</Button>}
       </div>
+
       <div className="space-y-4">
          {reports.length === 0 ? (
            <div className="text-center p-12 bg-zinc-900 border border-white/10 rounded-[2rem] text-white/40 italic text-sm">
@@ -375,9 +418,9 @@ function RelatoriosTab({ isLeader, reports }: { isLeader: boolean, reports: any[
            </div>
          ) : (
            reports.map(r => (
-             <div key={r.id} className="p-6 bg-zinc-900 border border-white/10 rounded-[2rem] flex justify-between items-center">
+             <div key={r.id} className="p-6 bg-zinc-900 border border-white/10 rounded-[2rem] flex justify-between items-center hover:border-primary/30 transition-colors">
                <div>
-                 <p className="font-bold text-lg">{new Date(r.date).toLocaleDateString()}</p>
+                 <p className="font-bold text-lg">{new Date(r.date).toLocaleDateString()} <span className="text-sm font-normal text-white/40 ml-2">({r.meetingType || 'Célula'})</span></p>
                  <p className="text-sm text-white/60 mt-1">Presentes: {r.present} | Visitantes: {r.visitors}</p>
                </div>
                <Button variant="outline" className="border-white/10 rounded-full">Ver Detalhes</Button>
@@ -385,6 +428,80 @@ function RelatoriosTab({ isLeader, reports }: { isLeader: boolean, reports: any[
            ))
          )}
       </div>
+
+      <AnimatePresence>
+        {isModalOpen && (
+          <motion.div 
+            initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+            className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm"
+          >
+             <motion.div 
+               initial={{ scale: 0.95, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.95, opacity: 0 }}
+               className="bg-zinc-900 border border-white/10 rounded-[2rem] p-8 w-full max-w-2xl max-h-[90vh] overflow-y-auto custom-scrollbar shadow-2xl"
+             >
+                <div className="flex justify-between items-center mb-6 border-b border-white/10 pb-4">
+                  <h2 className="text-2xl font-bold font-serif italic text-primary">Novo Relatório de Presença</h2>
+                  <Button variant="ghost" onClick={() => setIsModalOpen(false)} className="text-white/50 hover:text-white rounded-full">X</Button>
+                </div>
+                
+                <form onSubmit={handleSubmit} className="space-y-6">
+                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                     <div className="space-y-2">
+                       <label className="text-sm font-bold text-white/70">Data do Encontro</label>
+                       <input type="date" required value={date} onChange={e => setDate(e.target.value)} className="w-full bg-black/50 border border-white/10 rounded-xl px-4 py-3 text-white focus:border-primary outline-none" />
+                     </div>
+                     <div className="space-y-2">
+                       <label className="text-sm font-bold text-white/70">Tipo de Encontro</label>
+                       <select value={meetingType} onChange={e => setMeetingType(e.target.value)} className="w-full bg-black/50 border border-white/10 rounded-xl px-4 py-3 text-white focus:border-primary outline-none appearance-none">
+                         <option value="Célula">Encontro de Célula</option>
+                         <option value="Discipulado">Discipulado</option>
+                         <option value="Evento">Evento / Confraternização</option>
+                         <option value="Outro">Outro</option>
+                       </select>
+                     </div>
+                   </div>
+
+                   <div className="space-y-3">
+                     <label className="text-sm font-bold text-white/70">Membros Presentes</label>
+                     <div className="bg-black/30 border border-white/5 rounded-2xl p-4 max-h-60 overflow-y-auto custom-scrollbar grid grid-cols-1 sm:grid-cols-2 gap-2">
+                        {members.length === 0 ? <p className="text-xs text-white/40 italic">Nenhum membro vinculado a esta célula.</p> : null}
+                        {members.map(m => (
+                          <label key={m.id} className={`flex items-center gap-3 p-3 rounded-xl cursor-pointer transition-colors border ${presentMembers.includes(m.id) ? 'bg-primary/10 border-primary/30' : 'bg-black/40 border-white/5 hover:border-white/20'}`}>
+                            <input type="checkbox" checked={presentMembers.includes(m.id)} onChange={() => toggleMember(m.id)} className="w-4 h-4 accent-primary" />
+                            <div className="flex items-center gap-2">
+                              <Avatar className="w-6 h-6"><AvatarFallback className="text-[10px]">{m.name?.[0]}</AvatarFallback></Avatar>
+                              <span className="text-sm">{m.name}</span>
+                            </div>
+                          </label>
+                        ))}
+                     </div>
+                   </div>
+
+                   <div className="space-y-4 border-t border-white/10 pt-6">
+                     <label className="flex items-center gap-3 cursor-pointer">
+                        <input type="checkbox" checked={hasVisitors} onChange={e => setHasVisitors(e.target.checked)} className="w-5 h-5 accent-primary" />
+                        <span className="font-bold text-white">Tivemos Visitantes!</span>
+                     </label>
+
+                     {hasVisitors && (
+                       <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} className="space-y-2 overflow-hidden">
+                         <label className="text-sm text-white/70">Nome do Visitante Principal / Resumo</label>
+                         <input type="text" placeholder="Ex: Carlos e esposa" value={visitorName} onChange={e => setVisitorName(e.target.value)} className="w-full bg-black/50 border border-white/10 rounded-xl px-4 py-3 text-white focus:border-primary outline-none" />
+                       </motion.div>
+                     )}
+                   </div>
+
+                   <div className="pt-4 flex justify-end gap-3">
+                     <Button type="button" variant="outline" onClick={() => setIsModalOpen(false)} className="rounded-full border-white/10">Cancelar</Button>
+                     <Button type="submit" disabled={submitting} className="bg-primary text-black font-bold rounded-full px-8">
+                       {submitting ? 'Salvando...' : 'Salvar Relatório'}
+                     </Button>
+                   </div>
+                </form>
+             </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   )
 }
@@ -469,7 +586,7 @@ export function CellManagementDashboard({ isLeader, cell, userData }: { isLeader
 
         {isLeader && (
           <TabsContent value="reports" className="mt-6 focus-visible:outline-none">
-             <RelatoriosTab isLeader={isLeader} reports={reports} />
+             <RelatoriosTab isLeader={isLeader} reports={reports} members={members} cell={cell} userData={userData} />
           </TabsContent>
         )}
       </Tabs>
