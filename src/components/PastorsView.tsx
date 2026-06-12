@@ -1,11 +1,11 @@
-import React from 'react';
-import { motion } from 'framer-motion';
-import { Facebook, Instagram, Youtube, Mail, ChevronRight, Calendar } from 'lucide-react';
+import React, { useState } from 'react';
+import { motion, AnimatePresence } from 'motion/react';
+import { Facebook, Instagram, Youtube, Mail, ChevronRight, Calendar, X, AlertCircle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { db } from '@/lib/firebase';
-import { collection, query, where, onSnapshot } from 'firebase/firestore';
+import { collection, query, where, onSnapshot, addDoc, serverTimestamp } from 'firebase/firestore';
 
 const PASTORS = [
   {
@@ -46,8 +46,51 @@ const PASTORS = [
   }
 ];
 
-export function PastorsView({ isAdmin, userData }: { isAdmin?: boolean; userData?: any }) {
-  const [pastorsList, setPastorsList] = React.useState<any[]>(PASTORS);
+export function PastorsView({ isAdmin, userData, isLoggedIn, onLoginClick }: { isAdmin?: boolean; userData?: any; isLoggedIn?: boolean; onLoginClick?: () => void }) {
+  const [pastorsList, setPastorsList] = useState<any[]>(PASTORS);
+  const [selectedPastor, setSelectedPastor] = useState<any | null>(null);
+  const [selectedDate, setSelectedDate] = useState<string>('');
+  const [selectedTime, setSelectedTime] = useState<string>('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  const availableDates = Array.from({ length: 7 }, (_, i) => {
+     const d = new Date();
+     d.setDate(d.getDate() + i + 1);
+     return d;
+  }).filter(d => d.getDay() !== 0 && d.getDay() !== 6);
+
+  const availableTimes = ['14:00', '15:00', '16:00', '17:00', '18:00'];
+
+  const handleBook = async () => {
+    if (!isLoggedIn) {
+       if (onLoginClick) onLoginClick();
+       return;
+    }
+    if (!selectedDate || !selectedTime) return alert("Selecione data e hora.");
+    setIsSubmitting(true);
+    try {
+      await addDoc(collection(db, 'pastoral_appointments'), {
+        pastorId: selectedPastor?.id || 'plantonista',
+        pastorName: selectedPastor?.name || 'Pastor Plantonista',
+        userId: userData?.id || '',
+        userName: userData?.name || 'Membro',
+        tenantId: userData?.tenantId || 'default',
+        date: selectedDate,
+        time: selectedTime,
+        status: 'scheduled',
+        createdAt: serverTimestamp()
+      });
+      alert("Aconselhamento agendado com sucesso!");
+      setSelectedPastor(null);
+      setSelectedDate('');
+      setSelectedTime('');
+    } catch (e) {
+      console.error(e);
+      alert("Erro ao agendar.");
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
 
   React.useEffect(() => {
     const q = userData?.tenantId
@@ -173,6 +216,13 @@ export function PastorsView({ isAdmin, userData }: { isAdmin?: boolean; userData
                       </motion.a>
                     )}
                   </div>
+                  <Button 
+                    onClick={() => setSelectedPastor(pastor)}
+                    size="sm" 
+                    className="bg-primary text-black hover:bg-primary/90 font-bold ml-auto"
+                  >
+                    Agendar
+                  </Button>
                 </div>
               </div>
             </motion.div>
@@ -189,12 +239,95 @@ export function PastorsView({ isAdmin, userData }: { isAdmin?: boolean; userData
           </p>
         </div>
         <Button 
-          onClick={() => window.open('https://calendly.com/coroado/atendimento', '_blank')}
+          onClick={() => setSelectedPastor({ id: 'plantonista', name: 'Pastor Plantonista', role: 'Aconselhamento Geral' })}
           className="bg-primary text-black hover:bg-primary/90 font-black px-10 h-16 text-lg rounded-full shadow-lg shadow-primary/20 transition-all hover:scale-105 active:scale-95"
         >
-          Agendar Atendimento <ChevronRight className="ml-2 w-6 h-6" />
+          Agendar com Pastor <ChevronRight className="ml-2 w-6 h-6" />
         </Button>
       </section>
+
+      {/* Booking Modal */}
+      <AnimatePresence>
+        {selectedPastor && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80">
+            <motion.div 
+               initial={{ opacity: 0, scale: 0.95 }}
+               animate={{ opacity: 1, scale: 1 }}
+               exit={{ opacity: 0, scale: 0.95 }}
+               className="bg-zinc-900 border border-white/10 rounded-[2.5rem] max-w-lg w-full overflow-hidden relative"
+            >
+              <Button 
+                 variant="ghost" 
+                 size="icon" 
+                 onClick={() => setSelectedPastor(null)}
+                 className="absolute top-4 right-4 bg-black/50 text-white hover:bg-black rounded-full z-10"
+              >
+                <X className="w-5 h-5" />
+              </Button>
+
+              <div className="p-8 space-y-6">
+                <div>
+                  <Badge className="bg-primary/20 text-primary border-none mb-3">{selectedPastor.role || 'Aconselhamento'}</Badge>
+                  <h3 className="text-2xl font-black font-serif italic leading-tight mb-2">Agendar com {selectedPastor.name}</h3>
+                  <p className="text-white/60">Selecione um horário disponível para conversar com o pastor. Caso não esteja logado, você será direcionado para o acesso da plataforma.</p>
+                </div>
+                
+                <div className="space-y-4">
+                  <div>
+                    <label className="text-xs font-bold text-white/40 uppercase tracking-widest mb-2 block">Dia Disponível</label>
+                    <div className="flex gap-2 overflow-x-auto pb-2 custom-scrollbar">
+                       {availableDates.map(d => {
+                          const dateStr = d.toISOString().split('T')[0];
+                          return (
+                            <button
+                               key={dateStr}
+                               onClick={() => setSelectedDate(dateStr)}
+                               className={`shrink-0 px-4 py-2 rounded-xl border text-sm font-bold transition-all ${selectedDate === dateStr ? 'bg-primary text-black border-primary' : 'bg-black/40 text-white/60 border-white/10 hover:border-white/30'}`}
+                            >
+                               {d.toLocaleDateString('pt-BR', { weekday: 'short', day: '2-digit', month: '2-digit' }).replace('.', '')}
+                            </button>
+                          )
+                       })}
+                    </div>
+                  </div>
+
+                  {selectedDate && (
+                    <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }}>
+                      <label className="text-xs font-bold text-white/40 uppercase tracking-widest mb-2 block mt-2">Horário</label>
+                      <div className="flex flex-wrap gap-2">
+                        {availableTimes.map(t => (
+                          <button
+                             key={t}
+                             onClick={() => setSelectedTime(t)}
+                             className={`px-4 py-2 rounded-xl border text-sm font-bold transition-all ${selectedTime === t ? 'bg-primary text-black border-primary' : 'bg-black/40 text-white/60 border-white/10 hover:border-white/30'}`}
+                          >
+                             {t}
+                          </button>
+                        ))}
+                      </div>
+                    </motion.div>
+                  )}
+                </div>
+
+                {!isLoggedIn && (
+                  <div className="bg-blue-500/10 border border-blue-500/20 text-blue-400 p-3 rounded-xl flex items-start gap-3 text-sm">
+                    <AlertCircle className="w-5 h-5 shrink-0" />
+                    <p>Você precisará fazer login ou se cadastrar para confirmar este agendamento.</p>
+                  </div>
+                )}
+
+                <Button 
+                  onClick={handleBook} 
+                  disabled={!selectedDate || !selectedTime || isSubmitting}
+                  className="w-full h-14 bg-primary text-black font-bold uppercase tracking-wider"
+                >
+                  {isSubmitting ? 'Reservando...' : (!isLoggedIn ? 'Continuar para Login' : 'Confirmar Agendamento')}
+                </Button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }
