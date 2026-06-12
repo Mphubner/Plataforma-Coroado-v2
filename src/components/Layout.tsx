@@ -115,7 +115,7 @@ export function Layout({ children, activeTab, setActiveTab, isLoggedIn = true, u
 
   const getDesktopPrimaryItems = () => {
     const preferredLogged: RouteId[] = ["home", "cell", "school", "members", "ministries", "events", "finance", "jornada", "admin", "pastoral"];
-    const preferredPublic: RouteId[] = ["home", "cell", "ministries", "units", "pastors", "social", "events"];
+    const preferredPublic: RouteId[] = ["home", "cell", "ministries", "events", "units", "pastors", "social", "store", "media"];
     const preferred = isLoggedIn ? preferredLogged : preferredPublic;
     
     const permittedIds = new Set(permittedNav.map(item => item.id));
