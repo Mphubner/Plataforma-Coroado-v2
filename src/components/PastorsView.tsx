@@ -1,11 +1,12 @@
-import React, { useState } from 'react';
-import { motion, AnimatePresence } from 'motion/react';
-import { Facebook, Instagram, Youtube, Mail, ChevronRight, Calendar, X, AlertCircle } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
+import { Facebook, Instagram, Youtube, Mail, ChevronRight, Calendar, X, AlertCircle, Edit3, Trash2, Plus, Clock, CheckCircle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
+import { Input } from '@/components/ui/input';
 import { db } from '@/lib/firebase';
-import { collection, query, where, onSnapshot, addDoc, serverTimestamp } from 'firebase/firestore';
+import { collection, query, where, onSnapshot, addDoc, updateDoc, deleteDoc, doc, serverTimestamp } from 'firebase/firestore';
 
 const PASTORS = [
   {
@@ -52,6 +53,12 @@ export function PastorsView({ isAdmin, userData, isLoggedIn, onLoginClick }: { i
   const [selectedDate, setSelectedDate] = useState<string>('');
   const [selectedTime, setSelectedTime] = useState<string>('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [activeTab, setActiveTab] = useState<'list' | 'agenda'>('list');
+  const [appointments, setAppointments] = useState<any[]>([]);
+  const [showPastorForm, setShowPastorForm] = useState(false);
+  const [editingPastor, setEditingPastor] = useState<any>(null);
+  const [showSuccess, setShowSuccess] = useState(false);
+  const [lastAppointment, setLastAppointment] = useState<any>(null);
 
   const availableDates = Array.from({ length: 7 }, (_, i) => {
      const d = new Date();
@@ -59,7 +66,56 @@ export function PastorsView({ isAdmin, userData, isLoggedIn, onLoginClick }: { i
      return d;
   }).filter(d => d.getDay() !== 0 && d.getDay() !== 6);
 
-  const availableTimes = ['14:00', '15:00', '16:00', '17:00', '18:00'];
+  const availableTimes = (selectedPastor?.availableTimes && selectedPastor.availableTimes.length > 0)
+    ? selectedPastor.availableTimes
+    : ['14:00', '15:00', '16:00', '17:00', '18:00'];
+
+  const generateGoogleCalendarUrl = (app: any) => {
+    if (!app) return '#';
+    // Very simple generator for the local timezone without external libraries
+    const dateStr = app.date.replace(/-/g, '');
+    const timeStr = app.time.replace(':', '') + '00';
+    const text = encodeURIComponent(`Aconselhamento: ${app.pastor}`);
+    return `https://calendar.google.com/calendar/render?action=TEMPLATE&text=${text}&dates=${dateStr}T${timeStr}/${dateStr}T${timeStr}&details=Aconselhamento+Pastoral`;
+  };
+
+  const handleSavePastor = async (e: React.FormEvent) => {
+    e.preventDefault();
+    try {
+      const pData = {
+        name: editingPastor.name,
+        role: editingPastor.role,
+        image: editingPastor.image,
+        social: editingPastor.social || { facebook: '', instagram: '', youtube: '' },
+        availableTimes: typeof editingPastor.availableTimes === 'string' 
+           ? editingPastor.availableTimes.split(',').map((t: string) => t.trim()) 
+           : (editingPastor.availableTimes || []),
+        tenantId: userData?.tenantId || 'tenant-1'
+      };
+
+      if (editingPastor.id && editingPastor.id !== 'rafael' && editingPastor.id !== 'fabricio' && editingPastor.id !== 'alan') {
+        await updateDoc(doc(db, 'pastors', editingPastor.id), { ...pData, updatedAt: serverTimestamp() });
+      } else {
+        await addDoc(collection(db, 'pastors'), { ...pData, createdAt: serverTimestamp(), updatedAt: serverTimestamp() });
+      }
+      setShowPastorForm(false);
+      setEditingPastor(null);
+    } catch(err) {
+      console.error(err);
+      alert('Erro ao salvar pastor');
+    }
+  };
+
+  const handleDeletePastor = async (id: string) => {
+    if (id === 'rafael' || id === 'fabricio' || id === 'alan') return alert('Pastores padrão mockados não podem ser excluídos, exclua apenas os do banco de dados.');
+    if (confirm('Excluir pastor?')) {
+      await deleteDoc(doc(db, 'pastors', id));
+    }
+  };
+
+  const updateAppointmentStatus = async (id: string, status: string) => {
+    await updateDoc(doc(db, 'pastoral_appointments', id), { status });
+  };
 
   const handleBook = async () => {
     if (!isLoggedIn) {
@@ -69,7 +125,7 @@ export function PastorsView({ isAdmin, userData, isLoggedIn, onLoginClick }: { i
     if (!selectedDate || !selectedTime) return alert("Selecione data e hora.");
     setIsSubmitting(true);
     try {
-      await addDoc(collection(db, 'pastoral_appointments'), {
+      const appRef = await addDoc(collection(db, 'pastoral_appointments'), {
         pastorId: selectedPastor?.id || 'plantonista',
         pastorName: selectedPastor?.name || 'Pastor Plantonista',
         userId: userData?.id || '',
@@ -80,7 +136,8 @@ export function PastorsView({ isAdmin, userData, isLoggedIn, onLoginClick }: { i
         status: 'scheduled',
         createdAt: serverTimestamp()
       });
-      alert("Aconselhamento agendado com sucesso!");
+      setLastAppointment({ id: appRef.id, date: selectedDate, time: selectedTime, pastor: selectedPastor?.name || 'Pastor Plantonista' });
+      setShowSuccess(true);
       setSelectedPastor(null);
       setSelectedDate('');
       setSelectedTime('');
@@ -92,20 +149,36 @@ export function PastorsView({ isAdmin, userData, isLoggedIn, onLoginClick }: { i
     }
   };
 
-  React.useEffect(() => {
-    const q = userData?.tenantId
-      ? query(collection(db, 'pastors'), where('tenantId', '==', userData.tenantId))
-      : query(collection(db, 'pastors'));
+  useEffect(() => {
+    let unsubPastors = () => {};
+    let unsubApps = () => {};
 
-    const unsub = onSnapshot(q, (snap) => {
-      if (!snap.empty) {
-        setPastorsList(snap.docs.map(doc => ({ id: doc.id, ...doc.data() })));
-      } else {
-        setPastorsList(PASTORS); // Fallback para lista mock enquanto não há pastores no DB
+    if (userData?.tenantId) {
+      const q = query(collection(db, 'pastors'), where('tenantId', '==', userData.tenantId));
+      unsubPastors = onSnapshot(q, (snap) => {
+        if (!snap.empty) {
+          setPastorsList(snap.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+        } else {
+          setPastorsList(PASTORS);
+        }
+      });
+
+      if (isAdmin || userData?.profileType === 'pastor') {
+        const qA = query(collection(db, 'pastoral_appointments'), where('tenantId', '==', userData.tenantId));
+        unsubApps = onSnapshot(qA, (snap) => {
+          let apps = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+          if (!isAdmin) {
+             apps = apps.filter((a: any) => a.pastorId === userData.id || a.pastorName === userData.name);
+          }
+          setAppointments(apps);
+        });
       }
-    });
-    return () => unsub();
-  }, [userData?.tenantId]);
+    } else {
+      setPastorsList(PASTORS);
+    }
+
+    return () => { unsubPastors(); unsubApps(); };
+  }, [userData?.tenantId, userData?.id, isAdmin, userData?.profileType]);
 
   return (
     <div className="space-y-20 pb-20">
@@ -143,16 +216,37 @@ export function PastorsView({ isAdmin, userData, isLoggedIn, onLoginClick }: { i
         </div>
       </section>
 
-      {/* Pastors Grid */}
+      {/* Pastors Grid or Agenda */}
       <section className="space-y-6">
-        {isAdmin && (
-          <div className="flex justify-end">
-             <Button variant="outline" className="border-white/10" onClick={() => alert("Gerenciamento de Pastores será integrado ao painel Gestão")}>
-                + Adicionar Pastor
-             </Button>
+        <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+          <div className="flex gap-2 bg-zinc-900 border border-white/10 p-1 rounded-lg w-fit">
+            <button 
+              onClick={() => setActiveTab('list')}
+              className={`px-4 py-2 text-sm font-medium rounded-md transition-colors ${activeTab === 'list' ? 'bg-white/10 text-white' : 'text-white/60 hover:text-white'}`}
+            >
+              Lista de Pastores
+            </button>
+            {(isAdmin || userData?.profileType === 'pastor') && (
+              <button 
+                onClick={() => setActiveTab('agenda')}
+                className={`px-4 py-2 text-sm font-medium rounded-md transition-colors ${activeTab === 'agenda' ? 'bg-white/10 text-white' : 'text-white/60 hover:text-white'}`}
+              >
+                Minha Agenda
+              </button>
+            )}
           </div>
-        )}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+          {isAdmin && activeTab === 'list' && (
+             <Button variant="outline" className="border-white/10" onClick={() => {
+                setEditingPastor({ name: '', role: '', image: '', social: { facebook: '', instagram: '', youtube: '' }, availableTimes: '14:00, 15:00, 16:00' });
+                setShowPastorForm(true);
+             }}>
+                <Plus className="w-4 h-4 mr-2" /> Adicionar Pastor
+             </Button>
+          )}
+        </div>
+
+        {activeTab === 'list' && (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
           {pastorsList.map((pastor, index) => (
             <motion.div
               key={pastor.id}
@@ -216,18 +310,70 @@ export function PastorsView({ isAdmin, userData, isLoggedIn, onLoginClick }: { i
                       </motion.a>
                     )}
                   </div>
-                  <Button 
-                    onClick={() => setSelectedPastor(pastor)}
-                    size="sm" 
-                    className="bg-primary text-black hover:bg-primary/90 font-bold ml-auto"
-                  >
-                    Agendar
-                  </Button>
+                  <div className="flex items-center gap-2 pt-2">
+                    <Button 
+                      onClick={() => setSelectedPastor(pastor)}
+                      size="sm" 
+                      className="bg-primary text-black hover:bg-primary/90 font-bold w-full"
+                    >
+                      Agendar
+                    </Button>
+                    {isAdmin && (
+                      <div className="flex gap-2">
+                        <Button size="icon" variant="outline" className="bg-black/40 border-white/10 hover:bg-white/10 shrink-0" onClick={() => {
+                           setEditingPastor({ ...pastor, availableTimes: pastor.availableTimes?.join(', ') || '' });
+                           setShowPastorForm(true);
+                        }}>
+                          <Edit3 className="w-4 h-4" />
+                        </Button>
+                        <Button size="icon" variant="outline" className="bg-red-500/10 border-red-500/20 text-red-400 hover:bg-red-500 hover:text-white shrink-0" onClick={() => handleDeletePastor(pastor.id)}>
+                          <Trash2 className="w-4 h-4" />
+                        </Button>
+                      </div>
+                    )}
+                  </div>
                 </div>
               </div>
             </motion.div>
           ))}
         </div>
+        )}
+
+        {activeTab === 'agenda' && (
+          <div className="space-y-4">
+            {appointments.length === 0 ? (
+              <div className="text-center p-12 bg-zinc-900 border border-white/10 rounded-[2.5rem] text-white/40">
+                 Nenhum agendamento encontrado para sua agenda.
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                 {appointments.map(app => (
+                   <Card key={app.id} className="bg-zinc-900 border-white/10">
+                      <CardHeader>
+                        <Badge className="w-fit mb-2">{app.status}</Badge>
+                        <CardTitle className="text-lg">{app.userName}</CardTitle>
+                      </CardHeader>
+                      <CardContent className="space-y-4">
+                        <div className="flex items-center gap-2 text-white/60 text-sm">
+                           <Calendar className="w-4 h-4" /> {app.date}
+                        </div>
+                        <div className="flex items-center gap-2 text-white/60 text-sm">
+                           <Clock className="w-4 h-4" /> {app.time}
+                        </div>
+                        <div className="flex items-center gap-2 text-white/60 text-sm">
+                           Pastor: {app.pastorName}
+                        </div>
+                        <div className="flex gap-2 pt-4">
+                          <Button size="sm" variant="outline" className="flex-1 bg-green-500/10 border-green-500/20 text-green-400" onClick={() => updateAppointmentStatus(app.id, 'approved')}>Aprovar</Button>
+                          <Button size="sm" variant="outline" className="flex-1 bg-red-500/10 border-red-500/20 text-red-400" onClick={() => updateAppointmentStatus(app.id, 'declined')}>Rejeitar</Button>
+                        </div>
+                      </CardContent>
+                   </Card>
+                 ))}
+              </div>
+            )}
+          </div>
+        )}
       </section>
 
       {/* CTA Section */}
@@ -350,6 +496,83 @@ export function PastorsView({ isAdmin, userData, isLoggedIn, onLoginClick }: { i
                   </>
                 )}
               </div>
+            </motion.div>
+          </div>
+        )}
+      {/* Success Modal with Calendar Sync */}
+      <AnimatePresence>
+        {showSuccess && lastAppointment && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80">
+            <motion.div 
+               initial={{ opacity: 0, scale: 0.95 }}
+               animate={{ opacity: 1, scale: 1 }}
+               exit={{ opacity: 0, scale: 0.95 }}
+               className="bg-zinc-900 border border-white/10 rounded-[2.5rem] max-w-sm w-full overflow-hidden relative p-8 text-center space-y-6"
+            >
+              <div className="w-16 h-16 bg-green-500/20 text-green-500 rounded-full flex items-center justify-center mx-auto">
+                 <CheckCircle className="w-8 h-8" />
+              </div>
+              <h3 className="text-2xl font-black font-serif italic text-white">Agendado!</h3>
+              <p className="text-white/60 text-sm">
+                 Seu aconselhamento com <strong className="text-white">{lastAppointment.pastor}</strong> foi reservado para o dia <strong>{new Date(lastAppointment.date).toLocaleDateString('pt-BR')}</strong> às <strong>{lastAppointment.time}</strong>.
+              </p>
+              <div className="space-y-3 pt-4">
+                 <Button 
+                   onClick={() => window.open(generateGoogleCalendarUrl(lastAppointment), '_blank')}
+                   className="w-full bg-primary text-black font-bold h-12"
+                 >
+                   Adicionar ao Google Calendar
+                 </Button>
+                 <Button variant="ghost" onClick={() => setShowSuccess(false)} className="w-full text-white/40 hover:text-white">
+                   Fechar
+                 </Button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* Pastor Form Modal */}
+      <AnimatePresence>
+        {showPastorForm && editingPastor && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
+            <motion.div 
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              className="bg-zinc-900 border border-white/10 rounded-3xl max-w-lg w-full p-8 max-h-[90vh] overflow-y-auto custom-scrollbar"
+            >
+              <h3 className="text-2xl font-bold mb-6">{editingPastor.id ? 'Editar Pastor' : 'Novo Pastor'}</h3>
+              <form onSubmit={handleSavePastor} className="space-y-4">
+                <div className="space-y-2">
+                  <label className="text-xs font-bold text-white/60">Nome</label>
+                  <Input required value={editingPastor.name} onChange={e => setEditingPastor({ ...editingPastor, name: e.target.value })} className="bg-black border-white/10" />
+                </div>
+                <div className="space-y-2">
+                  <label className="text-xs font-bold text-white/60">Cargo/Função</label>
+                  <Input required value={editingPastor.role} onChange={e => setEditingPastor({ ...editingPastor, role: e.target.value })} className="bg-black border-white/10" />
+                </div>
+                <div className="space-y-2">
+                  <label className="text-xs font-bold text-white/60">URL da Foto</label>
+                  <Input required value={editingPastor.image} onChange={e => setEditingPastor({ ...editingPastor, image: e.target.value })} className="bg-black border-white/10" />
+                </div>
+                <div className="space-y-2">
+                  <label className="text-xs font-bold text-white/60">Horários Disponíveis (separados por vírgula)</label>
+                  <Input required value={editingPastor.availableTimes} onChange={e => setEditingPastor({ ...editingPastor, availableTimes: e.target.value })} className="bg-black border-white/10" placeholder="14:00, 15:00, 16:00" />
+                </div>
+                
+                <h4 className="text-sm font-bold text-white mt-6 mb-2">Redes Sociais (URLs)</h4>
+                <div className="space-y-2">
+                  <Input value={editingPastor.social?.instagram || ''} onChange={e => setEditingPastor({ ...editingPastor, social: { ...editingPastor.social, instagram: e.target.value } })} className="bg-black border-white/10" placeholder="Instagram URL" />
+                  <Input value={editingPastor.social?.youtube || ''} onChange={e => setEditingPastor({ ...editingPastor, social: { ...editingPastor.social, youtube: e.target.value } })} className="bg-black border-white/10" placeholder="YouTube URL" />
+                  <Input value={editingPastor.social?.facebook || ''} onChange={e => setEditingPastor({ ...editingPastor, social: { ...editingPastor.social, facebook: e.target.value } })} className="bg-black border-white/10" placeholder="Facebook URL" />
+                </div>
+                
+                <div className="pt-6 flex gap-4">
+                  <Button type="button" variant="ghost" onClick={() => { setShowPastorForm(false); setEditingPastor(null); }} className="flex-1 text-white/40 hover:text-white">Cancelar</Button>
+                  <Button type="submit" className="flex-1 bg-primary text-black font-bold">Salvar Pastor</Button>
+                </div>
+              </form>
             </motion.div>
           </div>
         )}

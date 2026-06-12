@@ -9,7 +9,7 @@ import { collection, query, where, onSnapshot, getDoc, doc, addDoc, updateDoc, d
 import { can } from "@/src/lib/permissions";
 
 // Types
-export type BriefingStatus = 'todo' | 'in-progress' | 'done';
+export type BriefingStatus = 'todo' | 'in-progress' | 'done' | 'pending' | 'accepted' | 'declined' | 'completed';
 
 export type Briefing = {
   id: string;
@@ -143,7 +143,7 @@ export function MinistriesView({ isLoggedIn = true, userData, onLoginClick }: { 
     description: '',
     requesterMinistry: '',
     deadline: '',
-    status: 'todo'
+    status: 'pending'
   });
 
   const handleCreateMinistry = async () => {
@@ -300,18 +300,47 @@ export function MinistriesView({ isLoggedIn = true, userData, onLoginClick }: { 
             <h4 className="font-bold text-sm leading-tight">{briefing.title}</h4>
             <p className="text-xs text-white/60 mt-1 line-clamp-2">{briefing.description}</p>
           </div>
-          <div className="pt-2 border-t border-white/10 flex justify-between items-center">
-            {assignee ? (
-              <div className="flex items-center gap-2">
-                <div className="w-5 h-5 rounded-full bg-white/10 flex items-center justify-center text-[8px] font-bold">
-                  {assignee.name.substring(0, 2).toUpperCase()}
+          <div className="pt-2 border-t border-white/10 flex flex-col gap-2">
+            <div className="flex justify-between items-center">
+              {assignee ? (
+                <div className="flex items-center gap-2">
+                  <div className="w-5 h-5 rounded-full bg-white/10 flex items-center justify-center text-[8px] font-bold">
+                    {assignee.name.substring(0, 2).toUpperCase()}
+                  </div>
+                  <span className="text-[10px] text-white/60">{assignee.name.split(' ')[0]}</span>
                 </div>
-                <span className="text-[10px] text-white/60">{assignee.name.split(' ')[0]}</span>
+              ) : (
+                <span className="text-[10px] text-white/40 italic">Não atribuído</span>
+              )}
+              {briefing.status === 'accepted' || briefing.status === 'todo' || briefing.status === 'in-progress' ? (
+                <Button size="sm" variant="ghost" className="h-6 px-2 text-[10px] text-white/40 hover:text-white" onClick={async () => {
+                  try {
+                    await updateDoc(doc(db, 'briefings', briefing.id), { status: 'completed' });
+                  } catch (e) { console.error(e); }
+                }}>Concluir ✓</Button>
+              ) : null}
+            </div>
+
+            {briefing.status === 'pending' && isLeader && (
+              <div className="flex gap-2 w-full mt-2">
+                <Button size="sm" className="flex-1 h-7 text-[10px] bg-green-500/20 text-green-400 hover:bg-green-500/30" onClick={async () => {
+                  try {
+                    await updateDoc(doc(db, 'briefings', briefing.id), { status: 'accepted' });
+                  } catch (e) { console.error(e); }
+                }}>Aceitar</Button>
+                <Button size="sm" className="flex-1 h-7 text-[10px] bg-red-500/20 text-red-400 hover:bg-red-500/30" onClick={async () => {
+                  const reason = prompt("Qual o motivo da recusa?");
+                  if (reason) {
+                    try {
+                      await updateDoc(doc(db, 'briefings', briefing.id), { status: 'declined', declineReason: reason });
+                    } catch (e) { console.error(e); }
+                  }
+                }}>Declinar</Button>
               </div>
-            ) : (
-              <span className="text-[10px] text-white/40 italic">Não atribuído</span>
             )}
-            <Button size="sm" variant="ghost" className="h-6 px-2 text-[10px] text-white/40 hover:text-white">Mover →</Button>
+            {briefing.status === 'declined' && (
+              <p className="text-[10px] text-red-400 bg-red-400/10 p-1 rounded">Motivo: Recusado pelo líder.</p>
+            )}
           </div>
         </CardContent>
       </Card>
@@ -326,7 +355,7 @@ export function MinistriesView({ isLoggedIn = true, userData, onLoginClick }: { 
       <div className="container mx-auto px-4 py-24 max-w-6xl space-y-8">
         <div className="flex items-center gap-4 mb-8">
           <Button variant="ghost" className="text-white/60 hover:text-white" onClick={() => { setSelectedMinistry(null); setActiveTab("overview"); }}>
-            ← Voltar
+            ← Ver Todos os Ministérios
           </Button>
           <div className="flex items-center gap-3">
             <div className="w-12 h-12 rounded-xl bg-primary/20 text-primary flex items-center justify-center">
@@ -624,27 +653,34 @@ export function MinistriesView({ isLoggedIn = true, userData, onLoginClick }: { 
               </Button>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
               <div className="space-y-4">
                 <div className="flex items-center justify-between">
-                  <h3 className="font-bold text-white/80 flex items-center gap-2"><AlertCircle className="w-4 h-4 text-yellow-400"/> Pendentes</h3>
-                  <span className="px-2 py-1 rounded-full text-xs border border-white/10">{ministryBriefings.filter(b => b.status === 'todo').length}</span>
+                  <h3 className="font-bold text-white/80 flex items-center gap-2 text-sm"><AlertCircle className="w-4 h-4 text-yellow-400"/> Novas Solicitações</h3>
+                  <span className="px-2 py-1 rounded-full text-xs border border-white/10">{ministryBriefings.filter(b => b.status === 'pending').length}</span>
                 </div>
-                {ministryBriefings.filter(b => b.status === 'todo').map(renderBriefingCard)}
+                {ministryBriefings.filter(b => b.status === 'pending').map(renderBriefingCard)}
               </div>
               <div className="space-y-4">
                 <div className="flex items-center justify-between">
-                  <h3 className="font-bold text-white/80 flex items-center gap-2"><Clock className="w-4 h-4 text-blue-400"/> Em Andamento</h3>
-                  <span className="px-2 py-1 rounded-full text-xs border border-white/10">{ministryBriefings.filter(b => b.status === 'in-progress').length}</span>
+                  <h3 className="font-bold text-white/80 flex items-center gap-2 text-sm"><Clock className="w-4 h-4 text-blue-400"/> Aprovados / Em Andamento</h3>
+                  <span className="px-2 py-1 rounded-full text-xs border border-white/10">{ministryBriefings.filter(b => ['accepted', 'todo', 'in-progress'].includes(b.status)).length}</span>
                 </div>
-                {ministryBriefings.filter(b => b.status === 'in-progress').map(renderBriefingCard)}
+                {ministryBriefings.filter(b => ['accepted', 'todo', 'in-progress'].includes(b.status)).map(renderBriefingCard)}
               </div>
               <div className="space-y-4">
                 <div className="flex items-center justify-between">
-                  <h3 className="font-bold text-white/80 flex items-center gap-2"><CheckCircle2 className="w-4 h-4 text-green-400"/> Concluídos</h3>
-                  <span className="px-2 py-1 rounded-full text-xs border border-white/10">{ministryBriefings.filter(b => b.status === 'done').length}</span>
+                  <h3 className="font-bold text-white/80 flex items-center gap-2 text-sm"><CheckCircle2 className="w-4 h-4 text-green-400"/> Concluídos</h3>
+                  <span className="px-2 py-1 rounded-full text-xs border border-white/10">{ministryBriefings.filter(b => ['done', 'completed'].includes(b.status)).length}</span>
                 </div>
-                {ministryBriefings.filter(b => b.status === 'done').map(renderBriefingCard)}
+                {ministryBriefings.filter(b => ['done', 'completed'].includes(b.status)).map(renderBriefingCard)}
+              </div>
+              <div className="space-y-4">
+                <div className="flex items-center justify-between">
+                  <h3 className="font-bold text-white/80 flex items-center gap-2 text-sm"><XCircle className="w-4 h-4 text-red-400"/> Recusados</h3>
+                  <span className="px-2 py-1 rounded-full text-xs border border-white/10">{ministryBriefings.filter(b => b.status === 'declined').length}</span>
+                </div>
+                {ministryBriefings.filter(b => b.status === 'declined').map(renderBriefingCard)}
               </div>
             </div>
           </div>

@@ -185,7 +185,7 @@ export function AuthView({ onLoginComplete, initialState = 'login', currentUserD
     if (!auth.currentUser) return;
     try {
       setLoading(true);
-      const requestedRoles = normalizeRoles(formData.roles.length > 0 ? formData.roles : ['member']);
+      const requestedRoles = normalizeRoles(formData.roles.length > 0 ? formData.roles : ['visitor']);
 
       await setDoc(doc(db, 'users', auth.currentUser.uid), {
         email: auth.currentUser.email || '',
@@ -316,7 +316,7 @@ export function AuthView({ onLoginComplete, initialState = 'login', currentUserD
                   <div className="space-y-4">
                     <label className="text-xs font-bold text-white/40 uppercase">O que você é hoje? (Selecione todos que se aplicam)</label>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                      {['Membro', 'Líder de Célula', 'Supervisor de Células', 'Líder de Ministério', 'Pastor da Sede', 'Pastor Auxiliar'].map(role => (
+                      {['Visitante', 'Membro', 'Líder de Célula', 'Supervisor de Células', 'Líder de Ministério', 'Pastor da Sede', 'Pastor Auxiliar'].map(role => (
                         <div 
                           key={role} 
                           onClick={() => handleRoleToggle(role)}
@@ -402,6 +402,9 @@ export function AuthView({ onLoginComplete, initialState = 'login', currentUserD
                           {formData.roles.includes('Membro') && <optgroup label="Líderes de Célula">
                             <option>Líder - Célula Esperança</option>
                             <option>Líder - Célula Vida</option>
+                          </optgroup>}
+                          {formData.roles.includes('Visitante') && <optgroup label="Visitantes">
+                            <option value="admin">Sou apenas visitante</option>
                           </optgroup>}
                           <optgroup label="Não encontrei">
                             <option value="admin">Encaminhar para Administração Central</option>

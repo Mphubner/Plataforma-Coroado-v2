@@ -1,4 +1,5 @@
 export type ChurchRole =
+  | "visitor"
   | "member"
   | "cellLeader"
   | "ministryLeader"
@@ -109,9 +110,16 @@ const roleAliases: Record<string, ChurchRole[]> = {
   voluntario: ["member"],
   membro: ["member"],
   member: ["member"],
+  visitor: ["visitor"],
+  visitante: ["visitor"]
 };
 
 const capabilitiesByRole: Record<ChurchRole, Capability[]> = {
+  visitor: [
+    "view:home",
+    "view:cells",
+    "view:public",
+  ],
   member: [
     "view:home",
     "view:cells",

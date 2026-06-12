@@ -6,25 +6,17 @@ import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/com
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { db } from '@/lib/firebase';
-import { collection, query, where, onSnapshot, addDoc, serverTimestamp } from 'firebase/firestore';
+import { collection, query, where, onSnapshot, addDoc, updateDoc, deleteDoc, doc, serverTimestamp } from 'firebase/firestore';
 import ReactQrCode from 'react-qr-code';
 
-const DEV_PROJECT_BOQUIRA = {
-  target: 15000,
-  current: 8750,
-  donors: 142,
-  deadline: '2023-12-20',
-  impactReports: [
-    { date: '2023-11-01', text: 'Compra de 50 cestas básicas concluída.', image: 'https://images.unsplash.com/photo-1488521787991-ed7bbaae773c?q=80&w=600&auto=format&fit=crop' },
-    { date: '2023-10-15', text: 'Equipe de saúde iniciou os atendimentos médicos.', image: 'https://images.unsplash.com/photo-1532938911079-1b06ac7ceec7?q=80&w=600&auto=format&fit=crop' }
-  ]
-};
-
-const EMPTY_PROJECT_BOQUIRA = {
+const EMPTY_CAMPAIGN = {
+  title: '',
+  description: '',
   target: 0,
   current: 0,
   donors: 0,
   deadline: '',
+  imageUrl: '',
   impactReports: [] as Array<{ date: string; text: string; image: string }>,
 };
 
@@ -36,10 +28,15 @@ export function FinanceView({ userData }: FinanceViewProps) {
   const [activeTab, setActiveTab] = useState<'tithes' | 'missions' | 'history'>('tithes');
   const [donateAmount, setDonateAmount] = useState('100');
   const [donateType, setDonateType] = useState('dizimo');
+  const [selectedCampaignId, setSelectedCampaignId] = useState<string | null>(null);
   const [showPix, setShowPix] = useState(false);
   const [history, setHistory] = useState<any[]>([]);
+  const [campaigns, setCampaigns] = useState<any[]>([]);
+  const [showCampaignForm, setShowCampaignForm] = useState(false);
+  const [editingCampaign, setEditingCampaign] = useState<any>(null);
 
   const tenantId = userData?.tenantId || 'tenant-1';
+  const isAdmin = userData?.profileType === 'admin' || userData?.role?.includes('Pastor da Sede') || userData?.role?.includes('admin');
 
   useEffect(() => {
     if (!userData?.id) return;
@@ -57,7 +54,16 @@ export function FinanceView({ userData }: FinanceViewProps) {
       });
       setHistory(txs);
     });
-    return () => unsub();
+    
+    const qCamps = query(
+      collection(db, 'campaigns'),
+      where('tenantId', '==', tenantId)
+    );
+    const unsubCamps = onSnapshot(qCamps, (snap) => {
+      setCampaigns(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+    });
+
+    return () => { unsub(); unsubCamps(); };
   }, [userData?.id, tenantId]);
 
   const handleSimulatePayment = () => {
@@ -73,8 +79,8 @@ export function FinanceView({ userData }: FinanceViewProps) {
       await addDoc(collection(db, 'transactions'), {
         userId: userData.id,
         amount: Number(donateAmount),
-        type: donateType === 'dizimo' ? 'Dízimo' : 'Oferta',
-        itemId: donateType === 'dizimo' ? 'dizimo' : 'oferta',
+        type: donateType === 'dizimo' ? 'Dízimo' : (donateType === 'oferta' ? 'Oferta' : `Campanha: ${donateType}`),
+        itemId: selectedCampaignId || donateType,
         status: 'completed',
         date: new Date().toISOString().split('T')[0],
         method: 'pix',
@@ -88,10 +94,38 @@ export function FinanceView({ userData }: FinanceViewProps) {
       alert("Erro ao salvar contribuição: " + (e as Error).message);
     }
     setShowPix(false);
+    setSelectedCampaignId(null);
   };
 
-  const projectBoquira = import.meta.env.DEV ? DEV_PROJECT_BOQUIRA : EMPTY_PROJECT_BOQUIRA;
-  const projectProgress = projectBoquira.target > 0 ? (projectBoquira.current / projectBoquira.target) * 100 : 0;
+  const handleSaveCampaign = async (e: React.FormEvent) => {
+    e.preventDefault();
+    try {
+      if (editingCampaign.id) {
+        await updateDoc(doc(db, 'campaigns', editingCampaign.id), {
+          ...editingCampaign,
+          updatedAt: serverTimestamp()
+        });
+      } else {
+        await addDoc(collection(db, 'campaigns'), {
+          ...editingCampaign,
+          tenantId,
+          createdAt: serverTimestamp(),
+          updatedAt: serverTimestamp()
+        });
+      }
+      setShowCampaignForm(false);
+      setEditingCampaign(null);
+    } catch(err) {
+      console.error(err);
+      alert("Erro ao salvar campanha");
+    }
+  };
+
+  const handleDeleteCampaign = async (id: string) => {
+    if(confirm('Deseja realmente excluir esta campanha?')) {
+      await deleteDoc(doc(db, 'campaigns', id));
+    }
+  };
 
   return (
     <div className="space-y-8 pb-20">
@@ -114,7 +148,7 @@ export function FinanceView({ userData }: FinanceViewProps) {
           className={`px-4 py-2 text-sm font-medium rounded-md transition-colors whitespace-nowrap ${activeTab === "missions" ? "bg-white/10 text-white" : "text-white/60 hover:text-white hover:bg-white/5"}`}
         >
           <div className="flex items-center gap-2">
-            <Globe className="w-4 h-4" /> Projeto Boquira
+            <Globe className="w-4 h-4" /> Missões e Projetos
           </div>
         </button>
         <button 
@@ -209,79 +243,110 @@ export function FinanceView({ userData }: FinanceViewProps) {
 
           {activeTab === 'missions' && (
             <div className="space-y-8">
-              <div className="relative h-[300px] rounded-[2.5rem] overflow-hidden flex items-end p-8 border border-white/10">
-                <div className="absolute inset-0">
-                  <div className="absolute inset-0 bg-gradient-to-t from-black via-black/80 to-transparent z-10" />
-                  <img src="https://images.unsplash.com/photo-1542810634-71277d95dc8c?q=80&w=1200&auto=format&fit=crop" alt="Boquira" className="w-full h-full object-cover grayscale" />
+              {isAdmin && (
+                <div className="flex justify-end">
+                  <Button onClick={() => {
+                    setEditingCampaign(EMPTY_CAMPAIGN);
+                    setShowCampaignForm(true);
+                  }} className="bg-primary text-black font-bold">
+                    <Plus className="w-4 h-4 mr-2" /> Nova Campanha
+                  </Button>
                 </div>
-                <div className="relative z-20 w-full max-w-3xl space-y-4">
-                  <Badge className="bg-primary/20 text-primary border-none px-3 py-1 uppercase tracking-widest text-[10px]">Missões Transculturais</Badge>
-                  <h2 className="text-4xl md:text-5xl font-black tracking-tight font-serif italic text-white">
-                    Visão Boquira
-                  </h2>
-                  <p className="text-lg text-white/80 max-w-xl">
-                    Levando saúde, educação e o Evangelho para as comunidades ribeirinhas e sertoes da Bahia.
-                  </p>
-                </div>
-              </div>
+              )}
 
-              <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-                <div className="lg:col-span-2 space-y-8">
-                  {/* Progress Tracker */}
-                  <Card className="bg-zinc-900 border-white/10">
-                    <CardHeader>
-                      <CardTitle>Meta da Campanha de Natal</CardTitle>
-                      <CardDescription>Arrecadação para presentes e reforma do Centro Comunitário.</CardDescription>
-                    </CardHeader>
-                    <CardContent className="space-y-6">
-                      <div className="space-y-2">
-                        <div className="flex justify-between text-sm font-bold">
-                          <span className="text-primary">R$ {projectBoquira.current.toLocaleString('pt-BR')} arrecadados</span>
-                          <span className="text-white/60">Meta: R$ {projectBoquira.target.toLocaleString('pt-BR')}</span>
+              {campaigns.length === 0 ? (
+                <div className="text-center p-12 bg-zinc-900 border border-white/10 rounded-[2.5rem]">
+                  <h3 className="text-xl font-bold">Nenhuma campanha ativa</h3>
+                  <p className="text-white/60 mt-2">Novos projetos missionários aparecerão aqui.</p>
+                </div>
+              ) : (
+                campaigns.map((campaign, idx) => {
+                  const progress = campaign.target > 0 ? (campaign.current / campaign.target) * 100 : 0;
+                  return (
+                    <div key={campaign.id || idx} className="space-y-8 pb-12 border-b border-white/10 last:border-0">
+                      <div className="relative h-[300px] rounded-[2.5rem] overflow-hidden flex items-end p-8 border border-white/10">
+                        <div className="absolute inset-0">
+                          <div className="absolute inset-0 bg-gradient-to-t from-black via-black/80 to-transparent z-10" />
+                          <img src={campaign.imageUrl || "https://images.unsplash.com/photo-1542810634-71277d95dc8c?q=80&w=1200&auto=format&fit=crop"} alt={campaign.title} className="w-full h-full object-cover grayscale" />
                         </div>
-                        <div className="h-4 bg-black rounded-full overflow-hidden border border-white/5">
-                          <motion.div 
-                            initial={{ width: 0 }}
-                            animate={{ width: `${projectProgress}%` }}
-                            transition={{ duration: 1, ease: "easeOut" }}
-                            className="h-full bg-primary relative overflow-hidden"
-                          >
-                            <div className="absolute inset-0 bg-white/20 animate-pulse" />
-                          </motion.div>
+                        <div className="relative z-20 w-full max-w-3xl space-y-4">
+                          <Badge className="bg-primary/20 text-primary border-none px-3 py-1 uppercase tracking-widest text-[10px]">Missões Transculturais</Badge>
+                          <h2 className="text-4xl md:text-5xl font-black tracking-tight font-serif italic text-white">
+                            {campaign.title}
+                          </h2>
+                          <p className="text-lg text-white/80 max-w-xl">
+                            {campaign.description}
+                          </p>
+                          {isAdmin && (
+                            <div className="flex gap-2 pt-2">
+                              <Button size="sm" variant="outline" className="border-white/10 bg-black/40" onClick={() => { setEditingCampaign(campaign); setShowCampaignForm(true); }}>
+                                <Edit3 className="w-4 h-4 mr-2" /> Editar Campanha
+                              </Button>
+                              <Button size="sm" variant="outline" className="border-red-500/20 text-red-400 bg-black/40 hover:bg-red-500 hover:text-white" onClick={() => handleDeleteCampaign(campaign.id)}>
+                                <Trash2 className="w-4 h-4 mr-2" /> Excluir
+                              </Button>
+                            </div>
+                          )}
                         </div>
                       </div>
-                      <div className="flex flex-wrap gap-4 pt-4 border-t border-white/10">
-                        <div className="flex items-center gap-2">
-                          <Users className="w-4 h-4 text-white/40" />
-                          <span className="text-sm">{projectBoquira.donors} Pessoas doaram</span>
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <Calendar className="w-4 h-4 text-white/40" />
-                          <span className="text-sm">{projectBoquira.deadline ? `Encerra em ${new Date(projectBoquira.deadline).toLocaleDateString('pt-BR')}` : 'Sem prazo cadastrado'}</span>
-                        </div>
-                      </div>
-                      <Button onClick={() => { setActiveTab('tithes'); setDonateType('oferta'); }} className="w-full bg-primary text-black font-bold h-12">
-                        Somar à Campanha
-                      </Button>
-                    </CardContent>
-                  </Card>
 
-                  {/* Impact Stream */}
-                  <div className="space-y-4">
-                    <h3 className="text-xl font-bold">Transparência em Ação</h3>
-                    <div className="space-y-4">
-                      {projectBoquira.impactReports.map((report, idx) => (
-                        <div key={idx} className="flex flex-col md:flex-row gap-4 bg-zinc-900 p-4 rounded-2xl border border-white/10">
-                          <img src={report.image} alt="Impact" className="w-full md:w-48 h-32 object-cover rounded-xl grayscale hover:grayscale-0 transition-all" />
-                          <div className="space-y-2">
-                            <Badge variant="outline" className="text-[10px] text-white/40">{report.date}</Badge>
-                            <p className="font-medium text-white/80">{report.text}</p>
-                          </div>
+                      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+                        <div className="lg:col-span-2 space-y-8">
+                          <Card className="bg-zinc-900 border-white/10">
+                            <CardHeader>
+                              <CardTitle>Meta da Campanha</CardTitle>
+                              <CardDescription>Acompanhe a arrecadação deste projeto.</CardDescription>
+                            </CardHeader>
+                            <CardContent className="space-y-6">
+                              <div className="space-y-2">
+                                <div className="flex justify-between text-sm font-bold">
+                                  <span className="text-primary">R$ {(campaign.current || 0).toLocaleString('pt-BR')} arrecadados</span>
+                                  <span className="text-white/60">Meta: R$ {(campaign.target || 0).toLocaleString('pt-BR')}</span>
+                                </div>
+                                <div className="h-4 bg-black rounded-full overflow-hidden border border-white/5">
+                                  <motion.div 
+                                    initial={{ width: 0 }}
+                                    animate={{ width: `${progress}%` }}
+                                    transition={{ duration: 1, ease: "easeOut" }}
+                                    className="h-full bg-primary relative overflow-hidden"
+                                  >
+                                    <div className="absolute inset-0 bg-white/20 animate-pulse" />
+                                  </motion.div>
+                                </div>
+                              </div>
+                              <div className="flex flex-wrap gap-4 pt-4 border-t border-white/10">
+                                <div className="flex items-center gap-2">
+                                  <Users className="w-4 h-4 text-white/40" />
+                                  <span className="text-sm">{campaign.donors || 0} Pessoas doaram</span>
+                                </div>
+                                <div className="flex items-center gap-2">
+                                  <Calendar className="w-4 h-4 text-white/40" />
+                                  <span className="text-sm">{campaign.deadline ? `Encerra em ${new Date(campaign.deadline).toLocaleDateString('pt-BR')}` : 'Sem prazo cadastrado'}</span>
+                                </div>
+                              </div>
+                              <Button onClick={() => { setActiveTab('tithes'); setDonateType(campaign.title); setSelectedCampaignId(campaign.id); }} className="w-full bg-primary text-black font-bold h-12">
+                                Somar à Campanha
+                              </Button>
+                            </CardContent>
+                          </Card>
+
+                          {campaign.impactReports && campaign.impactReports.length > 0 && (
+                            <div className="space-y-4">
+                              <h3 className="text-xl font-bold">Transparência em Ação</h3>
+                              <div className="space-y-4">
+                                {campaign.impactReports.map((report: any, idxR: number) => (
+                                  <div key={idxR} className="flex flex-col md:flex-row gap-4 bg-zinc-900 p-4 rounded-2xl border border-white/10">
+                                    <img src={report.image} alt="Impact" className="w-full md:w-48 h-32 object-cover rounded-xl grayscale hover:grayscale-0 transition-all" />
+                                    <div className="space-y-2">
+                                      <Badge variant="outline" className="text-[10px] text-white/40">{report.date}</Badge>
+                                      <p className="font-medium text-white/80">{report.text}</p>
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          )}
                         </div>
-                      ))}
-                    </div>
-                  </div>
-                </div>
 
                 {/* Sidebar */}
                 <div className="space-y-6">
@@ -316,6 +381,10 @@ export function FinanceView({ userData }: FinanceViewProps) {
                   </Card>
                 </div>
               </div>
+              </div>
+                  );
+                })
+              )}
             </div>
           )}
 
@@ -334,7 +403,7 @@ export function FinanceView({ userData }: FinanceViewProps) {
                           <CheckCircle2 className="w-5 h-5" />
                         </div>
                         <div>
-                          <p className="font-bold">{item.type}</p>
+                          <p className="font-bold max-w-xs truncate">{item.type}</p>
                           <p className="text-xs text-white/40">{new Date(item.date).toLocaleDateString('pt-BR')}</p>
                         </div>
                       </div>
@@ -411,9 +480,58 @@ export function FinanceView({ userData }: FinanceViewProps) {
           </div>
         )}
       </AnimatePresence>
+
+      {/* Campaign Form Modal */}
+      <AnimatePresence>
+        {showCampaignForm && editingCampaign && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
+            <motion.div 
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              className="bg-zinc-900 border border-white/10 rounded-3xl max-w-lg w-full p-8 max-h-[90vh] overflow-y-auto"
+            >
+              <h3 className="text-2xl font-bold mb-6">{editingCampaign.id ? 'Editar Campanha' : 'Nova Campanha'}</h3>
+              <form onSubmit={handleSaveCampaign} className="space-y-4">
+                <div className="space-y-2">
+                  <label className="text-xs font-bold text-white/60">Título da Campanha</label>
+                  <Input required value={editingCampaign.title} onChange={e => setEditingCampaign({ ...editingCampaign, title: e.target.value })} className="bg-black border-white/10" />
+                </div>
+                <div className="space-y-2">
+                  <label className="text-xs font-bold text-white/60">Descrição</label>
+                  <textarea required value={editingCampaign.description} onChange={e => setEditingCampaign({ ...editingCampaign, description: e.target.value })} className="w-full bg-black border border-white/10 rounded-md p-3 text-sm min-h-[80px]" />
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <label className="text-xs font-bold text-white/60">Meta (R$)</label>
+                    <Input type="number" required value={editingCampaign.target} onChange={e => setEditingCampaign({ ...editingCampaign, target: Number(e.target.value) })} className="bg-black border-white/10" />
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-xs font-bold text-white/60">Arrecadado até o momento (R$)</label>
+                    <Input type="number" value={editingCampaign.current} onChange={e => setEditingCampaign({ ...editingCampaign, current: Number(e.target.value) })} className="bg-black border-white/10" />
+                  </div>
+                </div>
+                <div className="space-y-2">
+                  <label className="text-xs font-bold text-white/60">Data de Encerramento</label>
+                  <Input type="date" value={editingCampaign.deadline} onChange={e => setEditingCampaign({ ...editingCampaign, deadline: e.target.value })} className="bg-black border-white/10" />
+                </div>
+                <div className="space-y-2">
+                  <label className="text-xs font-bold text-white/60">URL da Imagem de Capa</label>
+                  <Input value={editingCampaign.imageUrl} onChange={e => setEditingCampaign({ ...editingCampaign, imageUrl: e.target.value })} className="bg-black border-white/10" placeholder="https://..." />
+                </div>
+                
+                <div className="pt-6 flex gap-4">
+                  <Button type="button" variant="ghost" onClick={() => { setShowCampaignForm(false); setEditingCampaign(null); }} className="flex-1 text-white/40 hover:text-white">Cancelar</Button>
+                  <Button type="submit" className="flex-1 bg-primary text-black font-bold">Salvar Campanha</Button>
+                </div>
+              </form>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }
 
 // Importing a few missing icons for this component
-import { Users, Calendar, Heart } from 'lucide-react';
+import { Users, Calendar, Heart, Edit3, Trash2, Plus } from 'lucide-react';

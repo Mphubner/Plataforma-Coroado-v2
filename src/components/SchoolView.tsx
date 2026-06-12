@@ -21,6 +21,9 @@ import { Separator } from "@/components/ui/separator"
 import { db, auth } from "@/lib/firebase"
 import { collection, query, where, onSnapshot, addDoc, updateDoc, doc, deleteDoc, serverTimestamp, getDoc } from "firebase/firestore"
 import { onAuthStateChanged } from "firebase/auth"
+import { httpsCallable } from "firebase/functions"
+import { functions } from "@/lib/firebase"
+import ReactQrCode from 'react-qr-code';
 
 // Simple Progress component
 function Progress({ value, className }: { value: number, className?: string }) {
@@ -37,20 +40,60 @@ export function SchoolView({ userRole = [], isAdmin = false }: { userRole?: stri
   const [playCourse, setPlayCourse] = React.useState<boolean>(false)
   const [playLesson, setPlayLesson] = React.useState<any | null>(null)
   const [user, setUser] = React.useState<any>(null)
+  const [isSubscribed, setIsSubscribed] = React.useState(false)
+  const [showSubscriptionModal, setShowSubscriptionModal] = React.useState(false)
+  const [loadingSubscription, setLoadingSubscription] = React.useState(false)
 
   React.useEffect(() => {
-    const unsub = onAuthStateChanged(auth, (u) => {
+    const unsub = onAuthStateChanged(auth, async (u) => {
       setUser(u)
+      if (u) {
+        const docSnap = await getDoc(doc(db, "users", u.uid));
+        if (docSnap.exists()) {
+          const data = docSnap.data();
+          setIsSubscribed(data.subscriptionStatus === 'active' || data.role?.includes('admin') || data.profileType === 'admin');
+        }
+      }
     })
     return () => unsub()
   }, [])
 
+  const handleSubscribe = async () => {
+    if (!user?.uid) return;
+    setLoadingSubscription(true);
+    try {
+      const createSubscriptionCall = httpsCallable(functions, 'createSubscription');
+      const result = await createSubscriptionCall({
+        userId: user.uid,
+        email: user.email || 'aluno@email.com',
+        amount: 29.90,
+        planTitle: 'Escola IDE Premium',
+        enrollmentId: user.uid // Using userId as external reference to update user later
+      });
+      const data = result.data as any;
+      
+      if (data.initPoint) {
+        window.open(data.initPoint, '_blank');
+        setShowSubscriptionModal(false);
+      } else {
+        alert("Erro ao gerar link de assinatura.");
+      }
+    } catch(e) {
+      console.error(e);
+      alert("Erro ao contatar servidor. Assinatura Simulada Ativada (DEV)!");
+      setIsSubscribed(true); // Fallback for dev
+      setShowSubscriptionModal(false);
+    } finally {
+      setLoadingSubscription(false);
+    }
+  };
+
   if (selectedCourse && playCourse) {
-    return <LessonPlayer course={selectedCourse} initialLesson={playLesson} user={user} onBack={() => { setPlayCourse(false); setPlayLesson(null) }} />
+    return <LessonPlayer course={selectedCourse} initialLesson={playLesson} user={user} isSubscribed={isSubscribed} onBack={() => { setPlayCourse(false); setPlayLesson(null) }} />
   }
 
   if (selectedCourse) {
-    return <CourseDetails course={selectedCourse} onBack={() => setSelectedCourse(null)} onStartLesson={(lesson) => { setPlayLesson(lesson); setPlayCourse(true); }} user={user} />
+    return <CourseDetails course={selectedCourse} onBack={() => setSelectedCourse(null)} onStartLesson={(lesson) => { setPlayLesson(lesson); setPlayCourse(true); }} user={user} isSubscribed={isSubscribed} onSubscribeClick={() => setShowSubscriptionModal(true)} />
   }
 
   return (
@@ -114,6 +157,46 @@ export function SchoolView({ userRole = [], isAdmin = false }: { userRole?: stri
           <SchoolAdmin />
         </TabsContent>
       </Tabs>
+
+      {!isSubscribed && activeTab === 'dashboard' && (
+        <div className="fixed bottom-24 right-6 z-50">
+          <Button onClick={() => setShowSubscriptionModal(true)} className="bg-gradient-to-r from-primary to-primary/80 text-black font-black shadow-2xl rounded-full h-14 px-8 border border-white/20 hover:scale-105 transition-transform">
+            <Star className="w-5 h-5 mr-2 fill-black" /> Assinar Escola IDE
+          </Button>
+        </div>
+      )}
+
+      {/* Subscription Modal */}
+      <AnimatePresence>
+        {showSubscriptionModal && (
+          <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setShowSubscriptionModal(false)} className="absolute inset-0 bg-black/80 backdrop-blur-sm" />
+            <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.95 }} className="relative w-full max-w-md glass-card p-8 rounded-[2rem] space-y-6 text-center">
+              <div className="w-20 h-20 bg-primary/20 rounded-full flex items-center justify-center mx-auto mb-4 border border-primary/50">
+                <Star className="w-10 h-10 text-primary fill-primary" />
+              </div>
+              <h3 className="font-black font-serif italic text-3xl">Escola IDE Premium</h3>
+              <p className="text-white/60">Tenha acesso ilimitado a todos os cursos, trilhas de formação e materiais complementares.</p>
+              
+              <div className="bg-black/50 border border-white/10 rounded-2xl p-6 text-left space-y-4">
+                <div className="flex items-center gap-3"><CheckCircle2 className="w-5 h-5 text-primary" /> <span className="text-sm">Acesso a todos os cursos</span></div>
+                <div className="flex items-center gap-3"><CheckCircle2 className="w-5 h-5 text-primary" /> <span className="text-sm">Certificados Ilimitados</span></div>
+                <div className="flex items-center gap-3"><CheckCircle2 className="w-5 h-5 text-primary" /> <span className="text-sm">Fórum de Dúvidas Direto com Professores</span></div>
+              </div>
+
+              <div className="pt-4">
+                <p className="text-xs text-white/40 mb-2 uppercase tracking-widest font-bold">Plano Mensal</p>
+                <p className="text-4xl font-black mb-6">R$ 29,90<span className="text-lg text-white/40 font-normal">/mês</span></p>
+                
+                <Button onClick={handleSubscribe} disabled={loadingSubscription} className="w-full h-14 bg-primary text-black font-bold text-lg rounded-full">
+                  {loadingSubscription ? <Loader2 className="w-6 h-6 animate-spin mx-auto" /> : "Assinar Agora"}
+                </Button>
+                <Button variant="ghost" onClick={() => setShowSubscriptionModal(false)} className="w-full mt-2 text-white/40 hover:text-white">Agora Não</Button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
     </div>
   )
 }
@@ -733,7 +816,7 @@ function AdminCourseDetails({ course, onBack, tenantId }: { course: CourseData, 
   const [showAddModule, setShowAddModule] = React.useState(false);
   const [showAddLesson, setShowAddLesson] = React.useState<string | null>(null); // moduleId
   const [newModuleTitle, setNewModuleTitle] = React.useState('');
-  const [newLessonData, setNewLessonData] = React.useState({ title: '', videoUrl: '', isFree: false, description: '' });
+  const [newLessonData, setNewLessonData] = React.useState({ title: '', videoUrl: '', isFree: false, description: '', standalonePrice: '' });
 
   React.useEffect(() => {
     if (!tenantId) return;
@@ -784,11 +867,12 @@ function AdminCourseDetails({ course, onBack, tenantId }: { course: CourseData, 
         tenantId,
         order: moduleLessons.length,
         isFree: newLessonData.isFree,
+        standalonePrice: Number(newLessonData.standalonePrice) || 0,
         createdAt: serverTimestamp(),
         updatedAt: serverTimestamp()
       });
       setShowAddLesson(null);
-      setNewLessonData({ title: '', videoUrl: '', isFree: false, description: '' });
+      setNewLessonData({ title: '', videoUrl: '', isFree: false, description: '', standalonePrice: '' });
     } catch (e) {
       console.error(e);
     }
@@ -904,6 +988,12 @@ function AdminCourseDetails({ course, onBack, tenantId }: { course: CourseData, 
                   <input type="checkbox" checked={newLessonData.isFree} onChange={e => setNewLessonData({...newLessonData, isFree: e.target.checked})} className="accent-primary w-4 h-4" />
                   <span className="text-sm text-white/80">Aula gratuita (degustação)</span>
                 </label>
+                {!newLessonData.isFree && (
+                  <div className="space-y-1">
+                    <label className="text-xs text-white/60">Preço para compra avulsa (R$)</label>
+                    <Input type="number" placeholder="0.00 (Deixe em branco se for apenas via assinatura)" value={newLessonData.standalonePrice} onChange={e => setNewLessonData({...newLessonData, standalonePrice: e.target.value})} className="bg-black/50 border-white/10" />
+                  </div>
+                )}
               </div>
               <div className="flex gap-2 justify-end pt-2">
                 <Button variant="ghost" onClick={() => setShowAddLesson(null)}>Cancelar</Button>
@@ -924,7 +1014,7 @@ function SchoolAdmin() {
   const [tenantId, setTenantId] = React.useState<string | null>(null);
   const [showAddCourse, setShowAddCourse] = React.useState(false);
   const [showAddPath, setShowAddPath] = React.useState(false);
-  const [newCourse, setNewCourse] = React.useState({ title: '', category: 'Geral', status: 'Rascunho' });
+  const [newCourse, setNewCourse] = React.useState({ title: '', category: 'Geral', status: 'Rascunho', isSubscriptionOnly: true, monthlyPrice: '' });
   const [newPath, setNewPath] = React.useState({ title: '', description: '', stage: 'Geral' });
   const [selectedCourseId, setSelectedCourseId] = React.useState<string | null>(null);
   const [selectedPathForCourses, setSelectedPathForCourses] = React.useState<string | null>(null);
@@ -993,13 +1083,15 @@ function SchoolAdmin() {
         duration: '0h',
         img: '',
         students: 0,
+        isSubscriptionOnly: newCourse.isSubscriptionOnly,
+        monthlyPrice: Number(newCourse.monthlyPrice) || 0,
         tenantId: tenantId,
         createdBy: auth.currentUser.uid,
         createdAt: serverTimestamp(),
         updatedAt: serverTimestamp()
       });
       setShowAddCourse(false);
-      setNewCourse({ title: '', category: 'Geral', status: 'Rascunho' });
+      setNewCourse({ title: '', category: 'Geral', status: 'Rascunho', isSubscriptionOnly: true, monthlyPrice: '' });
     } catch (error) {
       console.error("Error adding course", error);
     }
@@ -1094,19 +1186,19 @@ function SchoolAdmin() {
             <Card className="bg-zinc-900 border-white/10">
               <CardHeader><CardTitle>Ações Rápidas</CardTitle></CardHeader>
               <CardContent className="grid grid-cols-2 gap-3">
-                <Button variant="outline" className="h-auto py-4 flex flex-col gap-2 border-white/10 hover:bg-white/5 hover:border-primary/50">
+                <Button variant="outline" className="h-auto py-4 flex flex-col gap-2 border-white/10 hover:bg-white/5 hover:border-primary/50" onClick={() => setShowAddCourse(true)}>
                   <Plus className="w-6 h-6 text-primary" />
                   <span>Criar Curso</span>
                 </Button>
-                <Button variant="outline" className="h-auto py-4 flex flex-col gap-2 border-white/10 hover:bg-white/5 hover:border-primary/50">
+                <Button variant="outline" className="h-auto py-4 flex flex-col gap-2 border-white/10 hover:bg-white/5 hover:border-primary/50" onClick={() => alert('Em breve')}>
                   <FileText className="w-6 h-6 text-secondary" />
                   <span>Novo Quiz</span>
                 </Button>
-                <Button variant="outline" className="h-auto py-4 flex flex-col gap-2 border-white/10 hover:bg-white/5 hover:border-primary/50">
+                <Button variant="outline" className="h-auto py-4 flex flex-col gap-2 border-white/10 hover:bg-white/5 hover:border-primary/50" onClick={() => alert('Em breve')}>
                   <Award className="w-6 h-6 text-yellow-500" />
                   <span>Certificados</span>
                 </Button>
-                <Button variant="outline" className="h-auto py-4 flex flex-col gap-2 border-white/10 hover:bg-white/5 hover:border-primary/50">
+                <Button variant="outline" className="h-auto py-4 flex flex-col gap-2 border-white/10 hover:bg-white/5 hover:border-primary/50" onClick={() => alert('Em breve')}>
                   <Download className="w-6 h-6 text-blue-500" />
                   <span>Relatórios</span>
                 </Button>
@@ -1117,8 +1209,8 @@ function SchoolAdmin() {
           <div className="grid md:grid-cols-2 gap-6">
             <Card className="bg-zinc-900 border-white/10">
               <CardHeader><CardTitle>Matrículas (Últimos 30 dias)</CardTitle></CardHeader>
-              <CardContent className="h-[250px]">
-                <ResponsiveContainer width="100%" height="100%" minHeight={250}>
+              <CardContent className="h-[250px] w-full">
+                <ResponsiveContainer width="99%" height={250}>
                   <LineChart data={[{name: '01', val: 12}, {name: '05', val: 19}, {name: '10', val: 15}, {name: '15', val: 25}, {name: '20', val: 22}, {name: '25', val: 30}, {name: '30', val: 28}]}>
                     <CartesianGrid strokeDasharray="3 3" stroke="#333" vertical={false} />
                     <XAxis dataKey="name" stroke="#666" fontSize={12} tickLine={false} axisLine={false} />
@@ -1131,8 +1223,8 @@ function SchoolAdmin() {
             </Card>
             <Card className="bg-zinc-900 border-white/10">
               <CardHeader><CardTitle>Engajamento por Ministério</CardTitle></CardHeader>
-              <CardContent className="h-[250px] flex items-center justify-center">
-                <ResponsiveContainer width="100%" height="100%" minHeight={250}>
+              <CardContent className="h-[250px] flex items-center justify-center w-full">
+                <ResponsiveContainer width="99%" height={250}>
                   <PieChart>
                     <Pie
                       data={[
@@ -1368,6 +1460,23 @@ function SchoolAdmin() {
                         <option value="Publicado">Publicado</option>
                       </select>
                     </div>
+                    <div className="space-y-2">
+                      <label className="text-xs font-bold text-white/40 uppercase">Acesso Liberado Por</label>
+                      <select 
+                        className="w-full h-10 bg-zinc-900 border border-white/10 rounded-md px-3 text-white"
+                        value={newCourse.isSubscriptionOnly ? 'true' : 'false'}
+                        onChange={e => setNewCourse({...newCourse, isSubscriptionOnly: e.target.value === 'true'})}
+                      >
+                        <option value="true">Assinatura Mensal (Escola IDE)</option>
+                        <option value="false">Gratuito ou Pagamento Único</option>
+                      </select>
+                    </div>
+                    {newCourse.isSubscriptionOnly && (
+                      <div className="space-y-2">
+                        <label className="text-xs font-bold text-white/40 uppercase">Preço da Assinatura (R$/mês)</label>
+                        <Input type="number" placeholder="49.90" value={newCourse.monthlyPrice} onChange={e => setNewCourse({...newCourse, monthlyPrice: e.target.value})} className="bg-zinc-900 border-white/10" />
+                      </div>
+                    )}
                   </div>
                   
                   <div className="pt-4 flex gap-2">
@@ -1619,7 +1728,7 @@ function SchoolAdmin() {
 }
 
 // --- DETALHES DO CURSO ---
-function CourseDetails({ course, onBack, onStartLesson, user }: { course: any, onBack: () => void, onStartLesson: (lesson: any, enrollment?: any) => void, user?: any }) {
+function CourseDetails({ course, onBack, onStartLesson, user, isSubscribed, onSubscribeClick }: { course: any, onBack: () => void, onStartLesson: (lesson: any, enrollment?: any) => void, user?: any, isSubscribed?: boolean, onSubscribeClick?: () => void }) {
   const [enrollment, setEnrollment] = React.useState<any>(null)
   const [enrolling, setEnrolling] = React.useState(false)
   const [modules, setModules] = React.useState<any[]>([]);
@@ -1745,19 +1854,29 @@ function CourseDetails({ course, onBack, onStartLesson, user }: { course: any, o
                         <div className="divide-y divide-white/5">
                           {modLessons.map((lesson, lIndex) => {
                             const isCompleted = (enrollment?.completedLessons || []).includes(lesson.id);
+                            const isLocked = !lesson.isFree && !isSubscribed;
+
                             return (
-                              <div key={lesson.id} className="p-4 flex items-center justify-between hover:bg-white/5 transition-colors cursor-pointer group" onClick={() => (enrollment ? onStartLesson(lesson) : handleEnroll())}>
+                              <div key={lesson.id} className="p-4 flex items-center justify-between hover:bg-white/5 transition-colors cursor-pointer group" onClick={() => {
+                                if (isLocked) {
+                                  if (onSubscribeClick) onSubscribeClick();
+                                } else {
+                                  (enrollment ? onStartLesson(lesson) : handleEnroll())
+                                }
+                              }}>
                                 <div className="flex items-center gap-3">
                                   <div className={`w-6 h-6 rounded-full border flex items-center justify-center shrink-0 ${isCompleted ? 'bg-primary border-primary text-black' : 'border-white/20'}`}>
-                                    {isCompleted ? <CheckCircle2 className="w-4 h-4" /> : <span className="text-[10px] font-bold">{lIndex + 1}</span>}
+                                    {isCompleted ? <CheckCircle2 className="w-4 h-4" /> : (isLocked ? <Lock className="w-3 h-3" /> : <span className="text-[10px] font-bold">{lIndex + 1}</span>)}
                                   </div>
                                   <div>
-                                    <p className={`text-sm ${isCompleted ? 'text-white/60 line-through decoration-white/20' : 'text-white/90 group-hover:text-primary transition-colors'}`}>{lesson.title}</p>
-                                    <p className="text-xs text-white/40 flex items-center gap-1 mt-1"><Video className="w-3 h-3" /> Vídeo {lesson.isFree ? '(Grátis)' : ''}</p>
+                                    <p className={`text-sm ${isCompleted ? 'text-white/60 line-through decoration-white/20' : 'text-white/90 group-hover:text-primary transition-colors'} ${isLocked ? 'text-white/40' : ''}`}>{lesson.title}</p>
+                                    <p className="text-xs text-white/40 flex items-center gap-1 mt-1"><Video className="w-3 h-3" /> Vídeo {lesson.isFree ? '(Grátis)' : ''} {isLocked ? '(Premium)' : ''}</p>
                                   </div>
                                 </div>
                                 <div className="opacity-0 group-hover:opacity-100 transition-opacity">
-                                  {enrollment ? (
+                                  {isLocked ? (
+                                    <Button variant="ghost" size="sm" className="h-8 text-yellow-500 hover:text-yellow-400 hover:bg-yellow-500/10">Desbloquear</Button>
+                                  ) : enrollment ? (
                                     <Button variant="ghost" size="sm" className="h-8 text-primary hover:text-primary hover:bg-primary/10">Assistir</Button>
                                   ) : (
                                     <Lock className="w-4 h-4 text-white/20" />
@@ -1908,12 +2027,14 @@ function CourseDetails({ course, onBack, onStartLesson, user }: { course: any, o
 }
 
 // --- SALA DE AULA (PLAYER) ---
-function LessonPlayer({ course, initialLesson, onBack, user }: { course: any, initialLesson?: any, onBack: () => void, user: any }) {
+function LessonPlayer({ course, initialLesson, onBack, user, isSubscribed }: { course: any, initialLesson?: any, onBack: () => void, user: any, isSubscribed?: boolean }) {
   const [modules, setModules] = React.useState<any[]>([]);
   const [lessons, setLessons] = React.useState<any[]>([]);
   const [activeLesson, setActiveLesson] = React.useState<any | null>(initialLesson || null);
   const [enrollment, setEnrollment] = React.useState<any>(null);
   const [tenantId, setTenantId] = React.useState<string | null>(null);
+  const [showBuyLessonModal, setShowBuyLessonModal] = React.useState(false);
+  const [buyingLesson, setBuyingLesson] = React.useState(false);
 
   React.useEffect(() => {
     if (!user?.uid || !course?.id) return;
@@ -1987,18 +2108,23 @@ function LessonPlayer({ course, initialLesson, onBack, user }: { course: any, in
                 {modLessons.map((l, lIndex) => {
                   const completed = (enrollment?.completedLessons || []).includes(l.id);
                   const isCurrent = activeLesson?.id === l.id;
+                  const isLocked = !l.isFree && !isSubscribed;
+
                   return (
                     <button 
                       key={l.id}
-                      onClick={() => setActiveLesson(l)}
+                      onClick={() => {
+                        if (isLocked) setShowBuyLessonModal(true);
+                        else setActiveLesson(l);
+                      }}
                       className={`w-full text-left p-3 rounded-xl flex items-start gap-3 transition-colors outline-none focus:ring-2 focus:ring-primary ${isCurrent ? 'bg-primary/10 border border-primary/20' : 'hover:bg-white/5 border border-transparent'}`}
                     >
-                      <div onClick={(e) => { e.stopPropagation(); toggleLessonComplete(l.id); }} className={`mt-0.5 shrink-0 w-5 h-5 rounded-full border flex items-center justify-center cursor-pointer transition-all ${completed ? 'bg-primary border-primary text-black' : 'border-white/20 hover:border-white/50'}`}>
-                        {completed && <CheckCircle2 className="w-3 h-3" />}
+                      <div onClick={(e) => { e.stopPropagation(); if (!isLocked) toggleLessonComplete(l.id); }} className={`mt-0.5 shrink-0 w-5 h-5 rounded-full border flex items-center justify-center cursor-pointer transition-all ${completed ? 'bg-primary border-primary text-black' : 'border-white/20 hover:border-white/50'}`}>
+                        {completed ? <CheckCircle2 className="w-3 h-3" /> : (isLocked ? <Lock className="w-3 h-3 text-white/40" /> : null)}
                       </div>
                       <div className="flex-1">
-                        <p className={`text-sm ${isCurrent ? 'text-primary font-bold' : 'text-white/80'}`}>{lIndex + 1}. {l.title}</p>
-                        <p className="text-xs text-white/40 flex items-center gap-1 mt-1"><Video className="w-3 h-3" /> Vídeo</p>
+                         <p className={`text-sm ${isCurrent ? 'text-primary font-bold' : (isLocked ? 'text-white/40' : 'text-white/80')}`}>{lIndex + 1}. {l.title}</p>
+                         <p className="text-xs text-white/40 flex items-center gap-1 mt-1"><Video className="w-3 h-3" /> Vídeo {l.isFree ? '(Grátis)' : ''} {isLocked ? '(Premium)' : ''}</p>
                       </div>
                     </button>
                   )
@@ -2115,6 +2241,51 @@ function LessonPlayer({ course, initialLesson, onBack, user }: { course: any, in
           </div>
         )}
       </div>
+
+      {/* Modal de Comprar Aula Avulsa */}
+      <AnimatePresence>
+        {showBuyLessonModal && (
+          <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setShowBuyLessonModal(false)} className="absolute inset-0 bg-black/80 backdrop-blur-sm" />
+            <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.95 }} className="relative w-full max-w-sm glass-card p-8 rounded-[2rem] space-y-6 text-center">
+              <div className="w-16 h-16 bg-primary/20 rounded-full flex items-center justify-center mx-auto border border-primary/50 text-primary">
+                <Lock className="w-8 h-8" />
+              </div>
+              <div>
+                <h3 className="font-bold text-xl">Conteúdo Premium</h3>
+                <p className="text-sm text-white/60 mt-2">Esta aula é exclusiva para assinantes da Escola IDE ou pode ser adquirida de forma avulsa.</p>
+              </div>
+
+              {buyingLesson ? (
+                <div className="bg-white p-4 rounded-xl inline-block mx-auto">
+                   <ReactQrCode value="00020101021126580014br.gov.bcb.pix0136coroado@igreja.com.br5204000053039865802BR5915IGREJA COROADO6009SAO PAULO62070503***6304" size={150} />
+                   <p className="text-black text-xs mt-2 font-bold uppercase">Aproxime o app do seu banco</p>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  <Button 
+                    onClick={() => {
+                      setBuyingLesson(true);
+                      setTimeout(() => {
+                        alert("Pagamento simulado aprovado!");
+                        setShowBuyLessonModal(false);
+                        setBuyingLesson(false);
+                      }, 4000);
+                    }} 
+                    className="w-full bg-primary text-black font-bold h-12"
+                  >
+                    Comprar Aula por R$ 9,90
+                  </Button>
+                  <div className="text-xs text-white/40 uppercase">Ou</div>
+                  <Button variant="outline" className="w-full border-white/10 text-white/80 h-12" onClick={() => window.location.reload()}>
+                    Assinar Escola IDE
+                  </Button>
+                </div>
+              )}
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }

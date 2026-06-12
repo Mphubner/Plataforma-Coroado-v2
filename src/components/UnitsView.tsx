@@ -1,11 +1,12 @@
-import React from 'react';
-import { motion } from 'framer-motion';
-import { MapPin, Clock, Phone, Navigation } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
+import { MapPin, Clock, Phone, Navigation, Edit3, Trash2, Plus } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
+import { Input } from '@/components/ui/input';
 import { db } from '@/lib/firebase';
-import { collection, query, where, onSnapshot } from 'firebase/firestore';
+import { collection, query, where, onSnapshot, addDoc, updateDoc, deleteDoc, doc, serverTimestamp } from 'firebase/firestore';
 
 const UNITS = [
   {
@@ -31,9 +32,60 @@ const UNITS = [
 ];
 
 export function UnitsView({ isAdmin, userData }: { isAdmin?: boolean; userData?: any }) {
-  const [unitsList, setUnitsList] = React.useState<any[]>(UNITS);
+  const [unitsList, setUnitsList] = useState<any[]>(UNITS);
+  const [showUnitForm, setShowUnitForm] = useState(false);
+  const [editingUnit, setEditingUnit] = useState<any>(null);
 
-  React.useEffect(() => {
+  const handleSaveUnit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    try {
+      const unitData = {
+        name: editingUnit.name,
+        address: editingUnit.address,
+        serviceTimes: editingUnit.serviceTimes,
+        phone: editingUnit.phone,
+        mapUrl: editingUnit.mapUrl,
+        image: editingUnit.image,
+        referrerPolicy: 'no-referrer',
+        tenantId: userData?.tenantId || 'tenant-1'
+      };
+
+      if (editingUnit.id && editingUnit.id !== 'sede' && editingUnit.id !== 'coroado-norte') {
+        await updateDoc(doc(db, 'units', editingUnit.id), {
+          ...unitData,
+          updatedAt: serverTimestamp()
+        });
+      } else {
+        await addDoc(collection(db, 'units'), {
+          ...unitData,
+          createdAt: serverTimestamp(),
+          updatedAt: serverTimestamp()
+        });
+      }
+      setShowUnitForm(false);
+      setEditingUnit(null);
+    } catch (err) {
+      console.error(err);
+      alert("Erro ao salvar unidade");
+    }
+  };
+
+  const handleDeleteUnit = async (id: string) => {
+    if (id === 'sede' || id === 'coroado-norte') {
+      alert("Unidades padrão não podem ser excluídas, apenas unidades reais salvas no banco.");
+      return;
+    }
+    if (confirm("Deseja realmente excluir esta unidade?")) {
+      try {
+        await deleteDoc(doc(db, 'units', id));
+      } catch (err) {
+        console.error(err);
+        alert("Erro ao excluir unidade");
+      }
+    }
+  };
+
+  useEffect(() => {
     const q = userData?.tenantId
       ? query(collection(db, 'units'), where('tenantId', '==', userData.tenantId))
       : query(collection(db, 'units'));
@@ -63,8 +115,11 @@ export function UnitsView({ isAdmin, userData }: { isAdmin?: boolean; userData?:
       <div className="space-y-6">
         {isAdmin && (
           <div className="flex justify-end">
-             <Button variant="outline" className="border-white/10" onClick={() => alert("Gerenciamento de Unidades será integrado ao painel Gestão")}>
-                + Adicionar Unidade
+             <Button variant="outline" className="border-white/10" onClick={() => {
+                setEditingUnit({ name: '', address: '', serviceTimes: '', phone: '', mapUrl: '', image: '' });
+                setShowUnitForm(true);
+             }}>
+                <Plus className="w-4 h-4 mr-2" /> Adicionar Unidade
              </Button>
           </div>
         )}
@@ -108,6 +163,16 @@ export function UnitsView({ isAdmin, userData }: { isAdmin?: boolean; userData?:
               </div>
               
               <div className="p-10 pt-0 flex-1 flex flex-col space-y-8">
+                {isAdmin && (
+                  <div className="flex gap-2 pt-4">
+                    <Button size="sm" variant="outline" className="flex-1 bg-black/40 border-white/10 hover:bg-white/10" onClick={() => { setEditingUnit(unit); setShowUnitForm(true); }}>
+                      <Edit3 className="w-4 h-4 mr-2" /> Editar
+                    </Button>
+                    <Button size="sm" variant="outline" className="flex-1 bg-red-500/10 border-red-500/20 text-red-400 hover:bg-red-500 hover:text-white" onClick={() => handleDeleteUnit(unit.id)}>
+                      <Trash2 className="w-4 h-4 mr-2" /> Excluir
+                    </Button>
+                  </div>
+                )}
                 <div className="space-y-4 flex-1">
                   <div className="flex items-start gap-4 text-white/60 font-medium">
                     <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
@@ -141,6 +206,55 @@ export function UnitsView({ isAdmin, userData }: { isAdmin?: boolean; userData?:
         ))}
       </div>
       </div>
+
+      {/* Unit Form Modal */}
+      <AnimatePresence>
+        {showUnitForm && editingUnit && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
+            <motion.div 
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              className="bg-zinc-900 border border-white/10 rounded-3xl max-w-lg w-full p-8 max-h-[90vh] overflow-y-auto custom-scrollbar"
+            >
+              <h3 className="text-2xl font-bold mb-6">{(editingUnit.id && editingUnit.id !== 'sede' && editingUnit.id !== 'coroado-norte') ? 'Editar Unidade' : 'Nova Unidade'}</h3>
+              <form onSubmit={handleSaveUnit} className="space-y-4">
+                <div className="space-y-2">
+                  <label className="text-xs font-bold text-white/60">Nome da Unidade</label>
+                  <Input required value={editingUnit.name} onChange={e => setEditingUnit({ ...editingUnit, name: e.target.value })} className="bg-black border-white/10" />
+                </div>
+                <div className="space-y-2">
+                  <label className="text-xs font-bold text-white/60">Endereço Completo</label>
+                  <textarea required value={editingUnit.address} onChange={e => setEditingUnit({ ...editingUnit, address: e.target.value })} className="w-full bg-black border border-white/10 rounded-md p-3 text-sm min-h-[80px]" />
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <label className="text-xs font-bold text-white/60">Horários (ex: Dom 19h)</label>
+                    <Input required value={editingUnit.serviceTimes} onChange={e => setEditingUnit({ ...editingUnit, serviceTimes: e.target.value })} className="bg-black border-white/10" />
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-xs font-bold text-white/60">Telefone</label>
+                    <Input required value={editingUnit.phone} onChange={e => setEditingUnit({ ...editingUnit, phone: e.target.value })} className="bg-black border-white/10" />
+                  </div>
+                </div>
+                <div className="space-y-2">
+                  <label className="text-xs font-bold text-white/60">URL de Imagem de Capa</label>
+                  <Input value={editingUnit.image} onChange={e => setEditingUnit({ ...editingUnit, image: e.target.value })} className="bg-black border-white/10" placeholder="https://..." />
+                </div>
+                <div className="space-y-2">
+                  <label className="text-xs font-bold text-white/60">Google Maps Embed URL (src do iframe)</label>
+                  <textarea required value={editingUnit.mapUrl} onChange={e => setEditingUnit({ ...editingUnit, mapUrl: e.target.value })} className="w-full bg-black border border-white/10 rounded-md p-3 text-sm min-h-[80px]" placeholder="https://www.google.com/maps/embed?..." />
+                </div>
+                
+                <div className="pt-6 flex gap-4">
+                  <Button type="button" variant="ghost" onClick={() => { setShowUnitForm(false); setEditingUnit(null); }} className="flex-1 text-white/40 hover:text-white">Cancelar</Button>
+                  <Button type="submit" className="flex-1 bg-primary text-black font-bold">Salvar Unidade</Button>
+                </div>
+              </form>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }

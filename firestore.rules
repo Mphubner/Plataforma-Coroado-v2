@@ -20,10 +20,18 @@ service cloud.firestore {
       return get(/databases/$(database)/documents/users/$(request.auth.uid));
     }
     function isApprovedUser() {
-      return currentUserExists() && currentUser().data.isApproved == true;
+      // Usa Custom Claims primeiro; se não existir, cai para leitura de doc (fallback)
+      return isSignedIn() && (
+        request.auth.token.isApproved == true ||
+        (currentUserExists() && currentUser().data.isApproved == true)
+      );
     }
     function hasAnyRole(roles) {
-      return isApprovedUser() && currentUser().data.roles.hasAny(roles);
+      // Usa Custom Claims para RBAC
+      return isApprovedUser() && (
+        (request.auth.token.roles != null && request.auth.token.roles.hasAny(roles)) ||
+        (currentUserExists() && currentUser().data.roles.hasAny(roles))
+      );
     }
     function sameTenant(tenantId) {
       return isAdmin() || (isApprovedUser() && currentUser().data.tenantId == tenantId);
@@ -32,6 +40,7 @@ service cloud.firestore {
     function isAdmin() { 
       return isSignedIn() && (
         request.auth.token.email == 'marcospereirahubner@gmail.com' ||
+        (request.auth.token.roles != null && request.auth.token.roles.hasAny(['admin', 'seniorPastor'])) ||
         (currentUserExists() && currentUser().data.roles.hasAny(['admin', 'seniorPastor']))
       ); 
     }

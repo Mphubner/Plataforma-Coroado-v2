@@ -7,9 +7,15 @@ import { Badge } from '@/components/ui/badge';
 import ReactQrCode from 'react-qr-code';
 import { db } from "@/lib/firebase";
 import { collection, query, onSnapshot, doc, setDoc, updateDoc, getDoc, serverTimestamp, where } from "firebase/firestore";
+import { httpsCallable } from "firebase/functions";
+import { initMercadoPago, Payment } from '@mercadopago/sdk-react';
 import { Html5QrcodeScanner, Html5QrcodeScanType, Html5QrcodeSupportedFormats } from 'html5-qrcode';
 import { handleFirestoreError, OperationType } from '@/lib/firestoreUtils';
 import { can } from '@/src/lib/permissions';
+import { functions } from '@/lib/firebase';
+
+initMercadoPago('TEST-00000000-0000-0000-0000-000000000000'); // Mude para o seu Public Key do MP depois
+
 
 type EventInfo = {
   id: string;
@@ -22,6 +28,15 @@ type EventInfo = {
   enrolled: number;
   image: string;
   description: string;
+  visibilityScope?: 'church' | 'ministry' | 'cell';
+  visibilityId?: string;
+  isPaid?: boolean;
+  price?: number;
+  requiresRegistration?: boolean;
+  requiresFunding?: boolean;
+  fundingAmount?: number;
+  requiredMinistries?: string[];
+  status?: 'draft' | 'pending_approval' | 'approved';
 };
 
 type EventEnrollment = {
@@ -31,6 +46,9 @@ type EventEnrollment = {
   tenantId: string;
   checkedIn: boolean;
   kids?: { id: string, name: string, age: string, obs: string, checkedIn: boolean }[];
+  paymentStatus?: 'pending' | 'approved' | 'rejected';
+  pixCopiaECola?: string;
+  preferenceId?: string;
 };
 
 export function EventsView({ isLoggedIn = false, userData, onLoginClick }: { isLoggedIn?: boolean; userData?: any; onLoginClick?: () => void }) {
@@ -44,6 +62,20 @@ export function EventsView({ isLoggedIn = false, userData, onLoginClick }: { isL
   const [enrollKids, setEnrollKids] = useState<{name: string, age: string, obs: string}[]>([]);
   const [viewMode, setViewMode] = useState<'list' | 'calendar'>('list');
   const [dateFilter, setDateFilter] = useState('');
+
+  // Form states
+  const [showNewEventForm, setShowNewEventForm] = useState(false);
+  const [newEvent, setNewEvent] = useState<Partial<EventInfo>>({
+    visibilityScope: 'church',
+    isPaid: false,
+    requiresRegistration: true,
+    requiredMinistries: [],
+    status: 'pending_approval'
+  });
+  const [ministries, setMinistries] = useState<{id: string, name: string}[]>([]);
+  const [cells, setCells] = useState<{id: string, name: string}[]>([]);
+
+  const isAnyLeader = can(userData, 'manage:events') || userData?.roles?.includes('ministryLeader') || userData?.roles?.includes('cellLeader');
 
   const [offlineQueue, setOfflineQueue] = useState<string[]>([]);
 
@@ -67,19 +99,39 @@ export function EventsView({ isLoggedIn = false, userData, onLoginClick }: { isL
             date: d_iso,
             time: docData.time || '19:30',
             location: docData.location || 'Campus Sede',
-            type: docData.category || 'Geral',
+            type: docData.category || docData.type || 'Geral',
             capacity: docData.capacity || 500,
             enrolled: docData.enrolled || 0,
             image: docData.image || 'https://images.unsplash.com/photo-1540039155733-d730a53ffb4c?q=80&w=800&auto=format&fit=crop',
-            description: docData.description || ''
+            description: docData.description || '',
+            visibilityScope: docData.visibilityScope || 'church',
+            visibilityId: docData.visibilityId || '',
+            isPaid: docData.isPaid || false,
+            price: docData.price || 0,
+            requiresRegistration: docData.requiresRegistration !== false,
+            requiredMinistries: docData.requiredMinistries || [],
+            status: docData.status || 'approved'
           } as EventInfo;
        }).sort((a,b) => a.date.localeCompare(b.date));
        setEvents(evs);
     }, (error) => {
        console.error("Error fetching events:", error);
     });
+
+    if (userData?.tenantId) {
+      // Fetch Ministries
+      const unsubMin = onSnapshot(query(collection(db, 'ministries'), where('tenantId', '==', userData.tenantId)), (snap) => {
+        setMinistries(snap.docs.map(d => ({id: d.id, name: d.data().name})));
+      });
+      // Fetch Cells
+      const unsubCel = onSnapshot(query(collection(db, 'cells'), where('tenantId', '==', userData.tenantId)), (snap) => {
+        setCells(snap.docs.map(d => ({id: d.id, name: d.data().name})));
+      });
+      return () => { unsub(); unsubMin(); unsubCel(); };
+    }
+
     return () => unsub();
-  }, []);
+  }, [userData?.tenantId]);
 
   useEffect(() => {
     if (!userData?.id) return;
@@ -188,7 +240,7 @@ export function EventsView({ isLoggedIn = false, userData, onLoginClick }: { isL
     }
     try {
       const enrollmentId = `${event.id}_${userData.id}`;
-      await setDoc(doc(db, 'event_enrollments', enrollmentId), {
+      const enrollmentData: any = {
         eventId: event.id,
         userId: userData.id,
         tenantId: userData.tenantId,
@@ -196,12 +248,90 @@ export function EventsView({ isLoggedIn = false, userData, onLoginClick }: { isL
         kids: enrollKids.map(k => ({...k, checkedIn: false, id: crypto.randomUUID()})),
         createdAt: serverTimestamp(),
         updatedAt: serverTimestamp()
-      });
-      alert(`Inscrição confirmada com sucesso!`);
+      };
+
+      if (event.isPaid) {
+        enrollmentData.paymentStatus = 'pending';
+        // Salva preliminarmente para garantir a vaga
+        await setDoc(doc(db, 'event_enrollments', enrollmentId), enrollmentData);
+
+        try {
+          const createPreferenceCall = httpsCallable(functions, 'createPreference');
+          const result = await createPreferenceCall({
+            eventId: event.id,
+            amount: event.price,
+            title: event.title,
+            enrollmentId: enrollmentId
+          });
+          const { preferenceId } = (result.data as any);
+          
+          await updateDoc(doc(db, 'event_enrollments', enrollmentId), { preferenceId });
+          alert('Inscrição iniciada! Finalize o pagamento para gerar seu ingresso.');
+        } catch (e) {
+          console.error("Erro ao gerar pagamento MP:", e);
+          alert('Houve um erro ao iniciar o pagamento. Tente novamente em Meus Ingressos.');
+        }
+      } else {
+        enrollmentData.paymentStatus = 'approved';
+        await setDoc(doc(db, 'event_enrollments', enrollmentId), enrollmentData);
+        alert(`Inscrição confirmada com sucesso!`);
+      }
       setSelectedEvent(null);
       setEnrollKids([]);
     } catch (error) {
       handleFirestoreError(error, OperationType.CREATE, `event_enrollments`);
+    }
+  };
+
+  const handleCreateEvent = async () => {
+    if (!newEvent.title || !newEvent.date || !newEvent.time || !newEvent.location) {
+      alert("Preencha as informações básicas do evento.");
+      return;
+    }
+    try {
+      const eventId = crypto.randomUUID();
+      await setDoc(doc(db, 'events', eventId), {
+        ...newEvent,
+        tenantId: userData.tenantId,
+        enrolled: 0,
+        createdAt: serverTimestamp()
+      });
+
+      // Se há ministérios auxiliares, cria um briefing (Doc 15) para cada
+      if (newEvent.requiredMinistries && newEvent.requiredMinistries.length > 0) {
+        for (const mId of newEvent.requiredMinistries) {
+          await setDoc(doc(db, 'briefings', crypto.randomUUID()), {
+             title: `Apoio para Evento: ${newEvent.title}`,
+             description: `Foi solicitado o apoio do seu ministério para o evento ${newEvent.title} que acontecerá dia ${newEvent.date} às ${newEvent.time}. Local: ${newEvent.location}. Por favor, avalie a viabilidade.`,
+             requesterMinistry: userData.id,
+             ministryId: mId,
+             status: 'todo',
+             deadline: newEvent.date,
+             tenantId: userData.tenantId,
+             createdAt: serverTimestamp()
+          });
+        }
+      }
+
+      if (newEvent.requiresFunding && newEvent.fundingAmount) {
+        await setDoc(doc(db, 'briefings', crypto.randomUUID()), {
+             title: `Aprovação Financeira: ${newEvent.title}`,
+             description: `Foi solicitado R$ ${newEvent.fundingAmount} de verba para o evento ${newEvent.title} que acontecerá dia ${newEvent.date}. Local: ${newEvent.location}. Por favor, avalie a viabilidade do custeio pela Igreja.`,
+             requesterMinistry: userData.id,
+             ministryId: 'financeiro', // ID lógico para cair no board financeiro
+             status: 'todo',
+             deadline: newEvent.date,
+             tenantId: userData.tenantId,
+             createdAt: serverTimestamp()
+        });
+      }
+
+      alert("Evento criado com sucesso! " + (newEvent.visibilityScope === 'church' && !can(userData, 'manage:events') ? 'Aguardando aprovação pastoral.' : ''));
+      setShowNewEventForm(false);
+      setNewEvent({ visibilityScope: 'church', isPaid: false, requiresRegistration: true, requiredMinistries: [], status: 'pending_approval' });
+    } catch (e) {
+      console.error(e);
+      alert("Erro ao criar evento.");
     }
   };
 
@@ -262,6 +392,11 @@ export function EventsView({ isLoggedIn = false, userData, onLoginClick }: { isL
           <h1 className="text-4xl font-bold tracking-tight">Eventos & Agenda</h1>
           <p className="text-white/60">Inscreva-se em cultos, retiros e conferências da igreja, e faça seu check-in.</p>
         </div>
+        {isAnyLeader && (
+          <Button onClick={() => setShowNewEventForm(true)} className="bg-primary text-black font-bold">
+            Criar Evento
+          </Button>
+        )}
       </div>
 
       <div className="flex gap-2 bg-zinc-900 border border-white/10 p-1 rounded-lg w-fit overflow-x-auto max-w-full">
@@ -305,7 +440,15 @@ export function EventsView({ isLoggedIn = false, userData, onLoginClick }: { isL
            transition={{ duration: 0.2 }}
         >
           {activeTab === 'upcoming' && (() => {
-            const filteredEvents = dateFilter ? events.filter(e => e.date.startsWith(dateFilter)) : events;
+            const filteredByDate = dateFilter ? events.filter(e => e.date.startsWith(dateFilter)) : events;
+            
+            const filteredEvents = filteredByDate.filter(e => {
+                if (can(userData, 'manage:events')) return true;
+                if (!e.visibilityScope || e.visibilityScope === 'church') return e.status !== 'draft';
+                if (e.visibilityScope === 'ministry') return userData?.roles?.includes('ministryLeader') || userData?.ministryId === e.visibilityId;
+                if (e.visibilityScope === 'cell') return userData?.roles?.includes('cellLeader') || userData?.cellId === e.visibilityId;
+                return false;
+            });
             
             const groupedEvents = filteredEvents.reduce((acc, event) => {
                if (!acc[event.date]) acc[event.date] = [];
@@ -437,9 +580,49 @@ export function EventsView({ isLoggedIn = false, userData, onLoginClick }: { isL
                        <div className="absolute -bottom-4 -right-4 w-8 h-8 rounded-full bg-black md:block hidden"></div>
 
                        <div className={`p-4 rounded-xl ${enrollment.checkedIn ? 'bg-zinc-800' : 'bg-white'}`}>
-                         <ReactQrCode value={enrollment.id} size={150} fgColor={enrollment.checkedIn ? '#666' : '#000'} bgColor={enrollment.checkedIn ? '#27272a' : '#fff'} />
+                         {enrollment.paymentStatus === 'pending' ? (
+                           <div className="flex flex-col items-center justify-center text-center w-full max-w-[400px]">
+                             {enrollment.preferenceId ? (
+                               <div className="w-full">
+                                 <Payment 
+                                   initialization={{ amount: event.price || 0, preferenceId: enrollment.preferenceId }}
+                                   customization={{
+                                     paymentMethods: {
+                                       ticket: "all",
+                                       bankTransfer: "all",
+                                       creditCard: "all",
+                                       debitCard: "all",
+                                       mercadoPago: "all",
+                                     },
+                                   }}
+                                   onSubmit={async (param) => {
+                                      // Brick will handle the submission, we can wait for webhook
+                                      alert("Processando... O ingresso será liberado assim que o pagamento for aprovado!");
+                                   }}
+                                 />
+                                 <Button 
+                                   size="sm" 
+                                   className="text-[10px] h-7 bg-primary/20 hover:bg-primary/30 text-primary mt-4 w-full"
+                                   onClick={async () => {
+                                      // Simulador para desenvolvimento local
+                                      try {
+                                        await updateDoc(doc(db, 'event_enrollments', enrollment.id), { paymentStatus: 'approved' });
+                                        alert('Pagamento simulado com sucesso! (Teste Local)');
+                                      } catch (e) { console.error(e); }
+                                   }}
+                                 >
+                                   (Teste) Simular Aprovação de Webhook
+                                 </Button>
+                               </div>
+                             ) : (
+                               <p className="text-xs text-white/50">Carregando módulo de pagamento...</p>
+                             )}
+                           </div>
+                         ) : (
+                           <ReactQrCode value={enrollment.id} size={150} fgColor={enrollment.checkedIn ? '#666' : '#000'} bgColor={enrollment.checkedIn ? '#27272a' : '#fff'} />
+                         )}
                        </div>
-                       <p className="mt-4 text-xs font-mono text-white/40 tracking-widest uppercase truncate w-32 text-center text-ellipsis">{enrollment.id}</p>
+                       {enrollment.paymentStatus !== 'pending' && <p className="mt-4 text-xs font-mono text-white/40 tracking-widest uppercase truncate w-32 text-center text-ellipsis">{enrollment.id}</p>}
                        {enrollment.checkedIn && <Badge className="mt-4 bg-green-500/20 text-green-400">Usado (Check-in)</Badge>}
                      </div>
 
@@ -694,6 +877,162 @@ export function EventsView({ isLoggedIn = false, userData, onLoginClick }: { isL
         )}
       </AnimatePresence>
 
+      <AnimatePresence>
+        {showNewEventForm && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80">
+            <motion.div 
+               initial={{ opacity: 0, scale: 0.95 }}
+               animate={{ opacity: 1, scale: 1 }}
+               exit={{ opacity: 0, scale: 0.95 }}
+               className="bg-zinc-900 border border-white/10 rounded-[2rem] max-w-2xl w-full max-h-[90vh] overflow-y-auto"
+            >
+              <div className="p-8 space-y-6">
+                <div className="flex justify-between items-center">
+                  <div>
+                    <h3 className="text-2xl font-black font-serif italic leading-tight mb-1">Novo Evento</h3>
+                    <p className="text-white/60 text-sm">Crie e configure um novo evento na agenda.</p>
+                  </div>
+                  <Button variant="ghost" size="icon" onClick={() => setShowNewEventForm(false)} className="bg-white/5 hover:bg-white/10 rounded-full">
+                    <X className="w-5 h-5" />
+                  </Button>
+                </div>
+
+                <div className="space-y-4">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <label className="text-[10px] text-white/40 uppercase font-bold tracking-widest">Título do Evento</label>
+                      <input className="w-full bg-black border border-white/10 rounded-lg px-3 py-2 text-sm text-white focus:border-primary focus:outline-none" placeholder="Ex: Culto da Família" value={newEvent.title || ''} onChange={(e) => setNewEvent({...newEvent, title: e.target.value})} />
+                    </div>
+                    <div className="space-y-2">
+                      <label className="text-[10px] text-white/40 uppercase font-bold tracking-widest">Tipo/Categoria</label>
+                      <select className="w-full bg-black border border-white/10 rounded-lg px-3 py-2 text-sm text-white focus:border-primary focus:outline-none" value={newEvent.type || ''} onChange={(e) => setNewEvent({...newEvent, type: e.target.value})}>
+                        <option value="">Selecione...</option>
+                        <option value="Culto">Culto</option>
+                        <option value="Conferência">Conferência</option>
+                        <option value="Retiro">Retiro</option>
+                        <option value="Workshop">Workshop (Escola IDE)</option>
+                        <option value="Célula">Encontro de Célula</option>
+                      </select>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div className="space-y-2">
+                      <label className="text-[10px] text-white/40 uppercase font-bold tracking-widest">Data</label>
+                      <input type="date" className="w-full bg-black border border-white/10 rounded-lg px-3 py-2 text-sm text-white focus:border-primary focus:outline-none" value={newEvent.date || ''} onChange={(e) => setNewEvent({...newEvent, date: e.target.value})} />
+                    </div>
+                    <div className="space-y-2">
+                      <label className="text-[10px] text-white/40 uppercase font-bold tracking-widest">Hora</label>
+                      <input type="time" className="w-full bg-black border border-white/10 rounded-lg px-3 py-2 text-sm text-white focus:border-primary focus:outline-none" value={newEvent.time || ''} onChange={(e) => setNewEvent({...newEvent, time: e.target.value})} />
+                    </div>
+                    <div className="space-y-2">
+                      <label className="text-[10px] text-white/40 uppercase font-bold tracking-widest">Capacidade</label>
+                      <input type="number" className="w-full bg-black border border-white/10 rounded-lg px-3 py-2 text-sm text-white focus:border-primary focus:outline-none" placeholder="Qtd máxima" value={newEvent.capacity || ''} onChange={(e) => setNewEvent({...newEvent, capacity: parseInt(e.target.value) || 0})} />
+                    </div>
+                  </div>
+
+                  <div className="space-y-2">
+                    <label className="text-[10px] text-white/40 uppercase font-bold tracking-widest">Local</label>
+                    <input className="w-full bg-black border border-white/10 rounded-lg px-3 py-2 text-sm text-white focus:border-primary focus:outline-none" placeholder="Ex: Campus Sede / Endereço" value={newEvent.location || ''} onChange={(e) => setNewEvent({...newEvent, location: e.target.value})} />
+                  </div>
+
+                  <div className="space-y-2">
+                    <label className="text-[10px] text-white/40 uppercase font-bold tracking-widest">Descrição</label>
+                    <textarea className="w-full bg-black border border-white/10 rounded-lg px-3 py-2 text-sm text-white focus:border-primary focus:outline-none min-h-[80px]" placeholder="Mais detalhes sobre o evento..." value={newEvent.description || ''} onChange={(e) => setNewEvent({...newEvent, description: e.target.value})} />
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 bg-black/40 p-4 rounded-xl border border-white/5">
+                    <div className="space-y-2">
+                      <label className="text-[10px] text-white/40 uppercase font-bold tracking-widest">Escopo (Visibilidade)</label>
+                      <select className="w-full bg-black border border-white/10 rounded-lg px-3 py-2 text-sm text-white focus:border-primary focus:outline-none" value={newEvent.visibilityScope || 'church'} onChange={(e) => setNewEvent({...newEvent, visibilityScope: e.target.value as any, visibilityId: ''})}>
+                        <option value="church">Toda a Igreja (Aprovação Pastoral)</option>
+                        <option value="ministry">Meu Ministério Específico</option>
+                        <option value="cell">Minha Célula</option>
+                      </select>
+                    </div>
+                    {newEvent.visibilityScope === 'ministry' && (
+                      <div className="space-y-2">
+                        <label className="text-[10px] text-white/40 uppercase font-bold tracking-widest">Selecione o Ministério</label>
+                        <select className="w-full bg-black border border-white/10 rounded-lg px-3 py-2 text-sm text-white focus:border-primary focus:outline-none" value={newEvent.visibilityId || ''} onChange={(e) => setNewEvent({...newEvent, visibilityId: e.target.value})}>
+                          <option value="">Selecione...</option>
+                          {ministries.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
+                        </select>
+                      </div>
+                    )}
+                    {newEvent.visibilityScope === 'cell' && (
+                      <div className="space-y-2">
+                        <label className="text-[10px] text-white/40 uppercase font-bold tracking-widest">Selecione a Célula</label>
+                        <select className="w-full bg-black border border-white/10 rounded-lg px-3 py-2 text-sm text-white focus:border-primary focus:outline-none" value={newEvent.visibilityId || ''} onChange={(e) => setNewEvent({...newEvent, visibilityId: e.target.value})}>
+                          <option value="">Selecione...</option>
+                          {cells.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                        </select>
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="bg-black/40 p-4 rounded-xl border border-white/5 space-y-4">
+                    <div className="flex items-center gap-2">
+                      <input type="checkbox" checked={newEvent.requiresRegistration} onChange={(e) => setNewEvent({...newEvent, requiresRegistration: e.target.checked})} />
+                      <label className="text-sm font-bold">Requer Inscrição / Check-in de Acesso?</label>
+                    </div>
+
+                    <div className="flex items-center gap-2">
+                      <input type="checkbox" checked={newEvent.isPaid} onChange={(e) => setNewEvent({...newEvent, isPaid: e.target.checked})} />
+                      <label className="text-sm font-bold">Evento Pago (Geração de Pix Mercado Pago)?</label>
+                    </div>
+                    
+                    {newEvent.isPaid && (
+                      <div className="space-y-2 pl-6 border-l-2 border-primary/30">
+                        <label className="text-[10px] text-white/40 uppercase font-bold tracking-widest">Valor da Inscrição (R$)</label>
+                        <input type="number" step="0.01" className="w-32 bg-black border border-white/10 rounded-lg px-3 py-2 text-sm text-white focus:border-primary focus:outline-none" placeholder="0.00" value={newEvent.price || ''} onChange={(e) => setNewEvent({...newEvent, price: parseFloat(e.target.value) || 0})} />
+                        <p className="text-xs text-white/40">Nota: O ingresso só será liberado após o Webhook do Mercado Pago aprovar.</p>
+                      </div>
+                    )}
+
+                    <div className="flex items-center gap-2 pt-2 border-t border-white/5">
+                      <input type="checkbox" checked={newEvent.requiresFunding} onChange={(e) => setNewEvent({...newEvent, requiresFunding: e.target.checked})} />
+                      <label className="text-sm font-bold text-yellow-500">Solicitar Verba/Custeio da Igreja?</label>
+                    </div>
+
+                    {newEvent.requiresFunding && (
+                      <div className="space-y-2 pl-6 border-l-2 border-yellow-500/30">
+                        <label className="text-[10px] text-white/40 uppercase font-bold tracking-widest">Valor Solicitado (R$)</label>
+                        <input type="number" step="0.01" className="w-32 bg-black border border-white/10 rounded-lg px-3 py-2 text-sm text-white focus:border-primary focus:outline-none" placeholder="0.00" value={newEvent.fundingAmount || ''} onChange={(e) => setNewEvent({...newEvent, fundingAmount: parseFloat(e.target.value) || 0})} />
+                        <p className="text-xs text-white/40">Isso criará um Briefing para o Ministério Financeiro aprovar a despesa.</p>
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="bg-black/40 p-4 rounded-xl border border-white/5 space-y-4">
+                    <div>
+                      <p className="text-sm font-bold">Ministérios Necessários (Apoio)</p>
+                      <p className="text-xs text-white/60">Marque as equipes que precisarão servir (será aberto um Briefing automático para eles).</p>
+                    </div>
+                    <div className="grid grid-cols-2 gap-2 max-h-32 overflow-y-auto">
+                       {ministries.map(m => (
+                         <div key={m.id} className="flex items-center gap-2 text-sm">
+                           <input type="checkbox" checked={newEvent.requiredMinistries?.includes(m.id)} onChange={(e) => {
+                             if (e.target.checked) setNewEvent({...newEvent, requiredMinistries: [...(newEvent.requiredMinistries || []), m.id]});
+                             else setNewEvent({...newEvent, requiredMinistries: (newEvent.requiredMinistries || []).filter(id => id !== m.id)});
+                           }} />
+                           <span>{m.name}</span>
+                         </div>
+                       ))}
+                    </div>
+                  </div>
+
+                </div>
+
+                <div className="pt-4 border-t border-white/10">
+                  <Button onClick={handleCreateEvent} className="w-full h-12 bg-primary text-black font-bold uppercase tracking-wider">
+                    Salvar e Agendar Evento
+                  </Button>
+                </div>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
     </div>
   )
 }
