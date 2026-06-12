@@ -140,6 +140,7 @@ export function UnitsView({ isAdmin, userData }: { isAdmin?: boolean; userData?:
           </motion.div>
         ))}
       </div>
+      </div>
     </div>
   );
 }
