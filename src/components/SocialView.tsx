@@ -13,7 +13,60 @@ import { collection, getDocs, addDoc, updateDoc, deleteDoc, doc, serverTimestamp
 
 // --- SUBCOMPONENTS FOR TABS ---
 
-function PublicPortal({ onLoginClick, isLoggedIn }: { onLoginClick?: () => void; isLoggedIn?: boolean }) {
+function PublicPortal({ onLoginClick, isLoggedIn, userData }: { onLoginClick?: () => void; isLoggedIn?: boolean; userData?: any }) {
+  const [publicProfs, setPublicProfs] = useState<SocialProfessional[]>([]);
+  const [selectedProf, setSelectedProf] = useState<SocialProfessional | null>(null);
+  const [selectedDate, setSelectedDate] = useState<string>('');
+  const [selectedTime, setSelectedTime] = useState<string>('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [showSuccess, setShowSuccess] = useState(false);
+
+  React.useEffect(() => {
+    const q = query(collection(db, 'social_professionals'), where('isPublic', '==', true));
+    const unsub = onSnapshot(q, (snapshot) => {
+      setPublicProfs(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as SocialProfessional)));
+    });
+    return () => unsub();
+  }, []);
+
+  const handleBooking = async () => {
+    if (!isLoggedIn) { onLoginClick?.(); return; }
+    if (!selectedDate || !selectedTime || !selectedProf) return;
+    setIsSubmitting(true);
+    try {
+      await addDoc(collection(db, 'social_appointments'), {
+        userName: userData?.name || 'Usuário',
+        userId: userData?.uid || 'anonymous',
+        professionalId: selectedProf.id,
+        professionalName: selectedProf.name,
+        specialty: selectedProf.specialty,
+        date: selectedDate,
+        time: selectedTime,
+        status: 'pending',
+        price: selectedProf.price || null,
+        paymentStatus: selectedProf.price ? 'pending' : 'paid',
+        createdAt: serverTimestamp(),
+        tenantId: 'default'
+      });
+      setShowSuccess(true);
+      setTimeout(() => {
+        setShowSuccess(false);
+        setSelectedProf(null);
+      }, 3000);
+    } catch (e) {
+      console.error(e);
+      alert('Erro ao agendar.');
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const availableDates = Array.from({ length: 7 }, (_, i) => {
+    const d = new Date();
+    d.setDate(d.getDate() + i + 1);
+    return d.toISOString().split('T')[0];
+  });
+
   return (
     <div className="space-y-20 pb-20 mt-8">
       {/* Hero Section */}
@@ -99,6 +152,64 @@ function PublicPortal({ onLoginClick, isLoggedIn }: { onLoginClick?: () => void;
         ))}
       </section>
 
+      {/* Profissionais / Agendamentos */}
+      <section className="space-y-10">
+        <div className="flex items-end justify-between">
+          <div className="space-y-2">
+            <h2 className="text-4xl font-black tracking-tight font-serif italic">Nossos Profissionais</h2>
+            <p className="text-white/50">Agende um atendimento social ou clínico com nossa rede de apoio.</p>
+          </div>
+        </div>
+        
+        {publicProfs.length === 0 ? (
+          <div className="border border-white/5 border-dashed rounded-[2rem] p-16 flex flex-col items-center justify-center text-center space-y-4">
+            <p className="text-white/50">Nenhum profissional disponível no momento.</p>
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+            {publicProfs.map((prof, index) => (
+              <motion.div
+                key={prof.id}
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.5, delay: index * 0.1 }}
+                whileHover={{ y: -10 }}
+              >
+                <div className="glass-card rounded-[2.5rem] overflow-hidden group relative aspect-[4/5]">
+                  <div className="absolute inset-0 bg-gradient-to-t from-black via-black/40 to-transparent z-10" />
+                  <img 
+                    src={prof.photoUrl || 'https://via.placeholder.com/400'} 
+                    alt={prof.name} 
+                    className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-110 grayscale group-hover:grayscale-0"
+                    referrerPolicy="no-referrer"
+                  />
+                  <div className="absolute bottom-0 left-0 right-0 p-10 z-20 space-y-4">
+                    <div className="space-y-1">
+                      <h2 className="text-3xl font-black font-serif italic text-white group-hover:text-primary transition-colors">{prof.name}</h2>
+                      <p className="text-primary font-bold uppercase tracking-widest text-xs">{prof.specialty}</p>
+                    </div>
+                    {prof.price ? (
+                       <Badge className="bg-white/10 text-white border-white/20">Clínico - R$ {prof.price.toFixed(2)}</Badge>
+                    ) : (
+                       <Badge className="bg-primary/20 text-primary border-primary/20">Social - Gratuito</Badge>
+                    )}
+                    <div className="pt-2">
+                      <Button 
+                        onClick={() => setSelectedProf(prof)}
+                        size="sm" 
+                        className="bg-primary text-black hover:bg-primary/90 font-bold w-full"
+                      >
+                        Agendar
+                      </Button>
+                    </div>
+                  </div>
+                </div>
+              </motion.div>
+            ))}
+          </div>
+        )}
+      </section>
+
       {/* Projects */}
       <section className="space-y-10">
         <div className="flex items-end justify-between">
@@ -147,6 +258,101 @@ function PublicPortal({ onLoginClick, isLoggedIn }: { onLoginClick?: () => void;
           ))}
         </div>
       </section>
+
+      {/* Booking Modal */}
+      <AnimatePresence>
+        {selectedProf && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
+            <motion.div 
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              className="bg-zinc-900 border border-white/10 rounded-3xl max-w-lg w-full overflow-hidden"
+            >
+              {showSuccess ? (
+                <div className="p-12 flex flex-col items-center justify-center text-center space-y-4">
+                  <div className="w-16 h-16 rounded-full bg-green-500/20 flex items-center justify-center text-green-400 mb-4">
+                    <HeartHandshake className="w-8 h-8" />
+                  </div>
+                  <h3 className="text-2xl font-black font-serif italic text-white">Agendamento Solicitado!</h3>
+                  <p className="text-white/60 text-sm max-w-[250px]">
+                    {selectedProf.price ? 'Sua solicitação foi recebida. Um administrador entrará em contato para o pagamento.' : 'O profissional foi notificado e você receberá as instruções em breve.'}
+                  </p>
+                </div>
+              ) : (
+                <>
+                  <div className="p-8 border-b border-white/10">
+                    <h3 className="text-2xl font-black font-serif italic text-white mb-2">Agendar Atendimento</h3>
+                    <p className="text-white/60 text-sm flex items-center gap-2">
+                      Com <span className="text-primary font-bold">{selectedProf.name}</span> ({selectedProf.specialty})
+                    </p>
+                  </div>
+                  <div className="p-8 space-y-6">
+                    <div className="space-y-3">
+                      <label className="text-xs font-bold text-white/40 uppercase tracking-widest">Selecione a Data</label>
+                      <div className="grid grid-cols-4 gap-2">
+                        {availableDates.map(date => {
+                          const isSelected = selectedDate === date;
+                          return (
+                            <button
+                              key={date}
+                              onClick={() => setSelectedDate(date)}
+                              className={`p-3 rounded-xl border text-center transition-all ${
+                                isSelected ? 'bg-primary border-primary text-black' : 'border-white/10 text-white/60 hover:border-white/30'
+                              }`}
+                            >
+                              <div className="text-[10px] uppercase font-bold mb-1">
+                                {new Date(date + 'T12:00:00').toLocaleDateString('pt-BR', { weekday: 'short' }).replace('.', '')}
+                              </div>
+                              <div className="font-bold text-lg leading-none">
+                                {new Date(date + 'T12:00:00').getDate()}
+                              </div>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                    
+                    {selectedDate && (
+                      <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} className="space-y-3">
+                        <label className="text-xs font-bold text-white/40 uppercase tracking-widest">Selecione o Horário</label>
+                        <div className="grid grid-cols-3 gap-2">
+                          {(selectedProf.availableTimes || ['09:00', '10:00', '14:00', '15:00']).map(time => {
+                            const isSelected = selectedTime === time;
+                            return (
+                              <button
+                                key={time}
+                                onClick={() => setSelectedTime(time)}
+                                className={`p-3 rounded-xl border text-center transition-all ${
+                                  isSelected ? 'bg-white border-white text-black font-bold' : 'border-white/10 text-white/60 hover:border-white/30'
+                                }`}
+                              >
+                                {time}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </motion.div>
+                    )}
+                  </div>
+                  <div className="p-6 bg-black/40 border-t border-white/10 flex gap-4">
+                    <Button variant="ghost" className="flex-1 rounded-full text-white/40 hover:text-white" onClick={() => setSelectedProf(null)}>
+                      Cancelar
+                    </Button>
+                    <Button 
+                      className={`flex-1 rounded-full font-bold ${selectedProf.price ? 'bg-green-500 hover:bg-green-600 text-black' : 'bg-primary hover:bg-primary/90 text-black'}`}
+                      disabled={!selectedDate || !selectedTime || isSubmitting}
+                      onClick={handleBooking}
+                    >
+                      {isSubmitting ? 'Aguarde...' : selectedProf.price ? `Agendar e Pagar R$ ${selectedProf.price.toFixed(2)}` : 'Confirmar (Gratuito)'}
+                    </Button>
+                  </div>
+                </>
+              )}
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }
@@ -158,6 +364,8 @@ export interface SocialProfessional {
   email: string;
   photoUrl: string;
   isPublic: boolean;
+  price?: number | null;
+  availableTimes?: string[];
   tenantId?: string;
 }
 
@@ -289,6 +497,17 @@ function ProfessionalsTab() {
                   <label className="text-xs font-bold text-white/60">URL Fotografia</label>
                   <Input value={editingProf.photoUrl} onChange={e => setEditingProf({ ...editingProf, photoUrl: e.target.value })} className="bg-black border-white/10" placeholder="https://..." />
                 </div>
+                <div className="flex gap-4">
+                  <div className="space-y-2 flex-1">
+                    <label className="text-xs font-bold text-white/60">Preço do Atendimento (R$)</label>
+                    <Input type="number" min="0" step="0.01" value={editingProf.price || ''} onChange={e => setEditingProf({ ...editingProf, price: e.target.value ? parseFloat(e.target.value) : null })} className="bg-black border-white/10" placeholder="Ex: 50.00 (Deixe em branco p/ gratuito)" />
+                  </div>
+                  <div className="space-y-2 flex-1">
+                    <label className="text-xs font-bold text-white/60">Horários (separados por vírgula)</label>
+                    <Input value={editingProf.availableTimes?.join(', ') || ''} onChange={e => setEditingProf({ ...editingProf, availableTimes: e.target.value.split(',').map(t => t.trim()) })} className="bg-black border-white/10" placeholder="14:00, 15:00" />
+                  </div>
+                </div>
+
                 <div className="flex items-center gap-2 pt-2 pb-4">
                   <input type="checkbox" id="isPublic" checked={editingProf.isPublic} onChange={e => setEditingProf({ ...editingProf, isPublic: e.target.checked })} className="w-4 h-4 rounded border-white/10 bg-black accent-primary" />
                   <label htmlFor="isPublic" className="text-sm font-bold text-white">Mostrar publicamente na página (Portal Público)</label>
@@ -308,6 +527,31 @@ function ProfessionalsTab() {
 }
 
 function AppointmentsTab() {
+  const [appointments, setAppointments] = useState<any[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+
+  React.useEffect(() => {
+    setIsLoading(true);
+    const unsub = onSnapshot(query(collection(db, 'social_appointments')), (snap) => {
+      setAppointments(snap.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+      setIsLoading(false);
+    });
+    return () => unsub();
+  }, []);
+
+  const total = appointments.length;
+  const socialCount = appointments.filter(a => !a.price).length;
+  const clinicalCount = appointments.filter(a => a.price > 0).length;
+
+  const handleUpdateStatus = async (id: string, status: string) => {
+    try {
+      await updateDoc(doc(db, 'social_appointments', id), { status });
+    } catch (e) {
+      console.error(e);
+      alert('Erro ao atualizar status.');
+    }
+  };
+
   return (
     <div className="space-y-8 mt-8">
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
@@ -316,7 +560,7 @@ function AppointmentsTab() {
             <div className="flex justify-between items-start">
               <div className="space-y-2">
                 <p className="text-white/50 font-bold uppercase tracking-widest text-[10px]">Total Atendimentos</p>
-                <p className="text-4xl font-black font-serif italic text-white">0</p>
+                <p className="text-4xl font-black font-serif italic text-white">{total}</p>
               </div>
               <HeartPulse className="h-6 w-6 text-primary/50" />
             </div>
@@ -327,7 +571,7 @@ function AppointmentsTab() {
             <div className="flex justify-between items-start">
               <div className="space-y-2">
                 <p className="text-white/50 font-bold uppercase tracking-widest text-[10px]">Atendimentos Sociais</p>
-                <p className="text-4xl font-black font-serif italic text-white">0</p>
+                <p className="text-4xl font-black font-serif italic text-white">{socialCount}</p>
               </div>
               <HandHeart className="h-6 w-6 text-primary/50" />
             </div>
@@ -338,7 +582,7 @@ function AppointmentsTab() {
             <div className="flex justify-between items-start">
               <div className="space-y-2">
                 <p className="text-white/50 font-bold uppercase tracking-widest text-[10px]">Agendamentos Clínicos</p>
-                <p className="text-4xl font-black font-serif italic text-white">0</p>
+                <p className="text-4xl font-black font-serif italic text-white">{clinicalCount}</p>
               </div>
               <Users className="h-6 w-6 text-primary/50" />
             </div>
@@ -347,16 +591,64 @@ function AppointmentsTab() {
       </div>
 
       <div className="bg-zinc-900/50 border border-white/5 rounded-[2rem] overflow-hidden">
-        <div className="grid grid-cols-5 text-[10px] font-bold text-white/40 uppercase tracking-widest p-6 border-b border-white/5">
+        <div className="grid grid-cols-6 text-[10px] font-bold text-white/40 uppercase tracking-widest p-6 border-b border-white/5">
           <div>Data/Hora</div>
           <div>Beneficiário</div>
-          <div>Serviço</div>
           <div>Profissional</div>
+          <div>Tipo / Preço</div>
           <div>Status</div>
+          <div className="text-right">Ações</div>
         </div>
-        <div className="p-16 flex flex-col items-center justify-center text-center space-y-4">
-          <p className="text-white/50 text-sm">Nenhum registro encontrado.</p>
-        </div>
+        {isLoading ? (
+          <div className="p-16 flex flex-col items-center justify-center text-center space-y-4">
+            <p className="text-white/50 text-sm">Carregando...</p>
+          </div>
+        ) : appointments.length === 0 ? (
+          <div className="p-16 flex flex-col items-center justify-center text-center space-y-4">
+            <p className="text-white/50 text-sm">Nenhum registro encontrado.</p>
+          </div>
+        ) : (
+          <div className="divide-y divide-white/5">
+            {appointments.map(app => (
+              <div key={app.id} className="grid grid-cols-6 items-center p-6 text-sm hover:bg-white/5 transition-colors">
+                <div className="font-bold text-white">{app.date} <span className="text-white/40 font-normal">{app.time}</span></div>
+                <div>{app.userName}</div>
+                <div>
+                  <p className="font-bold">{app.professionalName}</p>
+                  <p className="text-[10px] text-white/40">{app.specialty}</p>
+                </div>
+                <div>
+                  {app.price ? (
+                    <Badge className="bg-white/10 text-white border-white/20 text-[10px]">Clínico (R$ {app.price})</Badge>
+                  ) : (
+                    <Badge className="bg-primary/20 text-primary border-primary/20 text-[10px]">Social (Grátis)</Badge>
+                  )}
+                </div>
+                <div>
+                  <Badge variant="outline" className={`text-[10px] ${
+                    app.status === 'pending' ? 'border-yellow-500/50 text-yellow-500' :
+                    app.status === 'approved' ? 'border-green-500/50 text-green-500' :
+                    app.status === 'completed' ? 'border-blue-500/50 text-blue-500' :
+                    'border-red-500/50 text-red-500'
+                  }`}>
+                    {app.status}
+                  </Badge>
+                </div>
+                <div className="flex justify-end gap-2">
+                  {app.status === 'pending' && (
+                    <>
+                      <Button size="sm" variant="outline" className="h-7 text-[10px] border-green-500/20 text-green-500 hover:bg-green-500/10" onClick={() => handleUpdateStatus(app.id, 'approved')}>Aprovar</Button>
+                      <Button size="sm" variant="outline" className="h-7 text-[10px] border-red-500/20 text-red-500 hover:bg-red-500/10" onClick={() => handleUpdateStatus(app.id, 'declined')}>Recusar</Button>
+                    </>
+                  )}
+                  {app.status === 'approved' && (
+                    <Button size="sm" variant="outline" className="h-7 text-[10px] border-blue-500/20 text-blue-500 hover:bg-blue-500/10" onClick={() => handleUpdateStatus(app.id, 'completed')}>Concluir</Button>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
     </div>
   );

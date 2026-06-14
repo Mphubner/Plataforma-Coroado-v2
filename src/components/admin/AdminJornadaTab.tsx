@@ -12,8 +12,41 @@ export function AdminJornadaTab() {
   const [isCreating, setIsCreating] = React.useState(false);
   const [newTrack, setNewTrack] = React.useState<LearningTrack>({ id: '', title: '', description: '', courseIds: [] });
 
+  const funnelData = [
+    { stage: "Membros Totais", count: 1200, percentage: 100, color: "bg-blue-500" },
+    { stage: "Iniciaram a Jornada", count: 850, percentage: 70, color: "bg-green-500" },
+    { stage: "Nivelamento Concluído", count: 500, percentage: 41, color: "bg-yellow-500" },
+    { stage: "Escola de Líderes", count: 200, percentage: 16, color: "bg-orange-500" },
+    { stage: "Líderes Formados", count: 80, percentage: 6, color: "bg-red-500" },
+  ];
+
   return (
-    <div className="space-y-6">
+    <div className="space-y-10">
+      {/* Funil da Jornada IDE */}
+      <div className="space-y-4">
+        <div className="space-y-1">
+           <h3 className="text-2xl font-black font-serif italic text-white">Funil da Jornada IDE</h3>
+           <p className="text-white/50 text-sm">Acompanhamento da conversão de membros em líderes multiplicadores.</p>
+        </div>
+        <Card className="bg-zinc-900 border-white/10 p-6">
+          <div className="flex flex-col items-center justify-center space-y-2">
+            {funnelData.map((item, i) => (
+              <div key={i} className="flex items-center w-full max-w-2xl gap-4">
+                <div className="w-32 text-right text-xs font-bold text-white/60 uppercase">{item.stage}</div>
+                <div className="flex-1 flex justify-center">
+                   <div 
+                     className={`h-12 rounded-lg flex items-center justify-center font-black text-white shadow-lg ${item.color}`}
+                     style={{ width: `${Math.max(item.percentage, 15)}%`, transition: 'width 1s ease-in-out' }}
+                   >
+                      {item.count}
+                   </div>
+                </div>
+                <div className="w-16 text-left text-xs font-bold text-white/60">{item.percentage}%</div>
+              </div>
+            ))}
+          </div>
+        </Card>
+      </div>
       <div className="flex justify-between items-center">
         <div>
           <h2 className="text-2xl font-bold">Trilhas de Aprendizado (A Jornada)</h2>

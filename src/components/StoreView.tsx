@@ -155,6 +155,113 @@ const PRODUCTS: Product[] = [
 
 const CATEGORIES = ["Todos", "Vestuário", "Acessórios", "Home", "Livros", "Papelaria", "Ingressos", "Missões"];
 
+function StoreOrdersTab({ tenantId }: { tenantId: string }) {
+  const [orders, setOrders] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const q = query(collection(db, 'orders'), where('tenantId', '==', tenantId));
+    const unsub = onSnapshot(q, (snap) => {
+      setOrders(snap.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+      setLoading(false);
+    });
+    return () => unsub();
+  }, [tenantId]);
+
+  const handleUpdateStatus = async (orderId: string, newStatus: string) => {
+    try {
+      await updateDoc(doc(db, 'orders', orderId), {
+        status: newStatus,
+        updatedAt: serverTimestamp()
+      });
+    } catch (e) {
+      console.error(e);
+      alert('Erro ao atualizar pedido');
+    }
+  };
+
+  return (
+    <div className="space-y-6">
+      <div className="flex justify-between items-end">
+        <div className="space-y-1">
+          <h2 className="text-2xl font-black font-serif italic text-white">Gestão de Pedidos</h2>
+          <p className="text-white/50 text-sm">Controle de envio, retirada e status dos pagamentos.</p>
+        </div>
+      </div>
+      
+      {loading ? (
+        <div className="p-12 text-center text-white/50">Carregando pedidos...</div>
+      ) : orders.length === 0 ? (
+        <div className="p-12 border border-white/5 border-dashed rounded-3xl text-center text-white/50">
+          Nenhum pedido recebido ainda.
+        </div>
+      ) : (
+        <div className="grid gap-4">
+          {orders.map(order => (
+            <div key={order.id} className="bg-zinc-900 border border-white/10 rounded-2xl p-6 space-y-4">
+              <div className="flex flex-col md:flex-row justify-between md:items-center gap-4 border-b border-white/5 pb-4">
+                <div>
+                  <div className="flex items-center gap-3">
+                    <p className="font-bold text-white">Pedido #{order.id.substring(0, 8).toUpperCase()}</p>
+                    <Badge variant="outline" className={`
+                      ${order.status === 'paid' ? 'border-green-500/50 text-green-500' : ''}
+                      ${order.status === 'shipped' ? 'border-blue-500/50 text-blue-500' : ''}
+                      ${order.status === 'delivered' ? 'border-primary/50 text-primary' : ''}
+                    `}>
+                      {order.status === 'paid' ? 'Pago / Preparando' :
+                       order.status === 'shipped' ? 'Enviado / Aguardando Retirada' :
+                       order.status === 'delivered' ? 'Concluído' : order.status}
+                    </Badge>
+                  </div>
+                  <p className="text-sm text-white/50 mt-1">Cliente: {order.userName}</p>
+                </div>
+                <div className="text-right">
+                  <p className="text-xl font-black text-white">R$ {order.total.toFixed(2)}</p>
+                  <p className="text-[10px] text-white/40 uppercase tracking-widest">{order.paymentMethod}</p>
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                {order.items.map((item: any, i: number) => (
+                  <div key={i} className="flex justify-between text-sm items-center">
+                    <p className="text-white/80">{item.quantity}x {item.name}</p>
+                    <div className="flex gap-4 text-white/50">
+                      {item.size && <span>Tam: {item.size}</span>}
+                      {item.color && <span>Cor: {item.color}</span>}
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              <div className="flex gap-2 pt-4 border-t border-white/5">
+                 <Button 
+                   size="sm" 
+                   variant="outline" 
+                   className="text-xs bg-white/5 border-white/10"
+                   onClick={() => alert("Integração com Google Tasks a ser implementada na Fase Google.")}
+                 >
+                   Delegar Tarefa (Google Tasks)
+                 </Button>
+                 <div className="flex-1" />
+                 {order.status === 'paid' && (
+                    <Button size="sm" className="bg-blue-500 text-white font-bold" onClick={() => handleUpdateStatus(order.id, 'shipped')}>
+                      Marcar como Enviado
+                    </Button>
+                 )}
+                 {order.status === 'shipped' && (
+                    <Button size="sm" className="bg-primary text-black font-bold" onClick={() => handleUpdateStatus(order.id, 'delivered')}>
+                      Finalizar / Entregue
+                    </Button>
+                 )}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export function StoreView({ isAdmin = false, userData }: StoreViewProps) {
   const [selectedCategory, setSelectedCategory] = useState("Todos");
   const [searchQuery, setSearchQuery] = useState("");
@@ -376,7 +483,7 @@ export function StoreView({ isAdmin = false, userData }: StoreViewProps) {
     <div className="space-y-12 pb-20">
       {isAdmin && (
         <div className="flex items-center gap-2 overflow-x-auto pb-4 scrollbar-hide">
-             <button
+              <button
                 onClick={() => setStoreTab("shop")}
                 className={cn(
                   "px-6 h-10 rounded-full text-xs font-black uppercase tracking-widest transition-all whitespace-nowrap border",
@@ -387,7 +494,7 @@ export function StoreView({ isAdmin = false, userData }: StoreViewProps) {
               >
                 Loja Público
               </button>
-             <button
+              <button
                 onClick={() => setStoreTab("admin")}
                 className={cn(
                   "px-6 h-10 rounded-full text-xs font-black uppercase tracking-widest transition-all whitespace-nowrap border",
@@ -396,9 +503,24 @@ export function StoreView({ isAdmin = false, userData }: StoreViewProps) {
                     : "bg-white/5 border-white/10 text-white/40 hover:border-white/20 hover:text-white"
                 )}
               >
-                Gestão da Loja
+                Catálogo de Produtos
+              </button>
+              <button
+                onClick={() => setStoreTab("orders")}
+                className={cn(
+                  "px-6 h-10 rounded-full text-xs font-black uppercase tracking-widest transition-all whitespace-nowrap border",
+                  storeTab === "orders" 
+                    ? "bg-blue-500 border-blue-500 text-black" 
+                    : "bg-white/5 border-white/10 text-white/40 hover:border-white/20 hover:text-white"
+                )}
+              >
+                Gestão de Pedidos
               </button>
         </div>
+      )}
+
+      {storeTab === 'orders' && isAdmin && (
+        <StoreOrdersTab tenantId={tenantId} />
       )}
 
       {storeTab === 'admin' && isAdmin ? (

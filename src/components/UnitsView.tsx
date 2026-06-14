@@ -27,7 +27,8 @@ const UNITS = [
     phone: '(27) 99999-8888',
     mapUrl: 'https://www.google.com/maps/embed?pb=!1m18!1m12!1m3!1d59726.26898758945!2d-40.55842082843687!3d-20.673980063444038!2m3!1f0!2f0!3f0!3m2!1i1024!2i768!4f13.1!3m3!1m2!1s0xb85b005aead363%3A0x667e3278df6645c8!2sCoroado%20Unidade%20Norte!5e0!3m2!1spt-BR!2sbr!4v1776019830302!5m2!1spt-BR!2sbr',
     image: 'https://images.unsplash.com/photo-1499652848871-1527a310b13a?q=80&w=1074&auto=format&fit=crop&ixlib=rb-4.1.0&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D',
-    referrerPolicy: 'no-referrer'
+    referrerPolicy: 'no-referrer',
+    order: 2
   }
 ];
 
@@ -46,6 +47,7 @@ export function UnitsView({ isAdmin, userData }: { isAdmin?: boolean; userData?:
         phone: editingUnit.phone,
         mapUrl: editingUnit.mapUrl,
         image: editingUnit.image,
+        order: Number(editingUnit.order) || 0,
         referrerPolicy: 'no-referrer',
         tenantId: userData?.tenantId || 'tenant-1'
       };
@@ -92,7 +94,9 @@ export function UnitsView({ isAdmin, userData }: { isAdmin?: boolean; userData?:
 
     const unsub = onSnapshot(q, (snap) => {
       if (!snap.empty) {
-        setUnitsList(snap.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+        const list = snap.docs.map(doc => ({ id: doc.id, ...doc.data() } as any));
+        list.sort((a, b) => (a.order || 0) - (b.order || 0));
+        setUnitsList(list);
       } else {
         setUnitsList(UNITS); // Fallback para lista mock
       }
@@ -116,7 +120,7 @@ export function UnitsView({ isAdmin, userData }: { isAdmin?: boolean; userData?:
         {isAdmin && (
           <div className="flex justify-end">
              <Button variant="outline" className="border-white/10" onClick={() => {
-                setEditingUnit({ name: '', address: '', serviceTimes: '', phone: '', mapUrl: '', image: '' });
+                setEditingUnit({ name: '', address: '', serviceTimes: '', phone: '', mapUrl: '', image: '', order: 0 });
                 setShowUnitForm(true);
              }}>
                 <Plus className="w-4 h-4 mr-2" /> Adicionar Unidade
@@ -219,9 +223,15 @@ export function UnitsView({ isAdmin, userData }: { isAdmin?: boolean; userData?:
             >
               <h3 className="text-2xl font-bold mb-6">{(editingUnit.id && editingUnit.id !== 'sede' && editingUnit.id !== 'coroado-norte') ? 'Editar Unidade' : 'Nova Unidade'}</h3>
               <form onSubmit={handleSaveUnit} className="space-y-4">
-                <div className="space-y-2">
-                  <label className="text-xs font-bold text-white/60">Nome da Unidade</label>
-                  <Input required value={editingUnit.name} onChange={e => setEditingUnit({ ...editingUnit, name: e.target.value })} className="bg-black border-white/10" />
+                <div className="grid grid-cols-[1fr_80px] gap-4">
+                  <div className="space-y-2">
+                    <label className="text-xs font-bold text-white/60">Nome da Unidade</label>
+                    <Input required value={editingUnit.name} onChange={e => setEditingUnit({ ...editingUnit, name: e.target.value })} className="bg-black border-white/10" />
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-xs font-bold text-white/60">Ordem</label>
+                    <Input type="number" value={editingUnit.order || 0} onChange={e => setEditingUnit({ ...editingUnit, order: e.target.value })} className="bg-black border-white/10" />
+                  </div>
                 </div>
                 <div className="space-y-2">
                   <label className="text-xs font-bold text-white/60">Endereço Completo</label>
