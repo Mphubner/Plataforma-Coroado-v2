@@ -6,7 +6,7 @@ import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Carousel, CarouselContent, CarouselItem, CarouselNext, CarouselPrevious } from '@/components/ui/carousel';
 import { db } from "@/lib/firebase";
-import { collection, query, onSnapshot, orderBy, limit, updateDoc, doc } from "firebase/firestore";
+import { collection, query, onSnapshot, orderBy, limit, updateDoc, doc, addDoc, serverTimestamp } from "firebase/firestore";
 import { handleFirestoreError, OperationType } from '@/lib/firestoreUtils';
 import { CalendarCheck, Music } from 'lucide-react';
 import { getHomeSections, routeById, type RouteId } from '@/src/lib/permissions';
@@ -18,7 +18,40 @@ export function HomeView({ onTabChange, userData }: { onTabChange: (tab: string)
   const [dbMinistries, setDbMinistries] = useState<any[]>([]);
   const [myScales, setMyScales] = useState<any[]>([]);
   const [sermonNotes, setSermonNotes] = useState(() => localStorage.getItem('coroado_sermon_notes') || '');
+  const [visitorName, setVisitorName] = useState('');
+  const [visitorPhone, setVisitorPhone] = useState('');
+  const [visitorNeighborhood, setVisitorNeighborhood] = useState('');
+  const [isVisitorSubmitting, setIsVisitorSubmitting] = useState(false);
+
   const homeSections = getHomeSections(userData).filter((routeId): routeId is RouteId => Boolean(routeById[routeId]));
+
+  const handleVisitorSubmit = async () => {
+    if (!visitorName || !visitorPhone) {
+      alert("Por favor, preencha pelo menos o seu nome e WhatsApp.");
+      return;
+    }
+    setIsVisitorSubmitting(true);
+    try {
+      await addDoc(collection(db, 'visitor_leads'), {
+        name: visitorName,
+        phone: visitorPhone,
+        neighborhood: visitorNeighborhood,
+        tenantId: userData?.tenantId || 'tenant-1',
+        createdAt: serverTimestamp(),
+        status: 'pending'
+      });
+      alert("Obrigado! Nossos líderes entrarão em contato com você em breve!");
+      setVisitorName('');
+      setVisitorPhone('');
+      setVisitorNeighborhood('');
+      document.getElementById('novo-aqui-modal')?.classList.add('hidden');
+    } catch (e) {
+      console.error(e);
+      alert("Erro ao enviar dados. Tente novamente.");
+    } finally {
+      setIsVisitorSubmitting(false);
+    }
+  };
 
   useEffect(() => {
     // Fetch generic events
@@ -476,25 +509,23 @@ export function HomeView({ onTabChange, userData }: { onTabChange: (tab: string)
           <div className="w-full space-y-4 text-left">
             <div className="space-y-2">
               <label className="text-xs font-bold text-white/40 uppercase">Seu Nome</label>
-              <Input placeholder="Como gosta de ser chamado?" className="bg-black/50 border-white/10" />
+              <Input placeholder="Como gosta de ser chamado?" className="bg-black/50 border-white/10" value={visitorName} onChange={e => setVisitorName(e.target.value)} />
             </div>
             <div className="space-y-2">
               <label className="text-xs font-bold text-white/40 uppercase">WhatsApp</label>
-              <Input placeholder="(00) 00000-0000" className="bg-black/50 border-white/10" />
+              <Input placeholder="(00) 00000-0000" className="bg-black/50 border-white/10" value={visitorPhone} onChange={e => setVisitorPhone(e.target.value)} />
             </div>
             <div className="space-y-2">
               <label className="text-xs font-bold text-white/40 uppercase">Onde você mora? (Bairro)</label>
-              <Input placeholder="Ex: Muquiçaba..." className="bg-black/50 border-white/10" />
+              <Input placeholder="Ex: Muquiçaba..." className="bg-black/50 border-white/10" value={visitorNeighborhood} onChange={e => setVisitorNeighborhood(e.target.value)} />
             </div>
 
             <Button
               className="w-full h-12 bg-primary text-black font-bold uppercase tracking-wider mt-4"
-              onClick={() => {
-                alert("Obrigado! Nossos líderes entrarão em contato com você em breve!");
-                document.getElementById('novo-aqui-modal')?.classList.add('hidden');
-              }}
+              onClick={handleVisitorSubmit}
+              disabled={isVisitorSubmitting}
             >
-              Enviar Saudação
+              {isVisitorSubmitting ? "Enviando..." : "Enviar Saudação"}
             </Button>
           </div>
         </div>

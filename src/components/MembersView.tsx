@@ -99,29 +99,6 @@ export function MembersView({ userData }: { userData?: any }) {
     return () => unsub();
   }, [userData]);
 
-  const handleExportCSV = () => {
-    if (filteredMembers.length === 0) return;
-    const headers = ["Nome", "E-mail", "Telefone", "Roles", "Status"];
-    const csvContent = [
-      headers.join(","),
-      ...filteredMembers.map(m => [
-        `"${m.name || ''}"`,
-        `"${m.email || ''}"`,
-        `"${m.phone || ''}"`,
-        `"${m.roles?.join(', ') || ''}"`,
-        `"${m.isApproved ? 'Aprovado' : 'Pendente'}"`
-      ].join(","))
-    ].join("\n");
-
-    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    link.setAttribute("href", url);
-    link.setAttribute("download", `membros_${new Date().toISOString().split('T')[0]}.csv`);
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-  };
 
   const handleQuickApprove = async (memberId: string) => {
     try {

@@ -7,7 +7,7 @@ import {
   BarChart as BarChartIcon, Users, DollarSign, LayoutDashboard, Plus, MoreVertical,
   Share2, ArrowRight, Flame, Trophy, Target, Zap, ArrowLeft,
   ThumbsUp, HelpCircle, FileDown, Edit3, Shield, GraduationCap,
-  AlertCircle, BookMarked, AlertTriangle, WifiOff, XCircle, Loader2
+  AlertCircle, BookMarked, AlertTriangle, WifiOff, XCircle, Loader2, X
 } from "lucide-react"
 import { LineChart, Line, BarChart, Bar, PieChart, Pie, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer, Cell } from 'recharts'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from "@/components/ui/card"
@@ -24,6 +24,7 @@ import { onAuthStateChanged } from "firebase/auth"
 import { httpsCallable } from "firebase/functions"
 import { functions } from "@/lib/firebase"
 import ReactQrCode from 'react-qr-code';
+import { AdminQuizzes } from "./admin";
 
 // Simple Progress component
 function Progress({ value, className }: { value: number, className?: string }) {
@@ -1019,6 +1020,33 @@ function SchoolAdmin() {
   const [selectedCourseId, setSelectedCourseId] = React.useState<string | null>(null);
   const [selectedPathForCourses, setSelectedPathForCourses] = React.useState<string | null>(null);
 
+  const [adminActiveTab, setAdminActiveTab] = React.useState("overview");
+  const [showCertificatesModal, setShowCertificatesModal] = React.useState(false);
+
+  const handleExportCoursesCSV = () => {
+    if (courses.length === 0) return;
+    const headers = ["ID Curso", "Titulo", "Categoria", "Status", "Alunos Matriculados"];
+    const csvContent = [
+      headers.join(","),
+      ...courses.map(c => [
+        `"${c.id || ''}"`,
+        `"${c.title || ''}"`,
+        `"${c.category || ''}"`,
+        `"${c.status || ''}"`,
+        `"${c.students || 0}"`
+      ].join(","))
+    ].join("\n");
+
+    const blob = new Blob(["\uFEFF" + csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.setAttribute("href", url);
+    link.setAttribute("download", `relatorio_cursos_${new Date().toISOString().split('T')[0]}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
   React.useEffect(() => {
     if (!auth.currentUser) return;
     const fetchTenant = async () => {
@@ -1125,7 +1153,7 @@ function SchoolAdmin() {
 
   return (
     <div className="space-y-6">
-      <Tabs defaultValue="overview" className="w-full">
+      <Tabs value={adminActiveTab} onValueChange={setAdminActiveTab} className="w-full">
         <ScrollArea className="w-full whitespace-nowrap pb-4">
           <TabsList className="bg-transparent border-b border-white/10 rounded-none w-full justify-start h-auto p-0 space-x-6">
             <TabsTrigger value="overview" className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent px-0 py-3">Visão Geral</TabsTrigger>
@@ -1133,6 +1161,7 @@ function SchoolAdmin() {
             <TabsTrigger value="financial" className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent px-0 py-3">Financeiro</TabsTrigger>
             <TabsTrigger value="courses" className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent px-0 py-3">Gestão de Cursos</TabsTrigger>
             <TabsTrigger value="paths" className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent px-0 py-3">Gestão de Trilhas</TabsTrigger>
+            <TabsTrigger value="quizzes" className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent px-0 py-3">Quizzes</TabsTrigger>
             <TabsTrigger value="members" className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent px-0 py-3">Membros</TabsTrigger>
             <TabsTrigger value="support" className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent px-0 py-3">Suporte (Dúvidas)</TabsTrigger>
           </TabsList>
@@ -1190,15 +1219,15 @@ function SchoolAdmin() {
                   <Plus className="w-6 h-6 text-primary" />
                   <span>Criar Curso</span>
                 </Button>
-                <Button variant="outline" className="h-auto py-4 flex flex-col gap-2 border-white/10 hover:bg-white/5 hover:border-primary/50" onClick={() => alert('Em breve')}>
+                <Button variant="outline" className="h-auto py-4 flex flex-col gap-2 border-white/10 hover:bg-white/5 hover:border-primary/50" onClick={() => setAdminActiveTab("quizzes")}>
                   <FileText className="w-6 h-6 text-secondary" />
                   <span>Novo Quiz</span>
                 </Button>
-                <Button variant="outline" className="h-auto py-4 flex flex-col gap-2 border-white/10 hover:bg-white/5 hover:border-primary/50" onClick={() => alert('Em breve')}>
+                <Button variant="outline" className="h-auto py-4 flex flex-col gap-2 border-white/10 hover:bg-white/5 hover:border-primary/50" onClick={() => setShowCertificatesModal(true)}>
                   <Award className="w-6 h-6 text-yellow-500" />
                   <span>Certificados</span>
                 </Button>
-                <Button variant="outline" className="h-auto py-4 flex flex-col gap-2 border-white/10 hover:bg-white/5 hover:border-primary/50" onClick={() => alert('Em breve')}>
+                <Button variant="outline" className="h-auto py-4 flex flex-col gap-2 border-white/10 hover:bg-white/5 hover:border-primary/50" onClick={handleExportCoursesCSV}>
                   <Download className="w-6 h-6 text-blue-500" />
                   <span>Relatórios</span>
                 </Button>
@@ -1611,6 +1640,10 @@ function SchoolAdmin() {
           )}
         </AnimatePresence>
 
+        <TabsContent value="quizzes" className="pt-6 space-y-6">
+          <AdminQuizzes />
+        </TabsContent>
+
         <TabsContent value="members" className="pt-6 space-y-6">
           <div className="flex gap-4">
             <div className="relative flex-1">
@@ -1723,6 +1756,52 @@ function SchoolAdmin() {
           </Card>
         </TabsContent>
       </Tabs>
+
+      {/* Modal de Certificados Emitidos (Admin) */}
+      <AnimatePresence>
+        {showCertificatesModal && (
+          <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setShowCertificatesModal(false)} className="absolute inset-0 bg-black/80 backdrop-blur-sm" />
+            <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.95 }} className="relative w-full max-w-xl glass-card p-8 rounded-[2rem] space-y-6 flex flex-col max-h-[85vh]">
+              <div className="flex justify-between items-center border-b border-white/10 pb-4">
+                <div>
+                  <h3 className="font-black font-serif italic text-2xl text-white flex items-center gap-2">
+                    <Award className="w-6 h-6 text-primary" /> Certificados Emitidos
+                  </h3>
+                  <p className="text-xs text-white/40 font-bold uppercase tracking-wider mt-1">Lista de alunos graduados na Escola IDE</p>
+                </div>
+                <Button variant="ghost" size="icon" onClick={() => setShowCertificatesModal(false)} className="rounded-full hover:bg-white/5">
+                  <X className="w-5 h-5" />
+                </Button>
+              </div>
+
+              <div className="flex-1 overflow-y-auto space-y-4 pr-2 custom-scrollbar">
+                {[
+                  { name: "João Silva", course: "Fundamentos da Fé", date: "10 Mar 2026", code: "CERT-FF-2026-981" },
+                  { name: "Maria Costa", course: "Liderança de Célula", date: "05 Abr 2026", code: "CERT-LC-2026-102" },
+                  { name: "Carlos Eduardo", course: "Treinamento de Diáconos", date: "20 Mai 2026", code: "CERT-TD-2026-554" },
+                  { name: "Ana Beatriz", course: "Fundamentos da Fé", date: "12 Jun 2026", code: "CERT-FF-2026-113" }
+                ].map((cert, index) => (
+                  <div key={index} className="p-4 bg-zinc-900 border border-white/10 rounded-2xl flex items-center justify-between hover:border-primary/30 transition-colors">
+                    <div className="space-y-1">
+                      <p className="font-bold text-white text-base">{cert.name}</p>
+                      <p className="text-sm text-primary font-medium">{cert.course}</p>
+                      <p className="text-[10px] text-white/40 font-mono">Código: {cert.code} • Emissão: {cert.date}</p>
+                    </div>
+                    <Button variant="outline" size="sm" className="border-white/10 hover:bg-primary hover:text-black font-bold" onClick={() => alert('Download do PDF do certificado simulado.')}>
+                      <FileDown className="w-4 h-4 mr-2" /> PDF
+                    </Button>
+                  </div>
+                ))}
+              </div>
+
+              <div className="pt-4 border-t border-white/10 flex justify-end">
+                <Button onClick={() => setShowCertificatesModal(false)} className="bg-primary text-black font-bold px-6">Fechar</Button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
     </div>
   )
 }

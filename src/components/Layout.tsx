@@ -327,6 +327,42 @@ export function Layout({ children, activeTab, setActiveTab, isLoggedIn = true, u
         </AnimatePresence>
       </main>
 
+      {/* Footer */}
+      <footer className="border-t border-white/10 bg-zinc-950 pt-16 pb-[calc(6rem+env(safe-area-inset-bottom))] md:pb-16 text-white/60 text-sm">
+        <div className="container mx-auto px-4 max-w-6xl">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-12 mb-12">
+            <div className="space-y-4">
+              <div className="flex items-center gap-2 text-white">
+                <img src="/simbolob.png" alt="Coroado Icon" className="h-8 w-auto object-contain" />
+                <img src="/logomarcab.png" alt="Coroado" className="h-4 w-auto object-contain mt-1" />
+              </div>
+              <p className="max-w-xs">Uma igreja em células, apaixonada por Jesus para transformar o mundo.</p>
+            </div>
+            
+            <div className="space-y-4">
+              <h4 className="font-bold text-white uppercase tracking-widest text-xs">Políticas</h4>
+              <ul className="space-y-2">
+                <li><a href="/politicas/privacidade" className="hover:text-primary transition-colors">Política de Privacidade</a></li>
+                <li><a href="/politicas/servico" className="hover:text-primary transition-colors">Termos de Serviço</a></li>
+                <li><a href="/politicas/devolucao" className="hover:text-primary transition-colors">Política de Devolução</a></li>
+                <li><a href="/politicas/frete" className="hover:text-primary transition-colors">Política de Frete e Envio</a></li>
+              </ul>
+            </div>
+
+            <div className="space-y-4">
+              <h4 className="font-bold text-white uppercase tracking-widest text-xs">Atendimento</h4>
+              <ul className="space-y-2">
+                <li>Precisa de ajuda com a plataforma, loja ou doações?</li>
+                <li><a href="mailto:Suporte@coroado.org" className="text-white hover:text-primary font-medium transition-colors">Suporte@coroado.org</a></li>
+              </ul>
+            </div>
+          </div>
+          <div className="border-t border-white/10 pt-8 flex flex-col md:flex-row justify-between items-center gap-4 text-xs">
+            <p>&copy; {new Date().getFullYear()} Igreja Coroado. Todos os direitos reservados.</p>
+          </div>
+        </div>
+      </footer>
+
       {/* Mobile Bottom Nav */}
       <nav className="fixed bottom-0 left-0 right-0 z-50 md:hidden border-t border-white/10 bg-black/90 backdrop-blur-xl pb-[env(safe-area-inset-bottom)]">
         <div className="flex items-center justify-around h-16 px-1">

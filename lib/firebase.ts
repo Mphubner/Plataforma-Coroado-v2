@@ -11,6 +11,15 @@ export const db = initializeFirestore(app, {
 }, firebaseConfig.firestoreDatabaseId);
 export const auth = getAuth(app);
 export const googleProvider = new GoogleAuthProvider();
+
+export const googleWorkspaceProvider = new GoogleAuthProvider();
+googleWorkspaceProvider.addScope('https://www.googleapis.com/auth/calendar');
+googleWorkspaceProvider.addScope('https://www.googleapis.com/auth/tasks');
+googleWorkspaceProvider.addScope('https://www.googleapis.com/auth/chat.spaces');
+googleWorkspaceProvider.addScope('https://www.googleapis.com/auth/presentations');
+googleWorkspaceProvider.addScope('https://www.googleapis.com/auth/forms');
+googleWorkspaceProvider.addScope('https://www.googleapis.com/auth/spreadsheets');
+
 export const functions = getFunctions(app, 'us-central1'); // Ajuste se for outra região
 
 

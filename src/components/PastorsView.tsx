@@ -499,6 +499,8 @@ export function PastorsView({ isAdmin, userData, isLoggedIn, onLoginClick }: { i
             </motion.div>
           </div>
         )}
+      </AnimatePresence>
+
       {/* Success Modal with Calendar Sync */}
       <AnimatePresence>
         {showSuccess && lastAppointment && (

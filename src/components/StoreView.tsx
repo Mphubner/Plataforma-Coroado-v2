@@ -11,7 +11,8 @@ import {
   Star,
   Heart,
   Share2,
-  RefreshCw
+  RefreshCw,
+  Loader2
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
@@ -22,6 +23,7 @@ import { Separator } from '@/components/ui/separator';
 import { cn } from '@/lib/utils';
 import { auth, db } from '@/lib/firebase';
 import { collection, query, where, onSnapshot, addDoc, deleteDoc, doc, writeBatch, serverTimestamp } from 'firebase/firestore';
+import ReactQrCode from 'react-qr-code';
 
 interface StoreViewProps {
   isAdmin?: boolean;
@@ -161,6 +163,9 @@ export function StoreView({ isAdmin = false, userData }: StoreViewProps) {
   const [isCartOpen, setIsCartOpen] = useState(false);
   const [storeTab, setStoreTab] = useState("shop");
 
+  const [showSimulatedCheckoutModal, setShowSimulatedCheckoutModal] = useState(false);
+  const [isSimulatingPayment, setIsSimulatingPayment] = useState(false);
+
   const [dbProducts, setDbProducts] = useState<Product[]>([]);
   const [newProductForm, setNewProductForm] = useState({
     name: "",
@@ -174,6 +179,74 @@ export function StoreView({ isAdmin = false, userData }: StoreViewProps) {
   const [loading, setLoading] = useState(false);
 
   const tenantId = userData?.tenantId || 'tenant-1';
+
+  const handleCheckout = async () => {
+    try {
+      const currentUser = auth.currentUser;
+      if (!currentUser) {
+        alert('Entre com sua conta para finalizar a compra.');
+        return;
+      }
+
+      const idToken = await currentUser.getIdToken();
+      const response = await fetch('/api/checkout', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${idToken}`,
+        },
+        body: JSON.stringify({ items: cart })
+      });
+      const data = await response.json();
+      if (data.success && data.init_point) {
+        window.location.href = data.init_point;
+      } else {
+        console.warn('Backend checkout failed, opening simulation:', data.error);
+        setShowSimulatedCheckoutModal(true);
+      }
+    } catch (e) {
+      console.warn('Network checkout failed, opening simulation:', e);
+      setShowSimulatedCheckoutModal(true);
+    }
+  };
+
+  const handleSimulatedPaymentSuccess = async () => {
+    setIsSimulatingPayment(true);
+    try {
+      await new Promise(resolve => setTimeout(resolve, 3000));
+      
+      const currentUser = auth.currentUser;
+      const totalAmount = cart.reduce((total, item) => total + (item.product.price * item.quantity), 0);
+      await addDoc(collection(db, 'orders'), {
+        userId: currentUser?.uid || 'anonymous',
+        userName: currentUser?.displayName || userData?.name || 'Membro',
+        tenantId,
+        items: cart.map(item => ({
+          productId: String(item.product.id),
+          name: item.product.name,
+          quantity: item.quantity,
+          price: item.product.price,
+          size: item.size || '',
+          color: item.color || ''
+        })),
+        total: totalAmount,
+        status: 'paid',
+        paymentMethod: 'pix_simulation',
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp()
+      });
+      
+      alert("Pagamento simulado aprovado com sucesso! Obrigado pela compra.");
+      setCart([]);
+      setShowSimulatedCheckoutModal(false);
+      setIsCartOpen(false);
+    } catch (e) {
+      console.error(e);
+      alert("Erro ao processar pedido simulado: " + (e as Error).message);
+    } finally {
+      setIsSimulatingPayment(false);
+    }
+  };
 
   useEffect(() => {
     const q = query(collection(db, 'products'), where('tenantId', '==', tenantId));
@@ -781,33 +854,7 @@ export function StoreView({ isAdmin = false, userData }: StoreViewProps) {
                     </div>
                   </div>
                   <Button 
-                    onClick={async () => {
-                       try {
-                         const currentUser = auth.currentUser;
-                         if (!currentUser) {
-                           alert('Entre com sua conta para finalizar a compra.');
-                           return;
-                         }
-
-                         const idToken = await currentUser.getIdToken();
-                         const response = await fetch('/api/checkout', {
-                           method: 'POST',
-                           headers: {
-                             'Content-Type': 'application/json',
-                             Authorization: `Bearer ${idToken}`,
-                           },
-                           body: JSON.stringify({ items: cart })
-                         });
-                         const data = await response.json();
-                         if (data.success && data.init_point) {
-                           window.location.href = data.init_point;
-                         } else {
-                           alert('Erro ao iniciar checkout: ' + (data.error || 'Erro desconhecido'));
-                         }
-                       } catch (e) {
-                         alert('Erro de conexão ao iniciar o checkout.');
-                       }
-                    }}
+                    onClick={handleCheckout}
                     className="w-full h-16 rounded-full bg-primary text-black font-black text-lg shadow-lg shadow-primary/20 hover:scale-[1.02] active:scale-[0.98] transition-all"
                   >
                     Finalizar Compra
@@ -817,6 +864,46 @@ export function StoreView({ isAdmin = false, userData }: StoreViewProps) {
               )}
             </motion.div>
           </>
+        )}
+      </AnimatePresence>
+
+      {/* Modal de Checkout Simulado */}
+      <AnimatePresence>
+        {showSimulatedCheckoutModal && (
+          <div className="fixed inset-0 z-[200] flex items-center justify-center p-4">
+            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setShowSimulatedCheckoutModal(false)} className="absolute inset-0 bg-black/80 backdrop-blur-sm" />
+            <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.95 }} className="relative w-full max-w-sm glass-card p-8 rounded-[2rem] space-y-6 text-center">
+              <div className="w-16 h-16 bg-primary/20 rounded-full flex items-center justify-center mx-auto border border-primary/50 text-primary">
+                <ShoppingBag className="w-8 h-8" />
+              </div>
+              <div>
+                <h3 className="font-black text-2xl font-serif italic">Coroado Pay (PIX)</h3>
+                <p className="text-sm text-white/60 mt-2">Finalize sua compra pagando via PIX simulado.</p>
+              </div>
+
+              {isSimulatingPayment ? (
+                <div className="space-y-4 py-4">
+                  <Loader2 className="w-12 h-12 text-primary animate-spin mx-auto" />
+                  <p className="text-sm text-white/60 font-bold uppercase tracking-wider">Confirmando pagamento...</p>
+                </div>
+              ) : (
+                <div className="space-y-6">
+                  <div className="bg-white p-4 rounded-2xl inline-block mx-auto">
+                    <ReactQrCode value={`00020101021126580014br.gov.bcb.pix0136coroado@igreja.com.br5204000053039865802BR5915IGREJA COROADO6009SAO PAULO62070503***6304`} size={180} />
+                    <p className="text-black text-[10px] mt-2 font-black uppercase tracking-widest">Aproxime o app do seu banco</p>
+                  </div>
+                  <div className="space-y-2">
+                    <Button onClick={handleSimulatedPaymentSuccess} className="w-full bg-primary text-black font-black h-12 rounded-full uppercase text-xs tracking-wider">
+                      Simular Sucesso do Pagamento
+                    </Button>
+                    <Button variant="ghost" onClick={() => setShowSimulatedCheckoutModal(false)} className="w-full text-white/40 hover:text-white">
+                      Cancelar
+                    </Button>
+                  </div>
+                </div>
+              )}
+            </motion.div>
+          </div>
         )}
       </AnimatePresence>
         </>

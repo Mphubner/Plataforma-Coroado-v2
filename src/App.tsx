@@ -203,7 +203,7 @@ function AppShell({ userData, authState, onLogout, refreshProfile }: { userData:
         <Route path="/gestao" element={<ProtectedPage user={userData} capability="view:admin"><AdminView userData={userData} /></ProtectedPage>} />
         <Route path="/jornada" element={<ProtectedPage user={userData} capability="view:jornada"><JornadaView /></ProtectedPage>} />
         <Route path="/pastores" element={<ProtectedPage user={userData} capability="view:public"><PastorsView isAdmin={can(userData, 'view:admin')} userData={userData} isLoggedIn={authState === 'approved'} onLoginClick={() => navigate('/login')} /></ProtectedPage>} />
-        <Route path="/social" element={<ProtectedPage user={userData} capability="view:public"><SocialView isLoggedIn={authState === 'approved'} onLoginClick={() => navigate('/login')} /></ProtectedPage>} />
+        <Route path="/social" element={<ProtectedPage user={userData} capability="view:public"><SocialView isAdmin={can(userData, 'view:admin')} userData={userData} isLoggedIn={authState === 'approved'} onLoginClick={() => navigate('/login')} /></ProtectedPage>} />
         <Route path="/unidades" element={<ProtectedPage user={userData} capability="view:public"><UnitsView isAdmin={can(userData, 'view:admin')} userData={userData} /></ProtectedPage>} />
         <Route path="/midia" element={<ProtectedPage user={userData} capability="view:public"><SocialMediaView /></ProtectedPage>} />
         <Route path="/loja" element={<ProtectedPage user={userData} capability="view:public"><StoreView isAdmin={can(userData, 'manage:finance')} userData={userData} /></ProtectedPage>} />
