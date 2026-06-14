@@ -117,8 +117,35 @@ export function PastorsView({ isAdmin, userData, isLoggedIn, onLoginClick }: { i
     }
   };
 
-  const updateAppointmentStatus = async (id: string, status: string) => {
-    await updateDoc(doc(db, 'pastoral_appointments', id), { status });
+  const updateAppointmentStatus = async (app: any, status: string) => {
+    await updateDoc(doc(db, 'pastoral_appointments', app.id), { status });
+    if (status === 'approved' && userData?.googleAccessToken) {
+      try {
+        const startDate = new Date(`${app.date}T${app.time}:00-03:00`);
+        const endDate = new Date(startDate.getTime() + 60 * 60 * 1000);
+        const res = await fetch("https://www.googleapis.com/calendar/v3/calendars/primary/events", {
+          method: "POST",
+          headers: {
+            "Authorization": `Bearer ${userData.googleAccessToken}`,
+            "Content-Type": "application/json"
+          },
+          body: JSON.stringify({
+            summary: `Aconselhamento Pastoral com ${app.userName}`,
+            description: "Agendamento confirmado via Plataforma Coroado.",
+            start: { dateTime: startDate.toISOString() },
+            end: { dateTime: endDate.toISOString() }
+          })
+        });
+        if (res.ok) {
+          alert("Aconselhamento aprovado e salvo no seu Google Calendar!");
+        } else {
+          console.error(await res.json());
+          alert("Erro ao salvar no Google Calendar. Token pode ter expirado, reconecte no menu superior.");
+        }
+      } catch (e) {
+        console.error(e);
+      }
+    }
   };
 
   const handleBook = async () => {
@@ -382,8 +409,8 @@ export function PastorsView({ isAdmin, userData, isLoggedIn, onLoginClick }: { i
                                Pastor: {app.pastorName}
                             </div>
                             <div className="flex gap-2 pt-4">
-                              <Button size="sm" variant="outline" className="flex-1 bg-green-500/10 border-green-500/20 text-green-400" onClick={() => updateAppointmentStatus(app.id, 'approved')}>Aprovar</Button>
-                              <Button size="sm" variant="outline" className="flex-1 bg-red-500/10 border-red-500/20 text-red-400" onClick={() => updateAppointmentStatus(app.id, 'declined')}>Rejeitar</Button>
+                              <Button size="sm" variant="outline" className="flex-1 bg-green-500/10 border-green-500/20 text-green-400" onClick={() => updateAppointmentStatus(app, 'approved')}>Aprovar</Button>
+                              <Button size="sm" variant="outline" className="flex-1 bg-red-500/10 border-red-500/20 text-red-400" onClick={() => updateAppointmentStatus(app, 'declined')}>Rejeitar</Button>
                             </div>
                           </CardContent>
                        </Card>

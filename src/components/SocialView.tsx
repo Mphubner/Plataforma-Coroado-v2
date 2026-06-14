@@ -526,7 +526,7 @@ function ProfessionalsTab() {
   );
 }
 
-function AppointmentsTab() {
+function AppointmentsTab({ userData }: { userData: any }) {
   const [appointments, setAppointments] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
@@ -543,9 +543,32 @@ function AppointmentsTab() {
   const socialCount = appointments.filter(a => !a.price).length;
   const clinicalCount = appointments.filter(a => a.price > 0).length;
 
-  const handleUpdateStatus = async (id: string, status: string) => {
+  const handleUpdateStatus = async (app: any, status: string) => {
     try {
-      await updateDoc(doc(db, 'social_appointments', id), { status });
+      await updateDoc(doc(db, 'social_appointments', app.id), { status });
+      if (status === 'approved' && userData?.googleAccessToken) {
+        const startDate = new Date(`${app.date}T${app.time}:00-03:00`);
+        const endDate = new Date(startDate.getTime() + 60 * 60 * 1000);
+        const res = await fetch("https://www.googleapis.com/calendar/v3/calendars/primary/events", {
+          method: "POST",
+          headers: {
+            "Authorization": `Bearer ${userData.googleAccessToken}`,
+            "Content-Type": "application/json"
+          },
+          body: JSON.stringify({
+            summary: `Atendimento Social com ${app.userName}`,
+            description: `Especialidade: ${app.specialty}\nAgendamento confirmado via Plataforma Coroado.`,
+            start: { dateTime: startDate.toISOString() },
+            end: { dateTime: endDate.toISOString() }
+          })
+        });
+        if (res.ok) {
+          alert("Atendimento aprovado e salvo no seu Google Calendar!");
+        } else {
+          console.error(await res.json());
+          alert("Erro ao salvar no Google Calendar. Token pode ter expirado, reconecte no menu superior.");
+        }
+      }
     } catch (e) {
       console.error(e);
       alert('Erro ao atualizar status.');
@@ -637,12 +660,12 @@ function AppointmentsTab() {
                 <div className="flex justify-end gap-2">
                   {app.status === 'pending' && (
                     <>
-                      <Button size="sm" variant="outline" className="h-7 text-[10px] border-green-500/20 text-green-500 hover:bg-green-500/10" onClick={() => handleUpdateStatus(app.id, 'approved')}>Aprovar</Button>
-                      <Button size="sm" variant="outline" className="h-7 text-[10px] border-red-500/20 text-red-500 hover:bg-red-500/10" onClick={() => handleUpdateStatus(app.id, 'declined')}>Recusar</Button>
+                      <Button size="sm" variant="outline" className="h-7 text-[10px] border-green-500/20 text-green-500 hover:bg-green-500/10" onClick={() => handleUpdateStatus(app, 'approved')}>Aprovar</Button>
+                      <Button size="sm" variant="outline" className="h-7 text-[10px] border-red-500/20 text-red-500 hover:bg-red-500/10" onClick={() => handleUpdateStatus(app, 'declined')}>Recusar</Button>
                     </>
                   )}
                   {app.status === 'approved' && (
-                    <Button size="sm" variant="outline" className="h-7 text-[10px] border-blue-500/20 text-blue-500 hover:bg-blue-500/10" onClick={() => handleUpdateStatus(app.id, 'completed')}>Concluir</Button>
+                    <Button size="sm" variant="outline" className="h-7 text-[10px] border-blue-500/20 text-blue-500 hover:bg-blue-500/10" onClick={() => handleUpdateStatus(app, 'completed')}>Concluir</Button>
                   )}
                 </div>
               </div>
@@ -728,7 +751,7 @@ export function SocialView({
             </TabsContent>
 
             <TabsContent value="appointments" className="mt-0 outline-none">
-              <AppointmentsTab />
+              <AppointmentsTab userData={userData} />
             </TabsContent>
           </motion.div>
         </AnimatePresence>

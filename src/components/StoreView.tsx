@@ -155,7 +155,7 @@ const PRODUCTS: Product[] = [
 
 const CATEGORIES = ["Todos", "Vestuário", "Acessórios", "Home", "Livros", "Papelaria", "Ingressos", "Missões"];
 
-function StoreOrdersTab({ tenantId }: { tenantId: string }) {
+function StoreOrdersTab({ tenantId, userData }: { tenantId: string; userData: any }) {
   const [orders, setOrders] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -238,7 +238,35 @@ function StoreOrdersTab({ tenantId }: { tenantId: string }) {
                    size="sm" 
                    variant="outline" 
                    className="text-xs bg-white/5 border-white/10"
-                   onClick={() => alert("Integração com Google Tasks a ser implementada na Fase Google.")}
+                   onClick={async () => {
+                     if (!userData?.googleAccessToken) {
+                       alert("Você precisa conectar sua conta do Google Workspace no menu superior primeiro para delegar tarefas.");
+                       return;
+                     }
+                     try {
+                       const res = await fetch("https://tasks.googleapis.com/tasks/v1/lists/@default/tasks", {
+                         method: "POST",
+                         headers: {
+                           "Authorization": `Bearer ${userData.googleAccessToken}`,
+                           "Content-Type": "application/json"
+                         },
+                         body: JSON.stringify({
+                           title: `[Loja] Separar Pedido #${order.id.substring(0, 8).toUpperCase()}`,
+                           notes: `Cliente: ${order.userName}\nValor: R$ ${order.total}\nItens:\n${order.items.map((i: any) => `- ${i.quantity}x ${i.name}`).join('\n')}`
+                         })
+                       });
+                       if (res.ok) {
+                         alert("Tarefa delegada e criada no seu Google Tasks com sucesso!");
+                       } else {
+                         const errorData = await res.json();
+                         console.error(errorData);
+                         alert("Erro ao criar tarefa no Google Tasks. O token pode ter expirado, reconecte no menu superior.");
+                       }
+                     } catch (e) {
+                       console.error(e);
+                       alert("Erro ao comunicar com Google Tasks.");
+                     }
+                   }}
                  >
                    Delegar Tarefa (Google Tasks)
                  </Button>
@@ -520,7 +548,7 @@ export function StoreView({ isAdmin = false, userData }: StoreViewProps) {
       )}
 
       {storeTab === 'orders' && isAdmin && (
-        <StoreOrdersTab tenantId={tenantId} />
+        <StoreOrdersTab tenantId={userData?.tenantId || 'tenant-1'} userData={userData} />
       )}
 
       {storeTab === 'admin' && isAdmin ? (
