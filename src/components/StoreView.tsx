@@ -22,7 +22,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Separator } from '@/components/ui/separator';
 import { cn } from '@/lib/utils';
 import { auth, db } from '@/lib/firebase';
-import { collection, query, where, onSnapshot, addDoc, deleteDoc, doc, writeBatch, serverTimestamp } from 'firebase/firestore';
+import { collection, query, where, onSnapshot, addDoc, updateDoc, deleteDoc, doc, writeBatch, serverTimestamp } from 'firebase/firestore';
 import ReactQrCode from 'react-qr-code';
 
 interface StoreViewProps {
