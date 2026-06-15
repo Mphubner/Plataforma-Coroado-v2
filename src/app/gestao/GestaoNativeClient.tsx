@@ -93,7 +93,7 @@ export function GestaoNativeClient() {
             </TabsContent>
 
             <TabsContent value="planning" className="space-y-6 mt-0">
-              <AdminPlanningKanban />
+              <AdminPlanningKanban userData={userData} />
             </TabsContent>
 
             <TabsContent value="automations" className="space-y-6 mt-0">

@@ -16,11 +16,13 @@ const limit = limitArg ? Number(limitArg.split('=')[1]) : 5000;
 const databaseUrl = process.env.DATABASE_URL || process.env.CLOUD_SQL_DATABASE_URL || '';
 const cloudSqlConnectionName = process.env.CLOUD_SQL_CONNECTION_NAME || 'gen-lang-client-0529830528:us-east1:gen-lang-client-0529830528-instance';
 const cloudSqlDatabase = process.env.CLOUD_SQL_DATABASE || 'gen-lang-client-0529830528-database';
+const cloudSqlPostgresVersion = process.env.CLOUD_SQL_POSTGRES_VERSION || '18';
 const cloudSqlUser = process.env.CLOUD_SQL_USER || process.env.DB_USER || '';
 const cloudSqlPassword = process.env.CLOUD_SQL_PASSWORD || process.env.DB_PASSWORD || '';
 const cloudSqlHost = process.env.CLOUD_SQL_HOST || process.env.DB_HOST || '';
 const cloudSqlPort = Number(process.env.CLOUD_SQL_PORT || process.env.DB_PORT || 5432);
 const cloudSqlSocketDir = process.env.CLOUD_SQL_SOCKET_DIR || '/cloudsql';
+const defaultTenantId = process.env.DEFAULT_TENANT_ID || process.env.PLATFORM_TENANT_ID || 'tenant-1';
 
 function buildClientConfig(): ClientConfig | null {
   if (databaseUrl) {
@@ -65,6 +67,10 @@ function asText(value: any, fallback = '') {
   return String(value ?? fallback).trim();
 }
 
+function tenantId(value: any) {
+  return asText(value, defaultTenantId) || defaultTenantId;
+}
+
 async function readCollection(name: string) {
   const snap = await getAdminDb().collection(name).limit(limit).get();
   return snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
@@ -95,7 +101,7 @@ async function syncDimensions(client: Client) {
   const units = await readCollection(COLLECTIONS.units);
   for (const unit of units as any[]) {
     await upsert(client, 'coroado_bi.dim_tenant', 'tenant_id', {
-      tenant_id: asText(unit.id || unit.tenantId, 'tenant-1'),
+      tenant_id: tenantId(unit.id || unit.tenantId),
       name: asText(unit.name, 'Igreja Coroado'),
       city: asText(unit.city),
       state: asText(unit.state),
@@ -105,7 +111,7 @@ async function syncDimensions(client: Client) {
   }
 
   await upsert(client, 'coroado_bi.dim_tenant', 'tenant_id', {
-    tenant_id: 'tenant-1',
+    tenant_id: defaultTenantId,
     name: 'Igreja Coroado',
     city: '',
     state: '',
@@ -117,7 +123,7 @@ async function syncDimensions(client: Client) {
   for (const user of users as any[]) {
     await upsert(client, 'coroado_bi.dim_member', 'member_id', {
       member_id: user.id,
-      tenant_id: asText(user.tenantId, 'tenant-1'),
+      tenant_id: tenantId(user.tenantId),
       name: asText(user.name || user.displayName),
       email: asText(user.email),
       primary_role: Array.isArray(user.roles) ? asText(user.roles[0]) : asText(user.role),
@@ -133,7 +139,7 @@ async function syncDimensions(client: Client) {
   for (const course of courses as any[]) {
     await upsert(client, 'coroado_bi.dim_course', 'course_id', {
       course_id: course.id,
-      tenant_id: asText(course.tenantId, 'tenant-1'),
+      tenant_id: tenantId(course.tenantId),
       title: asText(course.title, 'Curso'),
       category: asText(course.category),
       status: asText(course.status),
@@ -148,7 +154,7 @@ async function syncDimensions(client: Client) {
   for (const event of events as any[]) {
     await upsert(client, 'coroado_bi.dim_event', 'event_id', {
       event_id: event.id,
-      tenant_id: asText(event.tenantId, 'tenant-1'),
+      tenant_id: tenantId(event.tenantId),
       title: asText(event.title, 'Evento'),
       category: asText(event.category || event.type),
       starts_at: toIso(event.date),
@@ -173,7 +179,7 @@ async function syncFacts(client: Client) {
       provider_payment_id: asText(event.paymentId),
       reference_id: asText(event.referenceId),
       target_type: asText(event.targetType),
-      tenant_id: asText(event.tenantId, 'tenant-1'),
+      tenant_id: tenantId(event.tenantId),
       status: asText(event.status),
       amount: asNumber(event.amount),
       received_at: toIso(event.receivedAt),
@@ -185,7 +191,7 @@ async function syncFacts(client: Client) {
   for (const tx of transactions as any[]) {
     await upsert(client, 'coroado_bi.fact_transaction', 'transaction_id', {
       transaction_id: tx.id,
-      tenant_id: asText(tx.tenantId, 'tenant-1'),
+      tenant_id: tenantId(tx.tenantId),
       member_id: asText(tx.userId),
       source: asText(tx.source, 'firestore'),
       type: asText(tx.type),
@@ -207,7 +213,7 @@ async function syncFacts(client: Client) {
   for (const order of orders as any[]) {
     await upsert(client, 'coroado_bi.fact_order', 'order_id', {
       order_id: order.id,
-      tenant_id: asText(order.tenantId, 'tenant-1'),
+      tenant_id: tenantId(order.tenantId),
       member_id: asText(order.userId),
       status: asText(order.status),
       payment_status: asText(order.paymentStatus),
@@ -223,7 +229,7 @@ async function syncFacts(client: Client) {
   for (const enrollment of eventEnrollments as any[]) {
     await upsert(client, 'coroado_bi.fact_event_enrollment', 'enrollment_id', {
       enrollment_id: enrollment.id,
-      tenant_id: asText(enrollment.tenantId, 'tenant-1'),
+      tenant_id: tenantId(enrollment.tenantId),
       event_id: asText(enrollment.eventId),
       member_id: asText(enrollment.userId),
       payment_status: asText(enrollment.paymentStatus),
@@ -239,7 +245,7 @@ async function syncFacts(client: Client) {
   for (const report of cellReports as any[]) {
     await upsert(client, 'coroado_bi.fact_cell_report', 'report_id', {
       report_id: report.id,
-      tenant_id: asText(report.tenantId, 'tenant-1'),
+      tenant_id: tenantId(report.tenantId),
       cell_id: asText(report.cellId),
       report_date: toDate(report.date || report.createdAt),
       meeting_type: asText(report.meetingType || report.type),
@@ -264,7 +270,7 @@ async function syncFacts(client: Client) {
     const total = totalLessonsByCourse.get(asText(enrollment.courseId)) || completed || 0;
     await upsert(client, 'coroado_bi.fact_school_progress', 'enrollment_id', {
       enrollment_id: enrollment.id,
-      tenant_id: asText(enrollment.tenantId, 'tenant-1'),
+      tenant_id: tenantId(enrollment.tenantId),
       course_id: asText(enrollment.courseId),
       member_id: asText(enrollment.userId),
       completed_lessons: completed,
@@ -279,7 +285,7 @@ async function syncFacts(client: Client) {
   for (const subscription of subscriptions as any[]) {
     await upsert(client, 'coroado_bi.fact_subscription', 'subscription_id', {
       subscription_id: subscription.id,
-      tenant_id: asText(subscription.tenantId, 'tenant-1'),
+      tenant_id: tenantId(subscription.tenantId),
       member_id: asText(subscription.userId || subscription.memberId),
       provider: asText(subscription.provider, 'mercadopago'),
       provider_subscription_id: asText(subscription.mpSubscriptionId || subscription.providerSubscriptionId),
@@ -295,7 +301,7 @@ async function syncFacts(client: Client) {
   for (const access of learningAccess as any[]) {
     await upsert(client, 'coroado_bi.fact_learning_access', 'access_id', {
       access_id: access.id,
-      tenant_id: asText(access.tenantId, 'tenant-1'),
+      tenant_id: tenantId(access.tenantId),
       member_id: asText(access.userId || access.memberId),
       target_type: asText(access.targetType),
       target_id: asText(access.targetId),
@@ -332,13 +338,15 @@ async function main() {
         cloudSql: {
           connectionName: cloudSqlConnectionName,
           database: cloudSqlDatabase,
+          postgresVersion: cloudSqlPostgresVersion,
           hostMode: cloudSqlHost ? 'tcp' : 'cloudsql-socket',
+          defaultTenantId,
         },
       }, null, 2));
       return;
     }
 
-    throw new Error('Informe DATABASE_URL/CLOUD_SQL_DATABASE_URL ou CLOUD_SQL_USER + CLOUD_SQL_PASSWORD para sincronizar SQL/BI.');
+    throw new Error('Informe DATABASE_URL/CLOUD_SQL_DATABASE_URL ou CLOUD_SQL_USER + CLOUD_SQL_PASSWORD para sincronizar o PostgreSQL/BI.');
   }
 
   const client = new Client(clientConfig);

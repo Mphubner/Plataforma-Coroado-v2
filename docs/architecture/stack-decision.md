@@ -11,7 +11,7 @@ Motivos:
 - App Router traz rotas por arquivo, layouts, loading states, Server Components e APIs no mesmo projeto.
 - O BFF Node/tRPC reduz regra sensivel no cliente e conversa naturalmente com Firebase Admin SDK e Mercado Pago.
 - Firestore continua como banco operacional em tempo real.
-- Cloud SQL/PostgreSQL entra como camada analitica/BI, nao como troca brusca do banco operacional.
+- Cloud SQL/PostgreSQL 18 entra como camada analitica/BI, nao como troca brusca do banco operacional.
 
 ## FastAPI e microservicos
 
@@ -29,7 +29,7 @@ O caminho correto e uma arquitetura modular que possa virar microservicos quando
 
 - `web`: Next.js, React, UI premium, motion e rotas.
 - `bff`: Node.js/tRPC/REST para autenticacao, permissao, pagamentos e operacoes da plataforma.
-- `worker-bi`: sincronizacao Firestore -> Cloud SQL.
+- `worker-bi`: sincronizacao Firestore -> Cloud SQL PostgreSQL 18.
 - `ai-service` futuro: FastAPI para IA, recomendacoes, analises e automacoes pesadas.
 - `integrations` futuro: webhooks, notificacoes, WhatsApp e jobs agendados.
 
@@ -48,5 +48,5 @@ Extrair um servico separado apenas quando pelo menos dois destes pontos forem ve
 - Next.js ja tem rotas explicitas.
 - Financeiro iniciou a primeira pagina Next nativa.
 - BFF ja cobre pagamentos, Escola, check-in, progresso e conciliacao.
-- Cloud SQL foi registrado como destino BI.
+- Cloud SQL PostgreSQL 18 foi registrado como destino BI.
 - O proximo passo e migrar Eventos ou Escola para pagina Next nativa com dados do BFF.

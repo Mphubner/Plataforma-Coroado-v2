@@ -7,6 +7,7 @@ dotenv.config();
 const app = initializeApp();
 const firestoreDatabaseId = process.env.FIRESTORE_DATABASE_ID || 'ai-studio-534c2e7e-8664-4b76-95e3-faf31fc1628b';
 const db = getFirestore(app, firestoreDatabaseId);
+const defaultTenantId = process.env.DEFAULT_TENANT_ID || process.env.PLATFORM_TENANT_ID || 'tenant-1';
 
 const ACTION_PLANS = [
   // Comunicação e Mídias
@@ -19,7 +20,7 @@ const ACTION_PLANS = [
     budget: 500,
     due_date: '2026-07-15',
     status: 'Pendente',
-    tenantId: 'tenant-1'
+    tenantId: defaultTenantId
   },
   {
     group_department: 'Comunicação e Mídias',
@@ -30,7 +31,7 @@ const ACTION_PLANS = [
     budget: 15000,
     due_date: '2026-08-10',
     status: 'Pendente',
-    tenantId: 'tenant-1'
+    tenantId: defaultTenantId
   },
   // Capacitação e Escola Bíblica
   {
@@ -42,7 +43,7 @@ const ACTION_PLANS = [
     budget: 1200,
     due_date: '2026-07-20',
     status: 'Pendente',
-    tenantId: 'tenant-1'
+    tenantId: defaultTenantId
   },
   {
     group_department: 'Capacitação e Escola Bíblica',
@@ -53,7 +54,7 @@ const ACTION_PLANS = [
     budget: 800,
     due_date: '2026-09-05',
     status: 'Pendente',
-    tenantId: 'tenant-1'
+    tenantId: defaultTenantId
   },
   // Planejamento Financeiro e Obras
   {
@@ -65,7 +66,7 @@ const ACTION_PLANS = [
     budget: 25000,
     due_date: '2026-10-15',
     status: 'Pendente',
-    tenantId: 'tenant-1'
+    tenantId: defaultTenantId
   },
   {
     group_department: 'Planejamento Financeiro e Obras',
@@ -76,7 +77,7 @@ const ACTION_PLANS = [
     budget: 0,
     due_date: '2026-08-01',
     status: 'Pendente',
-    tenantId: 'tenant-1'
+    tenantId: defaultTenantId
   },
   // Ação Social
   {
@@ -88,7 +89,7 @@ const ACTION_PLANS = [
     budget: 300,
     due_date: '2026-11-20',
     status: 'Pendente',
-    tenantId: 'tenant-1'
+    tenantId: defaultTenantId
   }
 ];
 

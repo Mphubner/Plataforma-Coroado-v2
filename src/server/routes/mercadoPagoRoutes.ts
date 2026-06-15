@@ -2,7 +2,7 @@ import type express from 'express';
 import { createHmac, timingSafeEqual } from 'node:crypto';
 import admin from 'firebase-admin';
 import { COLLECTIONS } from '../../lib/domain';
-import { cleanString, getAdminDb, getMercadoPagoAccessToken, getMercadoPagoWebhookSecret } from '../context';
+import { cleanString, DEFAULT_TENANT_ID, getAdminDb, getMercadoPagoAccessToken, getMercadoPagoWebhookSecret } from '../context';
 import { recordPaymentEvent } from '../operations';
 
 function toTransactionStatus(paymentStatus: string) {
@@ -93,7 +93,7 @@ async function processPreapprovalWebhook(preapprovalId: string) {
   const subscriptionSnap = await subscriptionRef.get();
   const current = subscriptionSnap.data() || {};
   const userId = cleanString(current.userId || subscriptionId.replace(/^school_/, ''), 128);
-  const tenantId = cleanString(current.tenantId, 128) || 'tenant-1';
+  const tenantId = cleanString(current.tenantId, 128) || DEFAULT_TENANT_ID;
   const active = ['authorized', 'active'].includes(status);
 
   await subscriptionRef.set({

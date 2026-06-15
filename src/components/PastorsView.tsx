@@ -17,47 +17,9 @@ import {
   updateTaskStatus,
 } from '@/src/lib/services/pastoralService';
 
-const PASTORS = [
-  {
-    id: 'rafael',
-    name: 'Rafael Vaillant',
-    role: 'Pastor Presidente',
-    image: 'https://i.imgur.com/guYg9mA.png',
-    bookingUrl: 'https://calendly.com/coroado/rafael',
-    social: {
-      facebook: 'https://www.facebook.com/rafael.vaillant',
-      instagram: 'https://www.instagram.com/rafaelvaillant.coroado/',
-      youtube: 'https://www.youtube.com/@IgrejaCoroado'
-    }
-  },
-  {
-    id: 'fabricio',
-    name: 'Fabricio Campos',
-    role: 'Pastor de Rede',
-    image: 'https://imgur.com/N4sRBgl.png',
-    bookingUrl: 'https://calendly.com/coroado/fabricio',
-    social: {
-      facebook: '#',
-      instagram: '#',
-      youtube: 'https://www.youtube.com/@IgrejaCoroado'
-    }
-  },
-  {
-    id: 'alan',
-    name: 'Alan Vaz',
-    role: 'Pastor de Rede',
-    image: 'https://i.imgur.com/dpggKK7.png',
-    bookingUrl: 'https://calendly.com/coroado/alan',
-    social: {
-      facebook: '#',
-      instagram: '#',
-      youtube: 'https://www.youtube.com/@IgrejaCoroado'
-    }
-  }
-];
-
 export function PastorsView({ isAdmin, userData, isLoggedIn, onLoginClick }: { isAdmin?: boolean; userData?: any; isLoggedIn?: boolean; onLoginClick?: () => void }) {
-  const [pastorsList, setPastorsList] = useState<any[]>(PASTORS);
+  const [pastorsList, setPastorsList] = useState<any[]>([]);
+  const [pastorsError, setPastorsError] = useState('');
   const [selectedPastor, setSelectedPastor] = useState<any | null>(null);
   const [selectedDate, setSelectedDate] = useState<string>('');
   const [selectedTime, setSelectedTime] = useState<string>('');
@@ -93,6 +55,10 @@ export function PastorsView({ isAdmin, userData, isLoggedIn, onLoginClick }: { i
 
   const handleSavePastor = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!userData?.tenantId) {
+      alert('Seu perfil ainda nao esta vinculado a uma unidade.');
+      return;
+    }
     try {
       const pData = {
         name: editingPastor.name,
@@ -102,10 +68,10 @@ export function PastorsView({ isAdmin, userData, isLoggedIn, onLoginClick }: { i
         availableTimes: typeof editingPastor.availableTimes === 'string' 
            ? editingPastor.availableTimes.split(',').map((t: string) => t.trim()) 
            : (editingPastor.availableTimes || []),
-        tenantId: userData?.tenantId || 'tenant-1'
+        tenantId: userData.tenantId
       };
 
-      if (editingPastor.id && editingPastor.id !== 'rafael' && editingPastor.id !== 'fabricio' && editingPastor.id !== 'alan') {
+      if (editingPastor.id) {
         await updateDoc(doc(db, 'pastors', editingPastor.id), { ...pData, updatedAt: serverTimestamp() });
       } else {
         await addDoc(collection(db, 'pastors'), { ...pData, createdAt: serverTimestamp(), updatedAt: serverTimestamp() });
@@ -119,7 +85,6 @@ export function PastorsView({ isAdmin, userData, isLoggedIn, onLoginClick }: { i
   };
 
   const handleDeletePastor = async (id: string) => {
-    if (id === 'rafael' || id === 'fabricio' || id === 'alan') return alert('Pastores padrão mockados não podem ser excluídos, exclua apenas os do banco de dados.');
     if (confirm('Excluir pastor?')) {
       await deleteDoc(doc(db, 'pastors', id));
     }
@@ -135,6 +100,7 @@ export function PastorsView({ isAdmin, userData, isLoggedIn, onLoginClick }: { i
        return;
     }
     if (!selectedDate || !selectedTime) return alert("Selecione data e hora.");
+    if (!userData?.tenantId) return alert("Seu perfil ainda nao esta vinculado a uma unidade.");
     setIsSubmitting(true);
     try {
       const token = await auth.currentUser?.getIdToken();
@@ -143,7 +109,7 @@ export function PastorsView({ isAdmin, userData, isLoggedIn, onLoginClick }: { i
         pastorName: selectedPastor?.name || 'Pastor Plantonista',
         userId: userData?.id || '',
         userName: userData?.name || 'Membro',
-        tenantId: userData?.tenantId || 'tenant-1',
+        tenantId: userData.tenantId,
         date: selectedDate,
         time: selectedTime,
       };
@@ -203,11 +169,12 @@ export function PastorsView({ isAdmin, userData, isLoggedIn, onLoginClick }: { i
     if (userData?.tenantId) {
       const q = query(collection(db, 'pastors'), where('tenantId', '==', userData.tenantId));
       unsubPastors = onSnapshot(q, (snap) => {
-        if (!snap.empty) {
-          setPastorsList(snap.docs.map(doc => ({ id: doc.id, ...doc.data() })));
-        } else {
-          setPastorsList(PASTORS);
-        }
+        setPastorsList(snap.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+        setPastorsError('');
+      }, (error) => {
+        console.error(error);
+        setPastorsList([]);
+        setPastorsError('Nao foi possivel carregar os pastores agora.');
       });
 
       if (isAdmin || userData?.profileType === 'pastor') {
@@ -228,7 +195,7 @@ export function PastorsView({ isAdmin, userData, isLoggedIn, onLoginClick }: { i
         });
       }
     } else {
-      setPastorsList(PASTORS);
+      setPastorsList([]);
     }
 
     return () => { unsubPastors(); unsubApps(); unsubTasks(); };
@@ -311,7 +278,13 @@ export function PastorsView({ isAdmin, userData, isLoggedIn, onLoginClick }: { i
 
             <TabsContent value="list" className="mt-0">
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
-          {pastorsList.map((pastor, index) => (
+          {pastorsList.length === 0 ? (
+            <div className="md:col-span-2 lg:col-span-3 text-center p-12 bg-zinc-900 border border-white/10 border-dashed rounded-[2.5rem]">
+              <Users className="w-12 h-12 text-white/20 mx-auto mb-4" />
+              <h3 className="text-xl font-bold text-white mb-2">Nenhum pastor cadastrado</h3>
+              <p className="text-white/60">{pastorsError || 'Cadastre os pastores reais para liberar agenda, tarefas e cuidado pastoral.'}</p>
+            </div>
+          ) : pastorsList.map((pastor, index) => (
             <motion.div
               key={pastor.id}
               initial={{ opacity: 0, y: 20 }}
@@ -337,7 +310,7 @@ export function PastorsView({ isAdmin, userData, isLoggedIn, onLoginClick }: { i
                   
                   {/* Social Links */}
                   <div className="flex items-center gap-3 pt-2">
-                    {pastor.social.facebook !== '#' && (
+                    {pastor.social?.facebook && pastor.social.facebook !== '#' && (
                       <motion.a 
                         whileHover={{ scale: 1.1 }}
                         whileTap={{ scale: 0.9 }}
@@ -349,7 +322,7 @@ export function PastorsView({ isAdmin, userData, isLoggedIn, onLoginClick }: { i
                         <Facebook className="w-5 h-5" />
                       </motion.a>
                     )}
-                    {pastor.social.instagram !== '#' && (
+                    {pastor.social?.instagram && pastor.social.instagram !== '#' && (
                       <motion.a 
                         whileHover={{ scale: 1.1 }}
                         whileTap={{ scale: 0.9 }}
@@ -361,7 +334,7 @@ export function PastorsView({ isAdmin, userData, isLoggedIn, onLoginClick }: { i
                         <Instagram className="w-5 h-5" />
                       </motion.a>
                     )}
-                    {pastor.social.youtube !== '#' && (
+                    {pastor.social?.youtube && pastor.social.youtube !== '#' && (
                       <motion.a 
                         whileHover={{ scale: 1.1 }}
                         whileTap={{ scale: 0.9 }}
@@ -496,12 +469,18 @@ export function PastorsView({ isAdmin, userData, isLoggedIn, onLoginClick }: { i
             </TabsContent>
 
             <TabsContent value="care" className="mt-0">
-              <PastoralCareView isLoggedIn={true} userData={{ tenantId: 'tenant-1' }} />
+              <PastoralCareView isLoggedIn={true} userData={userData} />
             </TabsContent>
           </Tabs>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {pastorsList.map(pastor => (
+            {pastorsList.length === 0 ? (
+              <div className="md:col-span-2 lg:col-span-3 text-center p-12 bg-zinc-900 border border-white/10 border-dashed rounded-[2.5rem]">
+                <Users className="w-12 h-12 text-white/20 mx-auto mb-4" />
+                <h3 className="text-xl font-bold text-white mb-2">Nenhum pastor cadastrado</h3>
+                <p className="text-white/60">{pastorsError || 'A liderança pastoral sera exibida aqui quando os cadastros reais forem inseridos.'}</p>
+              </div>
+            ) : pastorsList.map(pastor => (
               <div key={pastor.id} className="bg-zinc-900 border border-white/10 rounded-3xl p-6">
                 <div className="flex items-center gap-4">
                   <img src={pastor.image} alt={pastor.name} className="w-16 h-16 rounded-full border-2 border-primary/20 object-cover" />

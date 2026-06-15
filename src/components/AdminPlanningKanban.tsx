@@ -8,7 +8,7 @@ import { collection, query, where, onSnapshot, getDocs } from "firebase/firestor
 import { motion, AnimatePresence } from "motion/react";
 import { createTask, updateTaskDetails } from "@/src/lib/services/planningService";
 
-export function AdminPlanningKanban() {
+export function AdminPlanningKanban({ userData }: { userData?: any }) {
   const [tenantId, setTenantId] = useState<string | null>(null);
   const [plans, setPlans] = useState<any[]>([]);
   const [members, setMembers] = useState<any[]>([]);
@@ -30,11 +30,10 @@ export function AdminPlanningKanban() {
   const [expandedProbs, setExpandedProbs] = useState<Record<string, boolean>>({});
 
   useEffect(() => {
-    if (!auth.currentUser) return;
-    auth.currentUser.getIdTokenResult().then(token => {
-       setTenantId(token.claims.tenantId as string);
-    });
-  }, []);
+    if (userData?.tenantId) {
+      setTenantId(userData.tenantId);
+    }
+  }, [userData?.tenantId]);
 
   useEffect(() => {
     if (!tenantId) return;

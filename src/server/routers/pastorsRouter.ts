@@ -47,7 +47,7 @@ export const pastorsRouter = t.router({
         updatedAt: FieldValue.serverTimestamp()
       };
 
-      if (id && !['rafael', 'fabricio', 'alan'].includes(id)) {
+      if (id) {
         await db.collection('pastors').doc(id).update(docData);
         return { id };
       } else {
@@ -61,9 +61,6 @@ export const pastorsRouter = t.router({
     .input(z.object({ id: z.string() }))
     .mutation(async ({ ctx, input }) => {
       requirePastorAdmin(ctx);
-      if (['rafael', 'fabricio', 'alan'].includes(input.id)) {
-        throw new TRPCError({ code: 'FORBIDDEN', message: 'Pastores padrão mockados não podem ser excluídos.' });
-      }
       const db = getAdminDb();
       const ref = db.collection('pastors').doc(input.id);
       const snap = await ref.get();

@@ -146,11 +146,19 @@ export const escolaRouter = t.router({
       }
 
       // Proceed to enroll
+      const tenantId = courseData?.tenantId || ctx.auth.tenantId;
+      if (!tenantId) {
+        throw new TRPCError({
+          code: 'PRECONDITION_FAILED',
+          message: 'Curso ou usuario sem unidade/tenant configurado.',
+        });
+      }
+
       const newRef = db.collection(COLLECTIONS.enrollments).doc();
       await newRef.set({
         userId: ctx.auth.uid,
         courseId: input.courseId,
-        tenantId: courseData?.tenantId || ctx.auth.tenantId || 'tenant-1',
+        tenantId,
         progress: 0,
         status: 'in-progress',
         completedLessons: [],
