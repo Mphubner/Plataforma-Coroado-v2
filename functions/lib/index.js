@@ -1,10 +1,11 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.updateUserAccess = exports.mpWebhook = exports.createSubscription = exports.createPreference = void 0;
+exports.syncFirestoreToSql = exports.updateUserAccess = exports.mpWebhook = exports.createSubscription = exports.createPreference = void 0;
 const functions = require("firebase-functions");
 const admin = require("firebase-admin");
 const firestore_1 = require("firebase-admin/firestore");
 const mercadopago_1 = require("mercadopago");
+const node_crypto_1 = require("node:crypto");
 admin.initializeApp();
 const firestoreDatabaseId = process.env.FIRESTORE_DATABASE_ID || 'ai-studio-534c2e7e-8664-4b76-95e3-faf31fc1628b';
 function db() {
@@ -17,21 +18,76 @@ function getMpAccessToken() {
     }
     return token;
 }
+function getMpWebhookSecret() {
+    return process.env.MERCADOPAGO_WEBHOOK_SECRET || process.env.MP_WEBHOOK_SECRET || '';
+}
 function getMpClient() {
     return new mercadopago_1.MercadoPagoConfig({
         accessToken: getMpAccessToken(),
         options: { timeout: 5000 }
     });
 }
+function readHeader(req, name) {
+    const value = req.headers[name.toLowerCase()];
+    if (Array.isArray(value))
+        return value[0] || '';
+    return typeof value === 'string' ? value : '';
+}
+function parseSignatureHeader(header) {
+    return header.split(',').reduce((acc, part) => {
+        const [key, value] = part.split('=').map(item => item.trim());
+        if (key && value)
+            acc[key] = value;
+        return acc;
+    }, {});
+}
+function validateMercadoPagoSignature(req, notificationId) {
+    const secret = getMpWebhookSecret();
+    if (!secret) {
+        return {
+            ok: process.env.NODE_ENV !== 'production',
+            reason: 'missing_webhook_secret',
+        };
+    }
+    const signature = parseSignatureHeader(readHeader(req, 'x-signature'));
+    const requestId = readHeader(req, 'x-request-id');
+    const ts = signature.ts;
+    const v1 = signature.v1;
+    if (!ts || !v1 || !requestId) {
+        return { ok: false, reason: 'missing_signature_headers' };
+    }
+    const manifest = [
+        notificationId ? `id:${notificationId.toLowerCase()}` : '',
+        `request-id:${requestId}`,
+        `ts:${ts}`,
+    ].filter(Boolean).join(';') + ';';
+    const expected = (0, node_crypto_1.createHmac)('sha256', secret).update(manifest).digest('hex');
+    const expectedBuffer = Buffer.from(expected, 'hex');
+    const receivedBuffer = Buffer.from(v1, 'hex');
+    if (expectedBuffer.length !== receivedBuffer.length) {
+        return { ok: false, reason: 'signature_length_mismatch' };
+    }
+    return {
+        ok: (0, node_crypto_1.timingSafeEqual)(expectedBuffer, receivedBuffer),
+        reason: 'signature_checked',
+    };
+}
 exports.createPreference = functions.https.onCall(async (data, context) => {
     if (!context.auth) {
         throw new functions.https.HttpsError('unauthenticated', 'User must be authenticated.');
     }
-    const { eventId, amount, title, enrollmentId } = data;
-    if (!eventId || !amount || !enrollmentId) {
+    const { eventId, enrollmentId } = data;
+    if (!eventId || !enrollmentId) {
         throw new functions.https.HttpsError('invalid-argument', 'Missing required parameters.');
     }
     try {
+        const eventSnap = await db().collection('events').doc(eventId).get();
+        const eventData = eventSnap.data() || {};
+        const amount = Number(eventData.price || eventData.amount || 0);
+        const title = String(eventData.title || 'Ingresso Evento').slice(0, 120);
+        if (!eventSnap.exists || !Number.isFinite(amount) || amount <= 0) {
+            throw new functions.https.HttpsError('failed-precondition', 'Event price is not configured.');
+        }
         const preference = new mercadopago_1.Preference(getMpClient());
         const response = await preference.create({
             body: {
@@ -62,6 +118,9 @@ exports.createPreference = functions.https.onCall(async (data, context) => {
         };
     }
     catch (error) {
+        if (error instanceof functions.https.HttpsError) {
+            throw error;
+        }
         console.error('Error creating preference:', error);
         throw new functions.https.HttpsError('internal', 'Unable to create preference.');
     }
@@ -70,11 +129,20 @@ exports.createSubscription = functions.https.onCall(async (data, context) => {
     if (!context.auth) {
         throw new functions.https.HttpsError('unauthenticated', 'User must be authenticated.');
     }
-    const { planTitle, amount, enrollmentId } = data;
-    if (!amount || !enrollmentId) {
+    const { planTitle, enrollmentId, planId } = data;
+    if (!enrollmentId) {
         throw new functions.https.HttpsError('invalid-argument', 'Missing required parameters.');
     }
     try {
+        let amount = Number(process.env.SCHOOL_IDE_MONTHLY_PRICE || 0);
+        if (planId) {
+            const planSnap = await db().collection('plans').doc(String(planId)).get();
+            const planData = planSnap.data() || {};
+            amount = Number(planData.price || planData.monthlyPrice || amount);
+        }
+        if (!Number.isFinite(amount) || amount <= 0) {
+            throw new functions.https.HttpsError('failed-precondition', 'Subscription price is not configured.');
+        }
         const preApproval = new mercadopago_1.PreApproval(getMpClient());
         const response = await preApproval.create({
             body: {
@@ -96,6 +164,9 @@ exports.createSubscription = functions.https.onCall(async (data, context) => {
         };
     }
     catch (error) {
+        if (error instanceof functions.https.HttpsError) {
+            throw error;
+        }
         console.error('Error creating subscription:', error);
         throw new functions.https.HttpsError('internal', 'Unable to create subscription.');
     }
@@ -104,9 +175,13 @@ exports.mpWebhook = functions.https.onRequest(async (req, res) => {
     const { type, data } = req.body;
     if (type === 'payment' && data && data.id) {
         try {
-            // In a real scenario, you should verify the signature here to ensure the webhook is from MP
-            // Also, fetch the payment details from MP API using the data.id to ensure its status
             const paymentId = data.id;
+            const signatureValidation = validateMercadoPagoSignature(req, String(paymentId));
+            if (!signatureValidation.ok) {
+                console.warn('Mercado Pago webhook rejected:', signatureValidation.reason);
+                res.status(401).send('Invalid signature');
+                return;
+            }
             const response = await fetch(`https://api.mercadopago.com/v1/payments/${paymentId}`, {
                 headers: {
                     Authorization: `Bearer ${getMpAccessToken()}`
@@ -131,6 +206,12 @@ exports.mpWebhook = functions.https.onRequest(async (req, res) => {
     else if (type === 'subscription_preapproval' && data && data.id) {
         try {
             const subId = data.id;
+            const signatureValidation = validateMercadoPagoSignature(req, String(subId));
+            if (!signatureValidation.ok) {
+                console.warn('Mercado Pago subscription webhook rejected:', signatureValidation.reason);
+                res.status(401).send('Invalid signature');
+                return;
+            }
             const response = await fetch(`https://api.mercadopago.com/preapproval/${subId}`, {
                 headers: {
                     Authorization: `Bearer ${getMpAccessToken()}`
@@ -216,4 +297,6 @@ exports.updateUserAccess = functions.https.onCall(async (data, context) => {
         throw new functions.https.HttpsError('internal', 'Unable to update user access.');
     }
 });
+var sync_firestore_to_sql_1 = require("./sync-firestore-to-sql");
+Object.defineProperty(exports, "syncFirestoreToSql", { enumerable: true, get: function () { return sync_firestore_to_sql_1.syncFirestoreToSql; } });
 //# sourceMappingURL=index.js.map

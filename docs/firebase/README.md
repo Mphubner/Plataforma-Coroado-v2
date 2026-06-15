@@ -21,7 +21,7 @@ O backend/BFF e o worker passam a usar o mesmo databaseId por `FIRESTORE_DATABAS
 
 ## Sobre DATABASE_URL
 
-`DATABASE_URL` e `CLOUD_SQL_DATABASE_URL` sao para a camada SQL/BI em PostgreSQL/Cloud SQL.
+`DATABASE_URL` e `CLOUD_SQL_DATABASE_URL` sao para a camada SQL/BI em PostgreSQL 18 no Cloud SQL.
 Elas ainda sao opcionais: o Firestore segue como banco operacional.
 
 Quando o Cloud SQL/SQL Connect for criado, preencher uma dessas variaveis e executar:
@@ -30,3 +30,5 @@ Quando o Cloud SQL/SQL Connect for criado, preencher uma dessas variaveis e exec
 2. `npm run sync:bi`
 
 Enquanto nao houver URL SQL, o comando `npm run sync:bi -- --dry-run` valida o worker sem tentar upserts.
+
+A Function agendada `syncFirestoreToSql` tambem respeita esse limite: sem credenciais SQL, ela nao escreve no Cloud SQL.

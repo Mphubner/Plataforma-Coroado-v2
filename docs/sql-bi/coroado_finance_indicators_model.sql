@@ -1,5 +1,5 @@
 -- Coroado SQL/BI model v1
--- Target: PostgreSQL on Cloud SQL or Firebase Data Connect/SQL Connect compatible PostgreSQL.
+-- Target: PostgreSQL 18 on Cloud SQL or Firebase Data Connect/SQL Connect compatible PostgreSQL.
 -- Purpose: keep Firestore as the operational source and project recurring facts into analytical tables.
 
 create schema if not exists coroado_bi;

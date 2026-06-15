@@ -17,11 +17,13 @@
     "cors": "^2.8.5",
     "firebase-admin": "^12.1.0",
     "firebase-functions": "^5.0.0",
-    "mercadopago": "^2.0.9"
+    "mercadopago": "^2.0.9",
+    "pg": "^8.21.0"
   },
   "devDependencies": {
-    "typescript": "^5.0.0",
-    "@types/cors": "^2.8.17"
+    "@types/cors": "^2.8.17",
+    "@types/pg": "^8.20.0",
+    "typescript": "^5.0.0"
   },
   "private": true
 }

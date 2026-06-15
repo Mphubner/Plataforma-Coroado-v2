@@ -5,7 +5,7 @@ Este diretorio inicia a camada analitica da plataforma sem substituir o Firestor
 ## Decisao
 
 - Firestore continua como banco operacional para telas em tempo real.
-- Cloud SQL/PostgreSQL recebe fatos recorrentes e historicos para indicadores.
+- Cloud SQL/PostgreSQL 18 recebe fatos recorrentes e historicos para indicadores.
 - A primeira fronteira analitica cobre financeiro, pedidos, eventos, celulas, escola e KPIs.
 
 ## Primeiros fluxos a espelhar
@@ -34,7 +34,10 @@ O Cloud SQL/Data Connect ja foi criado em `us-east1`:
 - Servico: `gen-lang-client-0529830528-service`
 - Instancia: `gen-lang-client-0529830528-instance`
 - Banco: `gen-lang-client-0529830528-database`
+- Tipo: PostgreSQL 18
 
 Executar `npm run sync:bi:schema` uma vez para aplicar o schema e depois agendar `npm run sync:bi` em Cloud Run Jobs, Cloud Scheduler ou GitHub Actions com `DATABASE_URL`, `CLOUD_SQL_DATABASE_URL` ou `CLOUD_SQL_USER`/`CLOUD_SQL_PASSWORD`.
+
+A Firebase Function `syncFirestoreToSql` tambem faz upserts reais quando as credenciais do PostgreSQL 18 estiverem configuradas no ambiente. Sem credenciais, ela falha fechado e apenas registra que a sincronizacao foi ignorada.
 
 Detalhes operacionais: `docs/sql-bi/cloud-sql-coroado.md`.

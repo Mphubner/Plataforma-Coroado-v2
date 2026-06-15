@@ -7,6 +7,7 @@ dotenv.config();
 const app = initializeApp();
 const firestoreDatabaseId = process.env.FIRESTORE_DATABASE_ID || 'ai-studio-534c2e7e-8664-4b76-95e3-faf31fc1628b';
 const db = getFirestore(app, firestoreDatabaseId);
+const defaultTenantId = process.env.DEFAULT_TENANT_ID || process.env.PLATFORM_TENANT_ID || 'tenant-1';
 
 const events = [
   { event_date: '2026-06-01T20:00:00', title: 'Semana de Consagração', category: 'Semana de Consagração', theme: '-', season: 'Celebra', visibility: 'SIM' },
@@ -78,7 +79,7 @@ async function run() {
       description: ev.theme !== '-' ? `Tema: ${ev.theme}` : 'Evento especial da nossa igreja.',
       season: ev.season,
       visibilityScope: ev.visibility === 'SIM' ? 'church' : 'leaders',
-      tenantId: 'tenant-1',
+      tenantId: defaultTenantId,
       capacity: 500,
       enrolled: 0,
       requiresRegistration: true,

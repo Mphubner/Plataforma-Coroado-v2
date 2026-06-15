@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import { initTRPC, TRPCError } from '@trpc/server';
-import { ServerAuthContext } from '../context';
-import { getFirestore, FieldValue } from 'firebase-admin/firestore';
+import { getAdminDb, ServerAuthContext } from '../context';
+import { FieldValue } from 'firebase-admin/firestore';
 
 const t = initTRPC.context<ServerAuthContext>().create();
 
@@ -9,17 +9,25 @@ const COLLECTIONS = {
   socialProfessionals: 'social_professionals',
   socialAppointments: 'social_appointments',
 };
+const SOCIAL_ADMIN_ROLES = ['admin', 'seniorPastor', 'networkPastor', 'auxPastor'];
+
+function requireSocialAdmin(ctx: ServerAuthContext) {
+  if (!ctx.auth?.uid || !ctx.auth.tenantId) throw new TRPCError({ code: 'UNAUTHORIZED' });
+  if (!ctx.auth.roles?.some(role => SOCIAL_ADMIN_ROLES.includes(role))) {
+    throw new TRPCError({ code: 'FORBIDDEN' });
+  }
+}
 
 export const socialRouter = t.router({
   getPublicProfessionals: t.procedure.query(async () => {
-    const db = getFirestore();
+    const db = getAdminDb();
     const snap = await db.collection(COLLECTIONS.socialProfessionals).where('isPublic', '==', true).get();
     return snap.docs.map(d => ({ id: d.id, ...d.data() }));
   }),
 
   getAllProfessionals: t.procedure.query(async ({ ctx }) => {
     if (!ctx.auth?.uid || !ctx.auth?.tenantId) throw new TRPCError({ code: 'UNAUTHORIZED' });
-    const db = getFirestore();
+    const db = getAdminDb();
     const snap = await db.collection(COLLECTIONS.socialProfessionals).where('tenantId', '==', ctx.auth.tenantId).get();
     return snap.docs.map(d => ({ id: d.id, ...d.data() }));
   }),
@@ -36,8 +44,8 @@ export const socialRouter = t.router({
       availableTimes: z.array(z.string()).optional(),
     }))
     .mutation(async ({ ctx, input }) => {
-      if (!ctx.auth?.uid || !ctx.auth?.tenantId) throw new TRPCError({ code: 'UNAUTHORIZED' });
-      const db = getFirestore();
+      requireSocialAdmin(ctx);
+      const db = getAdminDb();
       
       const { id, ...data } = input;
       const docData = {
@@ -59,15 +67,18 @@ export const socialRouter = t.router({
   deleteProfessional: t.procedure
     .input(z.object({ id: z.string() }))
     .mutation(async ({ ctx, input }) => {
-      if (!ctx.auth?.uid) throw new TRPCError({ code: 'UNAUTHORIZED' });
-      const db = getFirestore();
-      await db.collection(COLLECTIONS.socialProfessionals).doc(input.id).delete();
+      requireSocialAdmin(ctx);
+      const db = getAdminDb();
+      const ref = db.collection(COLLECTIONS.socialProfessionals).doc(input.id);
+      const snap = await ref.get();
+      if (snap.exists && snap.data()?.tenantId !== ctx.auth?.tenantId) throw new TRPCError({ code: 'FORBIDDEN' });
+      await ref.delete();
       return { success: true };
     }),
 
   getAppointments: t.procedure.query(async ({ ctx }) => {
     if (!ctx.auth?.uid || !ctx.auth?.tenantId) throw new TRPCError({ code: 'UNAUTHORIZED' });
-    const db = getFirestore();
+    const db = getAdminDb();
     const snap = await db.collection(COLLECTIONS.socialAppointments).where('tenantId', '==', ctx.auth.tenantId).get();
     return snap.docs.map(d => ({ id: d.id, ...d.data() }));
   }),
@@ -83,7 +94,7 @@ export const socialRouter = t.router({
     }))
     .mutation(async ({ ctx, input }) => {
       if (!ctx.auth?.uid || !ctx.auth?.tenantId) throw new TRPCError({ code: 'UNAUTHORIZED' });
-      const db = getFirestore();
+      const db = getAdminDb();
       
       // Get the user name from auth context if needed or from user record
       const userRef = await db.collection('users').doc(ctx.auth.uid).get();
@@ -94,6 +105,7 @@ export const socialRouter = t.router({
         userId: ctx.auth.uid,
         userName,
         status: 'pending',
+        paymentStatus: input.price ? 'pending' : 'not_required',
         tenantId: ctx.auth.tenantId,
         createdAt: FieldValue.serverTimestamp(),
       };
@@ -109,9 +121,13 @@ export const socialRouter = t.router({
       status: z.string()
     }))
     .mutation(async ({ ctx, input }) => {
-      if (!ctx.auth?.uid) throw new TRPCError({ code: 'UNAUTHORIZED' });
-      const db = getFirestore();
-      await db.collection(COLLECTIONS.socialAppointments).doc(input.id).update({
+      requireSocialAdmin(ctx);
+      const db = getAdminDb();
+      const ref = db.collection(COLLECTIONS.socialAppointments).doc(input.id);
+      const snap = await ref.get();
+      if (!snap.exists) throw new TRPCError({ code: 'NOT_FOUND' });
+      if (snap.data()?.tenantId !== ctx.auth?.tenantId) throw new TRPCError({ code: 'FORBIDDEN' });
+      await ref.update({
         status: input.status,
         updatedAt: FieldValue.serverTimestamp()
       });

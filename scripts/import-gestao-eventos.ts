@@ -11,6 +11,7 @@ const app = initializeApp();
 
 const firestoreDatabaseId = process.env.FIRESTORE_DATABASE_ID || 'ai-studio-534c2e7e-8664-4b76-95e3-faf31fc1628b';
 const db = getFirestore(app, firestoreDatabaseId);
+const defaultTenantId = process.env.DEFAULT_TENANT_ID || process.env.PLATFORM_TENANT_ID || 'tenant-1';
 
 // Sample Data derived from Google Doc
 const events = [
@@ -125,7 +126,7 @@ async function run() {
       season: ev.season,
       color_hex: getSeasonColor(ev.season),
       visibility: ev.visibility === 'SIM' ? 'public' : 'private',
-      tenantId: 'tenant-1',
+      tenantId: defaultTenantId,
       createdAt: FieldValue.serverTimestamp(),
       updatedAt: FieldValue.serverTimestamp(),
     });
@@ -150,7 +151,7 @@ async function run() {
       due_date: plan.due_date,
       assignee_name: plan.assignee_name,
       status: 'Pendente',
-      tenantId: 'tenant-1',
+      tenantId: defaultTenantId,
       createdAt: FieldValue.serverTimestamp(),
       updatedAt: FieldValue.serverTimestamp(),
     });

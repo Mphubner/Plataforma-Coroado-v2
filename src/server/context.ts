@@ -152,3 +152,7 @@ export function cleanString(value: unknown, max = 500) {
 export function getMercadoPagoAccessToken() {
   return process.env.MERCADOPAGO_ACCESS_TOKEN || process.env.MP_ACCESS_TOKEN || '';
 }
+
+export function getMercadoPagoWebhookSecret() {
+  return process.env.MERCADOPAGO_WEBHOOK_SECRET || process.env.MP_WEBHOOK_SECRET || '';
+}

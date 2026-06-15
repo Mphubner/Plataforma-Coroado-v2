@@ -15,44 +15,9 @@ import { postJson } from '../../lib/api/http';
 import { PastoralCareView } from '../../components/PastoralCareView';
 import { pagePreset } from '../../lib/motion/presets';
 
-const PASTORS_MOCK = [
-  {
-    id: 'rafael',
-    name: 'Rafael Vaillant',
-    role: 'Pastor Presidente',
-    image: 'https://i.imgur.com/guYg9mA.png',
-    social: {
-      facebook: 'https://www.facebook.com/rafael.vaillant',
-      instagram: 'https://www.instagram.com/rafaelvaillant.coroado/',
-      youtube: 'https://www.youtube.com/@IgrejaCoroado'
-    }
-  },
-  {
-    id: 'fabricio',
-    name: 'Fabricio Campos',
-    role: 'Pastor de Rede',
-    image: 'https://imgur.com/N4sRBgl.png',
-    social: {
-      facebook: '#',
-      instagram: '#',
-      youtube: 'https://www.youtube.com/@IgrejaCoroado'
-    }
-  },
-  {
-    id: 'alan',
-    name: 'Alan Vaz',
-    role: 'Pastor de Rede',
-    image: 'https://i.imgur.com/dpggKK7.png',
-    social: {
-      facebook: '#',
-      instagram: '#',
-      youtube: 'https://www.youtube.com/@IgrejaCoroado'
-    }
-  }
-];
-
 export function PastoresNativeClient() {
-  const [pastorsList, setPastorsList] = useState<any[]>(PASTORS_MOCK);
+  const [pastorsList, setPastorsList] = useState<any[]>([]);
+  const [pastorsError, setPastorsError] = useState('');
   const [selectedPastor, setSelectedPastor] = useState<any | null>(null);
   const [selectedDate, setSelectedDate] = useState<string>('');
   const [selectedTime, setSelectedTime] = useState<string>('');
@@ -71,14 +36,12 @@ export function PastoresNativeClient() {
   const fetchPastors = async () => {
     try {
       const data = await trpc.pastors.getPastors.query();
-      if (data && data.length > 0) {
-        setPastorsList(data);
-      } else {
-        setPastorsList(PASTORS_MOCK);
-      }
+      setPastorsList(data || []);
+      setPastorsError('');
     } catch (e) {
       console.error(e);
-      setPastorsList(PASTORS_MOCK);
+      setPastorsList([]);
+      setPastorsError('Nao foi possivel carregar os pastores agora.');
     } finally {
       setIsLoading(false);
     }
@@ -170,9 +133,6 @@ export function PastoresNativeClient() {
   };
 
   const handleDeletePastor = async (id: string) => {
-    if (['rafael', 'fabricio', 'alan'].includes(id)) {
-      return alert('Pastores padrão mockados não podem ser excluídos, exclua apenas os do banco de dados.');
-    }
     if (confirm('Excluir pastor?')) {
       try {
         await trpc.pastors.deletePastor.mutate({ id });
@@ -198,6 +158,7 @@ export function PastoresNativeClient() {
        return;
     }
     if (!selectedDate || !selectedTime) return alert("Selecione data e hora.");
+    if (!userData?.tenantId) return alert("Seu perfil ainda nao esta vinculado a uma unidade.");
     setIsSubmitting(true);
     try {
       const token = await auth.currentUser?.getIdToken();
@@ -206,7 +167,7 @@ export function PastoresNativeClient() {
         pastorName: selectedPastor?.name || 'Pastor Plantonista',
         userId: userData?.id || '',
         userName: auth.currentUser?.displayName || 'Membro',
-        tenantId: userData?.tenantId || 'tenant-1',
+        tenantId: userData.tenantId,
         date: selectedDate,
         time: selectedTime,
       };
@@ -307,7 +268,13 @@ export function PastoresNativeClient() {
 
             <TabsContent value="list" className="mt-0">
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
-              {pastorsList.map((pastor) => (
+              {pastorsList.length === 0 ? (
+                <div className="md:col-span-2 lg:col-span-3 text-center p-12 bg-zinc-900 border border-white/10 border-dashed rounded-[2.5rem]">
+                  <Users className="w-12 h-12 text-white/20 mx-auto mb-4" />
+                  <h3 className="text-xl font-bold text-white mb-2">Nenhum pastor cadastrado</h3>
+                  <p className="text-white/60">{pastorsError || 'Cadastre os pastores reais para liberar agenda, tarefas e cuidado pastoral.'}</p>
+                </div>
+              ) : pastorsList.map((pastor) => (
                 <div key={pastor.id} className="bg-zinc-900 rounded-[2.5rem] overflow-hidden group relative aspect-[4/5] border border-white/10">
                   <div className="absolute inset-0 bg-gradient-to-t from-black via-black/20 to-transparent z-10" />
                   <img 
@@ -326,17 +293,17 @@ export function PastoresNativeClient() {
                     
                     {/* Social Links */}
                     <div className="flex items-center gap-3 pt-2">
-                      {pastor.social.facebook !== '#' && (
+                      {pastor.social?.facebook && pastor.social.facebook !== '#' && (
                         <a href={pastor.social.facebook} target="_blank" rel="noopener noreferrer" className="w-12 h-12 rounded-full bg-white/5 backdrop-blur-md border border-white/10 flex items-center justify-center text-white hover:bg-primary hover:text-black transition-all">
                           <Facebook className="w-5 h-5" />
                         </a>
                       )}
-                      {pastor.social.instagram !== '#' && (
+                      {pastor.social?.instagram && pastor.social.instagram !== '#' && (
                         <a href={pastor.social.instagram} target="_blank" rel="noopener noreferrer" className="w-12 h-12 rounded-full bg-white/5 backdrop-blur-md border border-white/10 flex items-center justify-center text-white hover:bg-primary hover:text-black transition-all">
                           <Instagram className="w-5 h-5" />
                         </a>
                       )}
-                      {pastor.social.youtube !== '#' && (
+                      {pastor.social?.youtube && pastor.social.youtube !== '#' && (
                         <a href={pastor.social.youtube} target="_blank" rel="noopener noreferrer" className="w-12 h-12 rounded-full bg-white/5 backdrop-blur-md border border-white/10 flex items-center justify-center text-white hover:bg-primary hover:text-black transition-all">
                           <Youtube className="w-5 h-5" />
                         </a>
@@ -461,7 +428,13 @@ export function PastoresNativeClient() {
           </Tabs>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
-            {pastorsList.map((pastor) => (
+            {pastorsList.length === 0 ? (
+              <div className="md:col-span-2 lg:col-span-3 text-center p-12 bg-zinc-900 border border-white/10 border-dashed rounded-[2.5rem]">
+                <Users className="w-12 h-12 text-white/20 mx-auto mb-4" />
+                <h3 className="text-xl font-bold text-white mb-2">Nenhum pastor cadastrado</h3>
+                <p className="text-white/60">{pastorsError || 'A liderança pastoral sera exibida aqui quando os cadastros reais forem inseridos.'}</p>
+              </div>
+            ) : pastorsList.map((pastor) => (
               <div key={pastor.id} className="bg-zinc-900 rounded-[2.5rem] overflow-hidden group relative aspect-[4/5] border border-white/10">
                 <div className="absolute inset-0 bg-gradient-to-t from-black via-black/20 to-transparent z-10" />
                 <img 
@@ -478,17 +451,17 @@ export function PastoresNativeClient() {
                   </div>
                   
                   <div className="flex items-center gap-3 pt-2">
-                    {pastor.social.facebook !== '#' && (
+                    {pastor.social?.facebook && pastor.social.facebook !== '#' && (
                       <a href={pastor.social.facebook} target="_blank" rel="noopener noreferrer" className="w-12 h-12 rounded-full bg-white/5 backdrop-blur-md border border-white/10 flex items-center justify-center text-white hover:bg-primary hover:text-black transition-all">
                         <Facebook className="w-5 h-5" />
                       </a>
                     )}
-                    {pastor.social.instagram !== '#' && (
+                    {pastor.social?.instagram && pastor.social.instagram !== '#' && (
                       <a href={pastor.social.instagram} target="_blank" rel="noopener noreferrer" className="w-12 h-12 rounded-full bg-white/5 backdrop-blur-md border border-white/10 flex items-center justify-center text-white hover:bg-primary hover:text-black transition-all">
                         <Instagram className="w-5 h-5" />
                       </a>
                     )}
-                    {pastor.social.youtube !== '#' && (
+                    {pastor.social?.youtube && pastor.social.youtube !== '#' && (
                       <a href={pastor.social.youtube} target="_blank" rel="noopener noreferrer" className="w-12 h-12 rounded-full bg-white/5 backdrop-blur-md border border-white/10 flex items-center justify-center text-white hover:bg-primary hover:text-black transition-all">
                         <Youtube className="w-5 h-5" />
                       </a>

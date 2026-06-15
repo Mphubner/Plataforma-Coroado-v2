@@ -6,6 +6,7 @@
 - Servico/Data Connect: `gen-lang-client-0529830528-service`
 - Instancia Cloud SQL: `gen-lang-client-0529830528-instance`
 - Banco de dados: `gen-lang-client-0529830528-database`
+- Tipo: `PostgreSQL 18`
 - Connection name esperado: `gen-lang-client-0529830528:us-east1:gen-lang-client-0529830528-instance`
 
 ## Como ligar o worker
@@ -16,6 +17,7 @@ O worker `npm run sync:bi` aceita duas formas:
 2. Metadados Cloud SQL + credenciais:
    - `CLOUD_SQL_CONNECTION_NAME`
    - `CLOUD_SQL_DATABASE`
+   - `CLOUD_SQL_POSTGRES_VERSION=18`
    - `CLOUD_SQL_USER`
    - `CLOUD_SQL_PASSWORD`
 
@@ -27,6 +29,20 @@ Para desenvolvimento local com Cloud SQL Auth Proxy, preencher:
 
 - `CLOUD_SQL_HOST=127.0.0.1`
 - `CLOUD_SQL_PORT=5432`
+
+## Function agendada
+
+`functions/src/sync-firestore-to-sql.ts` executa diariamente e usa o mesmo destino PostgreSQL 18.
+
+Ela precisa das mesmas variaveis do worker:
+
+- `CLOUD_SQL_CONNECTION_NAME`
+- `CLOUD_SQL_DATABASE`
+- `CLOUD_SQL_USER`
+- `CLOUD_SQL_PASSWORD`
+- `CLOUD_SQL_POSTGRES_VERSION=18`
+
+Sem usuario/senha ou `DATABASE_URL`, a Function nao tenta gravar e registra `missing-postgresql-credentials`.
 
 ## Sequencia segura
 

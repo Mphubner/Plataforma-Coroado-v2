@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import { initTRPC, TRPCError } from '@trpc/server';
-import { ServerAuthContext } from '../context';
-import { getFirestore, FieldValue } from 'firebase-admin/firestore';
+import { getAdminDb, ServerAuthContext } from '../context';
+import { FieldValue } from 'firebase-admin/firestore';
 import { getAuth } from 'firebase-admin/auth';
 import { memberProfileSchema } from '../../lib/domain';
 
@@ -14,7 +14,7 @@ export const membersRouter = t.router({
       throw new TRPCError({ code: 'UNAUTHORIZED', message: 'Usuário não autenticado' });
     }
 
-    const db = getFirestore();
+    const db = getAdminDb();
     const q = db.collection('users').where('tenantId', '==', ctx.auth.tenantId);
     const snap = await q.get();
 
@@ -53,7 +53,7 @@ export const membersRouter = t.router({
         throw new TRPCError({ code: 'UNAUTHORIZED' });
       }
 
-      const db = getFirestore();
+      const db = getAdminDb();
       const auth = getAuth();
       const callerRoles = ctx.auth.roles || [];
       const allowedRoles = ['admin', 'seniorPastor', 'networkPastor', 'auxPastor', 'supervisor'];
@@ -115,7 +115,7 @@ export const membersRouter = t.router({
         throw new TRPCError({ code: 'UNAUTHORIZED' });
       }
 
-      const db = getFirestore();
+      const db = getAdminDb();
       
       const callerRoles = ctx.auth.roles || [];
       const isSelf = ctx.auth.uid === input.id;

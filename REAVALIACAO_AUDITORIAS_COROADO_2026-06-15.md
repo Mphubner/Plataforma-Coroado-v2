@@ -316,3 +316,38 @@ Uma tela so deve ser marcada como "100% funcional" quando:
 - possui pelo menos um teste de fluxo HTTP/E2E ou smoke test da rota principal;
 - nao cria pagamento/aprovacao/status critico pelo cliente sem validacao no backend.
 
+## Fechamento da rodada de finalizacao - 2026-06-15
+
+### Pontos satisfeitos nesta rodada
+
+- Build voltou a ficar confiavel: `npm run validate:full` passou com TypeScript, regras Firestore, validacao local do Firestore Emulator, build Vite e build Next.
+- A validacao de Firestore agora roda com Java local em `C:\Users\marco\.codex\tools\jdk-21\bin\java.exe`.
+- `firestore.rules` foi saneado, removendo blocos duplicados e reforcando criacao de `task_updates` com `tenantId` e `createdAt`.
+- O BFF/tRPC foi estabilizado para as telas migradas: contexto autenticado compativel, rotas sem duplicidade e routers lendo o Firestore nomeado via `getAdminDb()`.
+- Mercado Pago foi endurecido:
+  - webhooks REST e Functions validam `x-signature`/`x-request-id` quando ha secret configurado;
+  - em producao, webhook sem secret nao passa;
+  - preferencias de evento nao aceitam mais `amount/title` vindos do cliente;
+  - assinatura da Escola IDE usa plano/preco de backend ou variavel segura.
+- Mutations sensiveis passaram a exigir tenant/papel em Store, Eventos, Escola, Ministerios, Social e Pastores.
+- Functions foram recompiladas e os arquivos gerados em `functions/lib` foram atualizados.
+- Testes de fluxo HTTP passaram com a aplicacao construida em modo de producao local.
+- Worker BI/SQL reconheceu Cloud SQL:
+  - connectionName: `gen-lang-client-0529830528:us-east1:gen-lang-client-0529830528-instance`;
+  - database: `gen-lang-client-0529830528-database`;
+  - hostMode: `cloudsql-socket`.
+
+### Validacoes executadas
+
+- `npm --prefix functions run build`: passou.
+- `npm run validate:full`: passou.
+- `npm run test:flows` com `FLOW_BASE_URL=http://localhost:3000`: passou.
+- `npm run sync:bi -- --dry-run`: passou em modo seguro, sem gravar dados porque as credenciais SQL ainda nao estao presentes no ambiente local.
+- `git diff --check`: sem erro bloqueante; apenas avisos de final de linha Windows.
+
+### O que ainda nao deve ser tratado como concluido
+
+- A sincronizacao SQL real ainda depende de credenciais/ambiente de execucao do Cloud SQL. O projeto ja conhece instancia e banco, mas nao deve gravar sem credencial configurada.
+- Ainda ha risco de dados estaticos residuais em componentes historicos que ficam como fallback quando Firestore falha ou esta vazio. O caminho principal foi endurecido, mas a limpeza completa de mocks por tela ainda deve ser feita com dados reais/seed controlado.
+- A camada visual premium com motions esta em base funcional, mas ainda precisa uma rodada dedicada de refinamento tela a tela.
+- O proximo deploy deve configurar `MERCADOPAGO_WEBHOOK_SECRET`, `SCHOOL_IDE_MONTHLY_PRICE` ou documentos `plans/{planId}` e o ambiente SQL do worker.
