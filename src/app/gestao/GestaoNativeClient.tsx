@@ -2,14 +2,14 @@
 
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '../../components/ui/tabs';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '../../../components/ui/tabs';
 import { AdminDashboardMetrics } from '../../components/AdminDashboardMetrics';
 import { AdminStrategicGoals } from '../../components/AdminStrategicGoals';
 import { AdminAutomations } from '../../components/AdminAutomations';
 import { AdminPlanningKanban } from '../../components/AdminPlanningKanban';
 import { AdminSeeder } from '../../components/AdminSeeder';
 // import { AdminSchoolTab, AdminJornadaTab } from '../../App'; // App depends on react-router
-import { auth } from '../../lib/firebase';
+import { auth } from '../../../lib/firebase';
 import { onAuthStateChanged } from 'firebase/auth';
 import { pagePreset } from '../../lib/motion/presets';
 

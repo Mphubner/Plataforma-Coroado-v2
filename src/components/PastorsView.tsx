@@ -501,7 +501,7 @@ export function PastorsView({ isAdmin, userData, isLoggedIn, onLoginClick }: { i
           </Tabs>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {pastors.map(pastor => (
+            {pastorsList.map(pastor => (
               <div key={pastor.id} className="bg-zinc-900 border border-white/10 rounded-3xl p-6">
                 <div className="flex items-center gap-4">
                   <img src={pastor.image} alt={pastor.name} className="w-16 h-16 rounded-full border-2 border-primary/20 object-cover" />

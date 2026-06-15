@@ -15,7 +15,6 @@ import {
   updateSchoolProgress,
 } from './operations';
 import { getFinanceOverview } from './queries/financeOverview';
-import { getEventsOverview } from './queries/eventsOverview';
 import { membersRouter } from './routers/membersRouter';
 import { ministriesRouter } from './routers/ministriesRouter';
 import { socialRouter } from './routers/socialRouter';
@@ -61,24 +60,6 @@ function toTrpcError(error: unknown): never {
 
 export const appRouter = t.router({
   health: t.procedure.query(() => ({ status: 'ok' })),
-  events: t.router({
-    overview: t.procedure.query(async ({ ctx }) => {
-      try {
-        return await getEventsOverview(ctx);
-      } catch (error) {
-        toTrpcError(error);
-      }
-    }),
-    checkIn: t.procedure
-      .input(eventCheckInRequestSchema)
-      .mutation(async ({ ctx, input }) => {
-        try {
-          return await checkInEventEnrollment(ctx, input.enrollmentId);
-        } catch (error) {
-          toTrpcError(error);
-        }
-      }),
-  }),
   school: t.router({
     updateProgress: t.procedure
       .input(schoolProgressRequestSchema)

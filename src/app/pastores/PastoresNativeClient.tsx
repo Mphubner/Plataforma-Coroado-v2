@@ -3,12 +3,12 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Facebook, Instagram, Youtube, Calendar, AlertCircle, Edit3, Trash2, Plus, Clock, CheckCircle, ListTodo, Users, Search } from 'lucide-react';
-import { Button } from '../../components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle } from '../../components/ui/card';
-import { Badge } from '../../components/ui/badge';
-import { Input } from '../../components/ui/input';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '../../components/ui/tabs';
-import { auth } from '../../lib/firebase';
+import { Button } from '../../../components/ui/button';
+import { Card, CardContent, CardHeader, CardTitle } from '../../../components/ui/card';
+import { Badge } from '../../../components/ui/badge';
+import { Input } from '../../../components/ui/input';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '../../../components/ui/tabs';
+import { auth } from '../../../lib/firebase';
 import { onAuthStateChanged } from 'firebase/auth';
 import { trpc } from '../../lib/trpc-client';
 import { postJson } from '../../lib/api/http';
@@ -107,8 +107,8 @@ export function PastoresNativeClient() {
       if (user) {
         setIsLoggedIn(true);
         const token = await user.getIdTokenResult();
-        const profileType = token.claims.profileType || 'member';
-        const roles = token.claims.roles || [];
+        const profileType = String(token.claims.profileType || 'member');
+        const roles = Array.isArray(token.claims.roles) ? token.claims.roles.map(String) : [];
         setUserData({
           id: user.uid,
           tenantId: token.claims.tenantId,

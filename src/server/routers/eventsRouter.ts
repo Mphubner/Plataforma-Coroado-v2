@@ -2,10 +2,43 @@ import { z } from 'zod';
 import { initTRPC, TRPCError } from '@trpc/server';
 import { ServerAuthContext } from '../context';
 import { getFirestore, FieldValue } from 'firebase-admin/firestore';
+import { eventCheckInRequestSchema } from '../../lib/domain';
+import { checkInEventEnrollment, OperationError } from '../operations';
+import { getEventsOverview } from '../queries/eventsOverview';
 
 const t = initTRPC.context<ServerAuthContext>().create();
 
 export const eventsRouter = t.router({
+  overview: t.procedure.query(async ({ ctx }) => {
+    try {
+      return await getEventsOverview(ctx);
+    } catch (error) {
+      if (error instanceof OperationError) {
+        throw new TRPCError({
+          code: error.status === 401 ? 'UNAUTHORIZED' : error.status === 403 ? 'FORBIDDEN' : 'BAD_REQUEST',
+          message: error.message,
+        });
+      }
+      throw new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: 'Nao foi possivel carregar eventos.' });
+    }
+  }),
+
+  checkIn: t.procedure
+    .input(eventCheckInRequestSchema)
+    .mutation(async ({ ctx, input }) => {
+      try {
+        return await checkInEventEnrollment(ctx, input.enrollmentId);
+      } catch (error) {
+        if (error instanceof OperationError) {
+          throw new TRPCError({
+            code: error.status === 401 ? 'UNAUTHORIZED' : error.status === 403 ? 'FORBIDDEN' : error.status === 404 ? 'NOT_FOUND' : 'BAD_REQUEST',
+            message: error.message,
+          });
+        }
+        throw new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: 'Nao foi possivel confirmar check-in.' });
+      }
+    }),
+
   getEvents: t.procedure.query(async ({ ctx }) => {
     const db = getFirestore();
     let query = db.collection('events').orderBy('event_date', 'asc') as any;

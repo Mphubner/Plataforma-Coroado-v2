@@ -60,14 +60,12 @@ export function AdminPlanningKanban() {
      if (!selectedTask || !auth.currentUser) return;
      try {
        await updateTaskDetails(selectedTask.id, {
-         action_title: selectedTask.action_title,
-         strategy_detail: selectedTask.strategy_detail,
-         group_department: selectedTask.group_department,
-         root_problem: selectedTask.root_problem,
-         assignee_name: selectedTask.assignee_name,
-         dueDate: selectedTask.due_date || '',
-         budget: parseFloat(selectedTask.budget || 0)
-       });
+          title: selectedTask.action_title || selectedTask.title || '',
+          description: selectedTask.strategy_detail || selectedTask.description || '',
+          tag: selectedTask.group_department || selectedTask.root_problem || selectedTask.tag || 'Geral',
+          assigneeId: selectedTask.assigneeId || selectedTask.assignee_name || 'Nao atribuido',
+          dueDate: selectedTask.due_date || '',
+        });
        setSelectedTask(null);
      } catch(e) {
        console.error("Error saving task", e);

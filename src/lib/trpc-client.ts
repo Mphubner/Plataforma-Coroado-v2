@@ -1,6 +1,6 @@
 import { createTRPCClient, httpBatchLink } from '@trpc/client';
 import type { AppRouter } from '../server/trpc';
-import { auth } from './firebase';
+import { auth } from '@/lib/firebase';
 
 export const trpc = createTRPCClient<AppRouter>({
   links: [

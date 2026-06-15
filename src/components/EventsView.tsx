@@ -57,8 +57,9 @@ export function EventsView({ isLoggedIn = false, userData, onLoginClick }: { isL
   const [scannedUser, setScannedUser] = useState<any>(null);
   const scannerRef = useRef<Html5QrcodeScanner | null>(null);
   const [enrollKids, setEnrollKids] = useState<{name: string, age: string, obs: string}[]>([]);
-  const [viewMode, setViewMode] = useState<'list' | 'calendar'>('list');
+  const [viewMode, setViewMode] = useState<'list' | 'calendar' | 'monthly'>('list');
   const [dateFilter, setDateFilter] = useState('');
+  const [categoryFilter, setCategoryFilter] = useState('');
 
   // Form states
   const [showNewEventForm, setShowNewEventForm] = useState(false);
@@ -444,9 +445,23 @@ export function EventsView({ isLoggedIn = false, userData, onLoginClick }: { isL
             const today = new Date().toISOString().split('T')[0];
             const futureEvents = events.filter(e => e.date >= today);
             
-            const filteredByDate = dateFilter ? futureEvents.filter(e => e.date.startsWith(dateFilter)) : futureEvents;
+            // Auto-select current month if dateFilter is empty
+            const currentMonth = today.substring(0, 7);
+            const appliedDateFilter = dateFilter || currentMonth;
             
-            const filteredEvents = filteredByDate.filter(e => {
+            let filteredByDate = futureEvents;
+            if (appliedDateFilter !== 'all') {
+               filteredByDate = futureEvents.filter(e => e.date.startsWith(appliedDateFilter));
+               // Se não houver eventos neste mês, busca o próximo evento disponível
+               if (filteredByDate.length === 0 && futureEvents.length > 0) {
+                 const nextEventMonth = futureEvents[0].date.substring(0, 7);
+                 filteredByDate = futureEvents.filter(e => e.date.startsWith(nextEventMonth));
+               }
+            }
+            
+            const filteredByCategory = categoryFilter ? filteredByDate.filter(e => e.type === categoryFilter) : filteredByDate;
+            
+            const filteredEvents = filteredByCategory.filter(e => {
                 if (can(userData, 'manage:events')) return true;
                 if (!e.visibilityScope || e.visibilityScope === 'church') return e.status !== 'draft';
                 if (e.visibilityScope === 'ministry') return userData?.roles?.includes('ministryLeader') || userData?.ministryId === e.visibilityId;
@@ -463,13 +478,44 @@ export function EventsView({ isLoggedIn = false, userData, onLoginClick }: { isL
             return (
             <div className="space-y-6">
               <div className="flex flex-col sm:flex-row justify-between gap-4 items-center bg-black/40 p-2 rounded-2xl border border-white/10">
-                <div className="flex gap-2 w-full sm:w-auto overflow-x-auto">
-                   <Button variant="ghost" className={`rounded-xl px-6 ${viewMode === 'list' ? 'bg-primary text-black font-bold' : 'text-white/60 hover:text-white'}`} onClick={() => setViewMode('list')}>Cards</Button>
-                   <Button variant="ghost" className={`rounded-xl px-6 ${viewMode === 'calendar' ? 'bg-primary text-black font-bold' : 'text-white/60 hover:text-white'}`} onClick={() => setViewMode('calendar')}>Calendário Diário</Button>
+                <div className="flex gap-2 w-full sm:w-auto overflow-x-auto custom-scrollbar">
+                   <Button variant="ghost" className={`rounded-xl px-4 ${viewMode === 'list' ? 'bg-primary text-black font-bold' : 'text-white/60 hover:text-white'}`} onClick={() => setViewMode('list')}>Cards</Button>
+                   <Button variant="ghost" className={`rounded-xl px-4 ${viewMode === 'calendar' ? 'bg-primary text-black font-bold' : 'text-white/60 hover:text-white'}`} onClick={() => setViewMode('calendar')}>Calendário Diário</Button>
+                   <Button variant="ghost" className={`rounded-xl px-4 ${viewMode === 'monthly' ? 'bg-primary text-black font-bold' : 'text-white/60 hover:text-white'}`} onClick={() => setViewMode('monthly')}>Visão Mensal</Button>
                 </div>
-                <div className="w-full sm:w-auto flex items-center gap-2 pr-4 pl-4 sm:pl-0 border-t sm:border-t-0 border-white/10 pt-2 sm:pt-0">
-                   <Calendar className="w-5 h-5 text-primary" />
-                   <input type="month" value={dateFilter} onChange={(e) => setDateFilter(e.target.value)} className="bg-transparent text-white outline-none font-bold placeholder-white/30" />
+                <div className="w-full sm:w-auto flex flex-wrap items-center gap-4 pr-4 pl-4 sm:pl-0 border-t sm:border-t-0 border-white/10 pt-2 sm:pt-0">
+                   <div className="flex items-center gap-2">
+                     <Calendar className="w-4 h-4 text-primary" />
+                     <select 
+                        value={dateFilter || 'all'} 
+                        onChange={(e) => setDateFilter(e.target.value === 'all' ? 'all' : e.target.value)}
+                        className="bg-zinc-900 border border-white/10 text-white text-sm rounded-lg p-1.5 focus:outline-none focus:ring-1 focus:ring-primary cursor-pointer"
+                     >
+                        <option value="all">Todos os Meses</option>
+                        <option value="2026-06">Junho 2026</option>
+                        <option value="2026-07">Julho 2026</option>
+                        <option value="2026-08">Agosto 2026</option>
+                        <option value="2026-09">Setembro 2026</option>
+                        <option value="2026-10">Outubro 2026</option>
+                        <option value="2026-11">Novembro 2026</option>
+                        <option value="2026-12">Dezembro 2026</option>
+                     </select>
+                   </div>
+                   <div className="flex items-center gap-2">
+                     <select 
+                        value={categoryFilter} 
+                        onChange={(e) => setCategoryFilter(e.target.value)}
+                        className="bg-zinc-900 border border-white/10 text-white text-sm rounded-lg p-1.5 focus:outline-none focus:ring-1 focus:ring-primary cursor-pointer"
+                     >
+                        <option value="">Todas as Categorias</option>
+                        <option value="Culto Público">Cultos Públicos</option>
+                        <option value="Conferência">Conferências</option>
+                        <option value="Curso/Treinamento">Cursos e Treinamentos</option>
+                        <option value="Retiro">Retiros</option>
+                        <option value="Ação Social">Ação Social</option>
+                        <option value="Evento Festivo">Eventos Festivos</option>
+                     </select>
+                   </div>
                 </div>
               </div>
 
@@ -533,7 +579,7 @@ export function EventsView({ isLoggedIn = false, userData, onLoginClick }: { isL
                   })}
                   {filteredEvents.length === 0 && <div className="col-span-full py-12 text-center text-white/40 border border-dashed border-white/10 rounded-2xl">Nenhum evento agendado para esta data.</div>}
                 </div>
-              ) : (
+              ) : viewMode === 'calendar' ? (
                 <div className="bg-zinc-900 border border-white/10 rounded-[2rem] p-6 lg:p-8 space-y-8">
                    {Object.entries(groupedEvents).map(([date, dayEvents]) => (
                      <div key={date}>
@@ -571,7 +617,62 @@ export function EventsView({ isLoggedIn = false, userData, onLoginClick }: { isL
                      </div>
                    ))}
                    {Object.keys(groupedEvents).length === 0 && (
-                     <div className="text-center py-12 text-white/40">Nenhum evento neste mês.</div>
+                     <div className="text-center py-12 text-white/40 border border-dashed border-white/10 rounded-2xl">Nenhum evento agendado para o filtro selecionado.</div>
+                   )}
+                </div>
+              ) : (
+                <div className="bg-zinc-900 border border-white/10 rounded-[2rem] p-6 lg:p-8">
+                   <div className="grid grid-cols-7 gap-2 mb-4">
+                     {['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'].map(day => (
+                       <div key={day} className="text-center font-bold text-white/40 text-sm py-2">{day}</div>
+                     ))}
+                   </div>
+                   <div className="grid grid-cols-7 gap-2">
+                     {(() => {
+                        // Montar calendário
+                        // Como a busca pode não estar limitando a apenas um mês (se "all"), pegamos o primeiro mês dos eventos ou o atual
+                        const baseDateStr = Object.keys(groupedEvents)[0] || new Date().toISOString().split('T')[0];
+                        const baseDate = new Date(baseDateStr + 'T00:00:00');
+                        const year = baseDate.getFullYear();
+                        const month = baseDate.getMonth();
+                        
+                        const firstDayOfMonth = new Date(year, month, 1);
+                        const lastDayOfMonth = new Date(year, month + 1, 0);
+                        const daysInMonth = lastDayOfMonth.getDate();
+                        const startDayOfWeek = firstDayOfMonth.getDay();
+                        
+                        const days = [];
+                        for (let i = 0; i < startDayOfWeek; i++) {
+                           days.push(<div key={`empty-${i}`} className="min-h-[100px] bg-black/20 rounded-xl border border-white/5 opacity-50"></div>);
+                        }
+                        
+                        for (let day = 1; day <= daysInMonth; day++) {
+                           const dStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+                           const dayEvents = groupedEvents[dStr] || [];
+                           
+                           days.push(
+                             <div key={dStr} className="min-h-[100px] bg-black/40 rounded-xl border border-white/10 p-2 flex flex-col hover:bg-white/5 transition-colors relative group">
+                               <span className={`text-sm font-bold mb-2 ${dayEvents.length > 0 ? 'text-primary' : 'text-white/40'}`}>{day}</span>
+                               <div className="space-y-1 overflow-y-auto max-h-[80px] custom-scrollbar">
+                                  {dayEvents.map(event => (
+                                    <div 
+                                      key={event.id} 
+                                      onClick={() => { if (!isLoggedIn && onLoginClick) return onLoginClick(); setSelectedEvent(event); }}
+                                      className="text-[10px] bg-primary/20 text-primary border border-primary/30 p-1 rounded truncate cursor-pointer hover:bg-primary hover:text-black transition-colors"
+                                      title={event.title}
+                                    >
+                                      {event.time} - {event.title}
+                                    </div>
+                                  ))}
+                               </div>
+                             </div>
+                           );
+                        }
+                        return days;
+                     })()}
+                   </div>
+                   {Object.keys(groupedEvents).length === 0 && (
+                     <div className="text-center py-12 text-white/40 border border-dashed border-white/10 rounded-2xl mt-4">Nenhum evento agendado para o filtro selecionado.</div>
                    )}
                 </div>
               )}
