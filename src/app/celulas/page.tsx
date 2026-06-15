@@ -1,5 +1,5 @@
-import NextClientApp from '../NextClientApp';
+import { CelulasNativeClient } from './CelulasNativeClient';
 
 export default function Page() {
-  return <NextClientApp />;
+  return <CelulasNativeClient />;
 }

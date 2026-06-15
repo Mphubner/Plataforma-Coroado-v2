@@ -1,5 +1,5 @@
-import NextClientApp from '../NextClientApp';
+import { PastoresNativeClient } from './PastoresNativeClient';
 
 export default function Page() {
-  return <NextClientApp />;
+  return <PastoresNativeClient />;
 }

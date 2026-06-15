@@ -1,5 +1,5 @@
-import NextClientApp from '../NextClientApp';
+import { SocialNativeClient } from './SocialNativeClient';
 
 export default function Page() {
-  return <NextClientApp />;
+  return <SocialNativeClient />;
 }

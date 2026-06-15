@@ -1,5 +1,5 @@
-import NextClientApp from '../NextClientApp';
+import { MembrosNativeClient } from './MembrosNativeClient';
 
 export default function Page() {
-  return <NextClientApp />;
+  return <MembrosNativeClient />;
 }

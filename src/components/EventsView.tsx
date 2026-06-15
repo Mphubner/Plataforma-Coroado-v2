@@ -276,44 +276,52 @@ export function EventsView({ isLoggedIn = false, userData, onLoginClick }: { isL
       return;
     }
     try {
-      const eventId = crypto.randomUUID();
-      await setDoc(doc(db, 'events', eventId), {
-        ...newEvent,
-        tenantId: userData.tenantId,
-        enrolled: 0,
-        createdAt: serverTimestamp()
-      });
+      if (newEvent.id) {
+        await setDoc(doc(db, 'events', newEvent.id), {
+          ...newEvent,
+          updatedAt: serverTimestamp()
+        }, { merge: true });
+        alert("Evento atualizado com sucesso!");
+      } else {
+        const eventId = crypto.randomUUID();
+        await setDoc(doc(db, 'events', eventId), {
+          ...newEvent,
+          tenantId: userData.tenantId,
+          enrolled: 0,
+          createdAt: serverTimestamp()
+        });
 
-      // Se há ministérios auxiliares, cria um briefing (Doc 15) para cada
-      if (newEvent.requiredMinistries && newEvent.requiredMinistries.length > 0) {
-        for (const mId of newEvent.requiredMinistries) {
+        // Se há ministérios auxiliares, cria um briefing (Doc 15) para cada
+        if (newEvent.requiredMinistries && newEvent.requiredMinistries.length > 0) {
+          for (const mId of newEvent.requiredMinistries) {
+            await setDoc(doc(db, 'briefings', crypto.randomUUID()), {
+               title: `Apoio para Evento: ${newEvent.title}`,
+               description: `Foi solicitado o apoio do seu ministério para o evento ${newEvent.title} que acontecerá dia ${newEvent.date} às ${newEvent.time}. Local: ${newEvent.location}. Por favor, avalie a viabilidade.`,
+               requesterMinistry: userData.id,
+               ministryId: mId,
+               status: 'todo',
+               deadline: newEvent.date,
+               tenantId: userData.tenantId,
+               createdAt: serverTimestamp()
+            });
+          }
+        }
+
+        if (newEvent.requiresFunding && newEvent.fundingAmount) {
           await setDoc(doc(db, 'briefings', crypto.randomUUID()), {
-             title: `Apoio para Evento: ${newEvent.title}`,
-             description: `Foi solicitado o apoio do seu ministério para o evento ${newEvent.title} que acontecerá dia ${newEvent.date} às ${newEvent.time}. Local: ${newEvent.location}. Por favor, avalie a viabilidade.`,
-             requesterMinistry: userData.id,
-             ministryId: mId,
-             status: 'todo',
-             deadline: newEvent.date,
-             tenantId: userData.tenantId,
-             createdAt: serverTimestamp()
+               title: `Aprovação Financeira: ${newEvent.title}`,
+               description: `Foi solicitado R$ ${newEvent.fundingAmount} de verba para o evento ${newEvent.title} que acontecerá dia ${newEvent.date}. Local: ${newEvent.location}. Por favor, avalie a viabilidade do custeio pela Igreja.`,
+               requesterMinistry: userData.id,
+               ministryId: 'financeiro', // ID lógico para cair no board financeiro
+               status: 'todo',
+               deadline: newEvent.date,
+               tenantId: userData.tenantId,
+               createdAt: serverTimestamp()
           });
         }
+        alert("Evento criado com sucesso!");
       }
 
-      if (newEvent.requiresFunding && newEvent.fundingAmount) {
-        await setDoc(doc(db, 'briefings', crypto.randomUUID()), {
-             title: `Aprovação Financeira: ${newEvent.title}`,
-             description: `Foi solicitado R$ ${newEvent.fundingAmount} de verba para o evento ${newEvent.title} que acontecerá dia ${newEvent.date}. Local: ${newEvent.location}. Por favor, avalie a viabilidade do custeio pela Igreja.`,
-             requesterMinistry: userData.id,
-             ministryId: 'financeiro', // ID lógico para cair no board financeiro
-             status: 'todo',
-             deadline: newEvent.date,
-             tenantId: userData.tenantId,
-             createdAt: serverTimestamp()
-        });
-      }
-
-      alert("Evento criado com sucesso! " + (newEvent.visibilityScope === 'church' && !can(userData, 'manage:events') ? 'Aguardando aprovação pastoral.' : ''));
       setShowNewEventForm(false);
       setNewEvent({ visibilityScope: 'church', isPaid: false, requiresRegistration: true, requiredMinistries: [], status: 'pending_approval' });
     } catch (e) {
@@ -375,7 +383,7 @@ export function EventsView({ isLoggedIn = false, userData, onLoginClick }: { isL
     localStorage.removeItem('coroado_checkin_queue');
   };
 
-  const isAdmin = can(userData, 'manage:events');
+  const isAdmin = userData?.roles?.includes('admin') || can(userData, 'manage:events');
 
   return (
     <motion.div {...pageMotion} className="space-y-8 pb-20">
@@ -385,7 +393,7 @@ export function EventsView({ isLoggedIn = false, userData, onLoginClick }: { isL
           <p className="text-white/60">Inscreva-se em cultos, retiros e conferências da igreja, e faça seu check-in.</p>
         </div>
         {isAnyLeader && (
-          <Button onClick={() => setShowNewEventForm(true)} className="bg-primary text-black font-bold">
+          <Button onClick={() => { setNewEvent({ visibilityScope: 'church', isPaid: false, requiresRegistration: true, requiredMinistries: [], status: 'pending_approval' }); setShowNewEventForm(true); }} className="bg-primary text-black font-bold">
             Criar Evento
           </Button>
         )}
@@ -432,7 +440,11 @@ export function EventsView({ isLoggedIn = false, userData, onLoginClick }: { isL
            transition={{ duration: 0.2 }}
         >
           {activeTab === 'upcoming' && (() => {
-            const filteredByDate = dateFilter ? events.filter(e => e.date.startsWith(dateFilter)) : events;
+            // Filter out past events based on the current date
+            const today = new Date().toISOString().split('T')[0];
+            const futureEvents = events.filter(e => e.date >= today);
+            
+            const filteredByDate = dateFilter ? futureEvents.filter(e => e.date.startsWith(dateFilter)) : futureEvents;
             
             const filteredEvents = filteredByDate.filter(e => {
                 if (can(userData, 'manage:events')) return true;
@@ -476,6 +488,16 @@ export function EventsView({ isLoggedIn = false, userData, onLoginClick }: { isL
                           <Badge className="absolute top-4 right-4 z-20 bg-black/60 text-white border-white/20 backdrop-blur-md">
                             {new Date(event.date + 'T00:00:00').toLocaleDateString('pt-BR')}
                           </Badge>
+                          {isAdmin && (
+                            <Button 
+                              size="sm" 
+                              variant="outline" 
+                              className="absolute bottom-4 right-4 z-20 bg-black/60 text-white border-white/20 hover:bg-black"
+                              onClick={(e) => { e.stopPropagation(); setNewEvent(event); setShowNewEventForm(true); }}
+                            >
+                              Editar
+                            </Button>
+                          )}
                         </div>
                         <CardHeader>
                           <CardTitle className="text-xl line-clamp-1">{event.title}</CardTitle>
@@ -860,11 +882,8 @@ export function EventsView({ isLoggedIn = false, userData, onLoginClick }: { isL
                className="bg-zinc-900 border border-white/10 rounded-[2rem] max-w-2xl w-full max-h-[90vh] overflow-y-auto"
             >
               <div className="p-8 space-y-6">
-                <div className="flex justify-between items-center">
-                  <div>
-                    <h3 className="text-2xl font-black font-serif italic leading-tight mb-1">Novo Evento</h3>
-                    <p className="text-white/60 text-sm">Crie e configure um novo evento na agenda.</p>
-                  </div>
+                <div className="flex justify-between items-center mb-6">
+                  <h3 className="text-2xl font-black font-serif italic leading-tight">{newEvent.id ? 'Editar Evento' : 'Novo Evento'}</h3>
                   <Button variant="ghost" size="icon" onClick={() => setShowNewEventForm(false)} className="bg-white/5 hover:bg-white/10 rounded-full">
                     <X className="w-5 h-5" />
                   </Button>

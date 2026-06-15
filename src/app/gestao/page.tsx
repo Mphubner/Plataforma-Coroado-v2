@@ -1,5 +1,5 @@
-import NextClientApp from '../NextClientApp';
+import { GestaoNativeClient } from './GestaoNativeClient';
 
 export default function Page() {
-  return <NextClientApp />;
+  return <GestaoNativeClient />;
 }
