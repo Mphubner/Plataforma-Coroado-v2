@@ -939,6 +939,48 @@ service cloud.firestore {
       allow delete: if isAdmin();
     }
 
+    match /kpi_goals/{kpiId} {
+      allow get, list: if isSignedIn() && (isAdmin() || (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && resource.data.tenantId == get(/databases/$(database)/documents/users/$(request.auth.uid)).data.tenantId));
+
+      allow create: if isSignedIn() &&
+                       incoming().tenantId == get(/databases/$(database)/documents/users/$(request.auth.uid)).data.tenantId &&
+                       hasAnyRole(['admin', 'seniorPastor', 'networkPastor', 'auxPastor']);
+
+      allow update: if isSignedIn() &&
+                       incoming().tenantId == existing().tenantId &&
+                       hasAnyRole(['admin', 'seniorPastor', 'networkPastor', 'auxPastor']);
+
+      allow delete: if isAdmin();
+    }
+
+    match /kpi_entries/{entryId} {
+      allow get, list: if isSignedIn() && (isAdmin() || (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && resource.data.tenantId == get(/databases/$(database)/documents/users/$(request.auth.uid)).data.tenantId));
+
+      allow create: if isSignedIn() &&
+                       incoming().tenantId == get(/databases/$(database)/documents/users/$(request.auth.uid)).data.tenantId &&
+                       hasAnyRole(['admin', 'seniorPastor', 'networkPastor', 'auxPastor']);
+
+      allow update: if isSignedIn() &&
+                       incoming().tenantId == existing().tenantId &&
+                       hasAnyRole(['admin', 'seniorPastor', 'networkPastor', 'auxPastor']);
+
+      allow delete: if isAdmin();
+    }
+
+    match /action_plans/{planId} {
+      allow get, list: if isSignedIn() && (isAdmin() || (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && resource.data.tenantId == get(/databases/$(database)/documents/users/$(request.auth.uid)).data.tenantId));
+
+      allow create: if isSignedIn() &&
+                       incoming().tenantId == get(/databases/$(database)/documents/users/$(request.auth.uid)).data.tenantId &&
+                       hasAnyRole(['admin', 'seniorPastor', 'networkPastor', 'auxPastor', 'manager']);
+
+      allow update: if isSignedIn() &&
+                       incoming().tenantId == existing().tenantId &&
+                       hasAnyRole(['admin', 'seniorPastor', 'networkPastor', 'auxPastor', 'manager']);
+
+      allow delete: if isAdmin();
+    }
+
     match /orders/{orderId} {
       allow get, list: if isSignedIn() && (isAdmin() || hasAnyRole(['seniorPastor', 'networkPastor', 'auxPastor']) || resource.data.userId == request.auth.uid);
       allow create: if isSignedIn() && isValidId(orderId) && isValidOrder(incoming()) &&
