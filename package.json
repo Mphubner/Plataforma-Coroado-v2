@@ -5,10 +5,10 @@
   "type": "module",
   "scripts": {
     "dev": "tsx server.ts",
-    "build": "vite build",
+    "build": "node --max-old-space-size=8192 ./node_modules/vite/bin/vite.js build",
     "preview": "vite preview",
     "clean": "rm -rf dist",
-    "lint": "tsc --noEmit",
+    "lint": "node --max-old-space-size=8192 ./node_modules/typescript/bin/tsc --noEmit",
     "lint:rules": "eslint firestore.rules",
     "validate:firestore": "powershell -ExecutionPolicy Bypass -File scripts/validate-firestore.ps1",
     "validate": "npm run lint && npm run lint:rules && npm run validate:firestore && npm run build",
@@ -22,7 +22,7 @@
     "firebase:rules:dry-run": "npx --yes firebase-tools deploy --only firestore:ai-studio-534c2e7e-8664-4b76-95e3-faf31fc1628b --project gen-lang-client-0529830528 --dry-run",
     "firebase:rules:deploy": "npx --yes firebase-tools deploy --only firestore:ai-studio-534c2e7e-8664-4b76-95e3-faf31fc1628b --project gen-lang-client-0529830528",
     "next:dev": "next dev -p 3001",
-    "next:build": "next build",
+    "next:build": "node --max-old-space-size=8192 ./node_modules/next/dist/bin/next build",
     "start": "tsx -e \"process.env.NODE_ENV='production'; import('./server.ts')\""
   },
   "dependencies": {
@@ -43,6 +43,7 @@
     "express": "^4.21.2",
     "firebase": "^12.12.0",
     "firebase-admin": "^13.8.0",
+    "googleapis": "^173.0.0",
     "html5-qrcode": "^2.3.8",
     "leaflet": "^1.9.4",
     "lucide-react": "^0.546.0",

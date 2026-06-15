@@ -1,4 +1,4 @@
-import * as React from "react"
+﻿import * as React from "react"
 import { motion } from "motion/react"
 import { Users, Calendar, CheckCircle2, AlertCircle, Plus, Search, ChevronRight, Music, Heart, Camera, Coffee, Shield, Clock, XCircle, BookOpen, Home, CalendarCheck, GraduationCap, MessageSquare } from "lucide-react"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
@@ -126,10 +126,12 @@ export function MinistriesView({ isLoggedIn = true, userData, onLoginClick }: { 
   const [scales, setScales] = React.useState<Scale[]>([]);
   const [briefings, setBriefings] = React.useState<Briefing[]>([]);
   const [calendarEvents, setCalendarEvents] = React.useState<CalendarEvent[]>([]);
+  const [systemEvents, setSystemEvents] = React.useState<any[]>([]);
   
   const [showBriefingForm, setShowBriefingForm] = React.useState(false);
   const [showScaleForm, setShowScaleForm] = React.useState(false);
   const [newScale, setNewScale] = React.useState<Partial<Scale>>({
+    eventId: '',
     eventName: '',
     date: '',
     time: '',
@@ -179,6 +181,14 @@ export function MinistriesView({ isLoggedIn = true, userData, onLoginClick }: { 
   const isMinistryMember = React.useMemo(() => {
     return isLeader || ministryMembers.some(m => m.id === currentUserId);
   }, [isLeader, ministryMembers, currentUserId]);
+
+  React.useEffect(() => {
+    if (!tenantId) return;
+    const unsubEv = onSnapshot(query(collection(db, 'events'), where('tenantId', '==', tenantId)), (snap) => {
+      setSystemEvents(snap.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+    });
+    return () => unsubEv();
+  }, [tenantId]);
 
   React.useEffect(() => {
     const q = tenantId 
@@ -975,10 +985,28 @@ export function MinistriesView({ isLoggedIn = true, userData, onLoginClick }: { 
             >
               <div className="p-6 space-y-4">
                 <h3 className="text-xl font-bold">Nova Escala</h3>
-                <p className="text-sm text-white/60">Agende a equipe para um novo culto ou evento.</p>
-                <div className="space-y-4">
-                  <div className="space-y-2">
-                    <label className="text-sm font-bold">Nome do Evento</label>
+                  <p className="text-sm text-white/60">Agende a equipe para um novo culto ou evento.</p>
+                  <div className="space-y-4">
+                    <div className="space-y-2">
+                      <label className="text-sm font-bold">Vincular a Evento (Opcional)</label>
+                      <select
+                        className="w-full h-10 bg-black border border-white/10 rounded-md px-3 text-white outline-none"
+                        value={newScale.eventId || ""}
+                        onChange={(e) => {
+                          const ev = systemEvents.find(x => x.id === e.target.value);
+                          if (ev) {
+                            setNewScale({...newScale, eventId: ev.id, eventName: ev.title, date: ev.date || '', time: ev.time || ''});
+                          } else {
+                            setNewScale({...newScale, eventId: ''});
+                          }
+                        }}
+                      >
+                        <option value="">-- Selecione um evento --</option>
+                        {systemEvents.map(ev => <option key={ev.id} value={ev.id}>{ev.title} ({ev.date})</option>)}
+                      </select>
+                    </div>
+                    <div className="space-y-2">
+                      <label className="text-sm font-bold">Nome do Evento</label>
                     <Input 
                       placeholder="Ex: Culto de Celebração" 
                       className="bg-black border-white/10"
@@ -1050,7 +1078,7 @@ export function MinistriesView({ isLoggedIn = true, userData, onLoginClick }: { 
                           tenantId: tenantId,
                         });
                         setShowScaleForm(false);
-                        setNewScale({ eventName: '', date: '', time: '', setlist: [], assignments: [] });
+                        setNewScale({ eventId: '', eventName: '', date: '', time: '', setlist: [], assignments: [] });
                       } catch (e) {
                         console.error(e);
                         alert("Erro ao salvar escala: " + (e as Error).message);
@@ -1194,3 +1222,4 @@ export function MinistriesView({ isLoggedIn = true, userData, onLoginClick }: { 
     </div>
   );
 }
+

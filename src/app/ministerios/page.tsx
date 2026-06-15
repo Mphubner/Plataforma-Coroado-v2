@@ -1,5 +1,5 @@
-import NextClientApp from '../NextClientApp';
+import { MinisteriosNativeClient } from './MinisteriosNativeClient';
 
 export default function Page() {
-  return <NextClientApp />;
+  return <MinisteriosNativeClient />;
 }

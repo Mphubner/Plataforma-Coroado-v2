@@ -1,5 +1,5 @@
-import NextClientApp from '../NextClientApp';
+import { EscolaNativeClient } from './EscolaNativeClient';
 
 export default function Page() {
-  return <NextClientApp />;
+  return <EscolaNativeClient />;
 }

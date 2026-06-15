@@ -886,6 +886,187 @@ service cloud.firestore {
                        incoming().keys().hasAll(['taskId', 'content', 'authorName', 'date', 'tenantId', 'createdAt']) &&
                        incoming().content is string && incoming().authorName is string &&
                        incoming().taskId is string && incoming().date is string &&
+                       incoming().updatedAt == request.time;
+
+      allow delete: if isAdmin();
+    }
+
+    match /ministry_events/{eventId} {
+      allow get, list: if isSignedIn() && (isAdmin() || (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && resource.data.tenantId == get(/databases/$(database)/documents/users/$(request.auth.uid)).data.tenantId));
+
+      allow create: if isSignedIn() && isValidId(eventId) && isValidMinistryEvent(incoming()) &&
+                       incoming().tenantId == get(/databases/$(database)/documents/users/$(request.auth.uid)).data.tenantId &&
+                       incoming().createdAt == request.time &&
+                       incoming().updatedAt == request.time &&
+                       (isAdmin() || get(/databases/$(database)/documents/ministries/$(incoming().ministryId)).data.leaderId == request.auth.uid);
+
+      allow update: if isSignedIn() && isValidId(eventId) && isValidMinistryEvent(incoming()) &&
+                       incoming().tenantId == existing().tenantId &&
+                       incoming().createdAt == existing().createdAt &&
+                       incoming().diff(existing()).affectedKeys().hasOnly(['title', 'date', 'type', 'updatedAt']) &&
+                       incoming().updatedAt == request.time &&
+                       (isAdmin() || get(/databases/$(database)/documents/ministries/$(existing().ministryId)).data.leaderId == request.auth.uid);
+
+      allow delete: if isAdmin() || (isSignedIn() && get(/databases/$(database)/documents/ministries/$(existing().ministryId)).data.leaderId == request.auth.uid);
+    }
+
+
+    match /visitor_leads/{leadId} {
+      allow get, list: if isSignedIn() && (isAdmin() || (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && resource.data.tenantId == get(/databases/$(database)/documents/users/$(request.auth.uid)).data.tenantId));
+
+      allow create: if isSignedIn() && isValidId(leadId) && isValidVisitorLead(incoming()) &&
+                       incoming().tenantId == get(/databases/$(database)/documents/users/$(request.auth.uid)).data.tenantId &&
+                       incoming().createdAt == request.time &&
+                       incoming().updatedAt == request.time;
+
+      allow update: if isSignedIn() && isValidId(leadId) && isValidVisitorLead(incoming()) &&
+                       incoming().tenantId == existing().tenantId &&
+                       incoming().createdAt == existing().createdAt &&
+                       incoming().diff(existing()).affectedKeys().hasOnly(['name', 'phone', 'neighborhood', 'dateVisited', 'source', 'status', 'assignedCellId', 'notes', 'updatedAt']) &&
+                       incoming().updatedAt == request.time;
+
+      allow delete: if isAdmin() || (isSignedIn() && hasAnyRole(['seniorPastor', 'networkPastor', 'auxPastor']));
+    }
+
+    match /prayer_requests/{requestId} {
+      allow get, list: if isSignedIn() && resource.data.tenantId == get(/databases/$(database)/documents/users/$(request.auth.uid)).data.tenantId &&
+                         (!resource.data.isPrivate || hasAnyRole(['admin', 'seniorPastor', 'networkPastor', 'auxPastor']));
+
+      allow create: if isSignedIn() && isValidId(requestId) && isValidPrayerRequest(incoming()) &&
+                       incoming().tenantId == get(/databases/$(database)/documents/users/$(request.auth.uid)).data.tenantId &&
+                       incoming().createdAt == request.time &&
+                       incoming().updatedAt == request.time;
+
+      allow update: if isSignedIn() && isValidId(requestId) && isValidPrayerRequest(incoming()) &&
+                       incoming().tenantId == existing().tenantId &&
+                       incoming().createdAt == existing().createdAt &&
+                       incoming().diff(existing()).affectedKeys().hasOnly(['status', 'updatedAt']) &&
+                       incoming().updatedAt == request.time;
+
+      allow delete: if isAdmin() || (isSignedIn() && hasAnyRole(['seniorPastor', 'networkPastor', 'auxPastor']));
+    }
+
+    match /risk_alerts/{alertId} {
+      allow get, list: if isSignedIn() && resource.data.tenantId == get(/databases/$(database)/documents/users/$(request.auth.uid)).data.tenantId && hasAnyRole(['admin', 'seniorPastor', 'networkPastor', 'auxPastor', 'supervisor', 'cellLeader']);
+
+      allow create: if isSignedIn() && isValidId(alertId) && isValidRiskAlert(incoming()) &&
+                       incoming().tenantId == get(/databases/$(database)/documents/users/$(request.auth.uid)).data.tenantId &&
+                       incoming().createdAt == request.time &&
+                       incoming().updatedAt == request.time;
+
+      allow update: if isSignedIn() && isValidId(alertId) && isValidRiskAlert(incoming()) &&
+                       incoming().tenantId == existing().tenantId &&
+                       incoming().createdAt == existing().createdAt &&
+                       incoming().diff(existing()).affectedKeys().hasOnly(['weeksAbsent', 'lastCellDate', 'riskLevel', 'updatedAt']) &&
+                       incoming().updatedAt == request.time;
+
+      allow delete: if isAdmin() || (isSignedIn() && hasAnyRole(['seniorPastor', 'networkPastor', 'auxPastor']));
+    }
+
+
+    match /kpi_targets/{targetId} {
+      allow get, list: if isSignedIn() && (isAdmin() || (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && resource.data.tenantId == get(/databases/$(database)/documents/users/$(request.auth.uid)).data.tenantId));
+
+      allow create: if isSignedIn() && isValidId(targetId) && isValidKpiTarget(incoming()) &&
+                       incoming().tenantId == get(/databases/$(database)/documents/users/$(request.auth.uid)).data.tenantId &&
+                       incoming().createdAt == request.time &&
+                       incoming().updatedAt == request.time &&
+                       isAdmin();
+
+      allow update: if isSignedIn() && isValidId(targetId) && isValidKpiTarget(incoming()) &&
+                       incoming().tenantId == existing().tenantId &&
+                       incoming().createdAt == existing().createdAt &&
+                       incoming().diff(existing()).affectedKeys().hasOnly(['name', 'period', 'targetValue', 'unit', 'updatedAt']) &&
+                       incoming().updatedAt == request.time &&
+                       isAdmin();
+
+      allow delete: if isAdmin();
+    }
+
+    match /kpi_entries/{entryId} {
+      allow get, list: if isSignedIn() && (isAdmin() || (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && resource.data.tenantId == get(/databases/$(database)/documents/users/$(request.auth.uid)).data.tenantId));
+
+      allow create: if isSignedIn() && isValidId(entryId) && isValidKpiEntry(incoming()) &&
+                       incoming().tenantId == get(/databases/$(database)/documents/users/$(request.auth.uid)).data.tenantId &&
+                       incoming().createdAt == request.time &&
+                       incoming().updatedAt == request.time &&
+                       hasAnyRole(['admin', 'seniorPastor', 'networkPastor', 'auxPastor']);
+
+      allow update: if isSignedIn() && isValidId(entryId) && isValidKpiEntry(incoming()) &&
+                       incoming().tenantId == existing().tenantId &&
+                       incoming().createdAt == existing().createdAt &&
+                       incoming().diff(existing()).affectedKeys().hasOnly(['actualValue', 'targetValue', 'notes', 'updatedAt']) &&
+                       incoming().updatedAt == request.time &&
+                       hasAnyRole(['admin', 'seniorPastor', 'networkPastor', 'auxPastor']);
+
+      allow delete: if isAdmin();
+    }
+
+    match /service_reports/{reportId} {
+      allow get, list: if isSignedIn() && (isAdmin() || (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && resource.data.tenantId == get(/databases/$(database)/documents/users/$(request.auth.uid)).data.tenantId));
+
+      allow create: if isSignedIn() && isValidId(reportId) && isValidServiceReport(incoming()) &&
+                       incoming().tenantId == get(/databases/$(database)/documents/users/$(request.auth.uid)).data.tenantId &&
+                       incoming().createdAt == request.time &&
+                       incoming().updatedAt == request.time &&
+                       hasAnyRole(['admin', 'seniorPastor', 'networkPastor', 'auxPastor']);
+
+      allow update: if isSignedIn() && isValidId(reportId) && isValidServiceReport(incoming()) &&
+                       incoming().tenantId == existing().tenantId &&
+                       incoming().createdAt == existing().createdAt &&
+                       incoming().diff(existing()).affectedKeys().hasOnly(['attendanceActual', 'attendanceTarget', 'visitorsActual', 'visitorsTarget', 'updatedAt']) &&
+                       incoming().updatedAt == request.time &&
+                       hasAnyRole(['admin', 'seniorPastor', 'networkPastor', 'auxPastor']);
+
+      allow delete: if isAdmin();
+    }
+
+    match /financial_reports/{reportId} {
+      allow get, list: if isSignedIn() && sameTenant(resource.data.tenantId) && hasAnyRole(['admin', 'seniorPastor', 'networkPastor', 'auxPastor']);
+
+      allow create: if isSignedIn() && isValidId(reportId) && isValidFinancialReport(incoming()) &&
+                       incoming().tenantId == currentUser().data.tenantId &&
+                       incoming().createdAt == request.time &&
+                       incoming().updatedAt == request.time &&
+                       hasAnyRole(['admin', 'seniorPastor', 'networkPastor', 'auxPastor']);
+
+      allow update: if isSignedIn() && isValidId(reportId) && isValidFinancialReport(incoming()) &&
+                       incoming().tenantId == existing().tenantId &&
+                       incoming().createdAt == existing().createdAt &&
+                       incoming().diff(existing()).affectedKeys().hasOnly(['amount', 'target', 'updatedAt']) &&
+                       incoming().updatedAt == request.time &&
+                       hasAnyRole(['admin', 'seniorPastor', 'networkPastor', 'auxPastor']);
+
+      allow delete: if isAdmin();
+    }
+
+
+    match /strategic_goals/{goalId} {
+      allow get, list: if isSignedIn() && (isAdmin() || (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && resource.data.tenantId == get(/databases/$(database)/documents/users/$(request.auth.uid)).data.tenantId));
+
+      allow create: if isSignedIn() && isValidId(goalId) && isValidStrategicGoal(incoming()) &&
+                       incoming().tenantId == get(/databases/$(database)/documents/users/$(request.auth.uid)).data.tenantId &&
+                       incoming().createdAt == request.time &&
+                       incoming().updatedAt == request.time &&
+                       hasAnyRole(['admin', 'seniorPastor', 'networkPastor', 'auxPastor']);
+
+      allow update: if isSignedIn() && isValidId(goalId) && isValidStrategicGoal(incoming()) &&
+                       incoming().tenantId == existing().tenantId &&
+                       incoming().createdAt == existing().createdAt &&
+                       incoming().diff(existing()).affectedKeys().hasOnly(['title', 'pillar', 'description', 'targetText', 'period', 'progress', 'color', 'updatedAt']) &&
+                       incoming().updatedAt == request.time &&
+                       hasAnyRole(['admin', 'seniorPastor', 'networkPastor', 'auxPastor']);
+
+      allow delete: if isAdmin();
+    }
+
+
+    match /task_updates/{updateId} {
+      allow get, list: if isSignedIn() && (isAdmin() || (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && resource.data.tenantId == get(/databases/$(database)/documents/users/$(request.auth.uid)).data.tenantId));
+      allow create: if isSignedIn() && isValidId(updateId) &&
+                       incoming().keys().hasAll(['taskId', 'content', 'authorName', 'date', 'tenantId', 'createdAt']) &&
+                       incoming().content is string && incoming().authorName is string &&
+                       incoming().taskId is string && incoming().date is string &&
                        incoming().tenantId is string && incoming().createdAt is timestamp &&
                        incoming().tenantId == get(/databases/$(database)/documents/users/$(request.auth.uid)).data.tenantId;
       allow delete: if isAdmin();

@@ -11,8 +11,51 @@ import { collection, query, where, onSnapshot } from 'firebase/firestore';
 import ReactQrCode from 'react-qr-code';
 import { COLLECTIONS } from '@/src/lib/domain/collections';
 import { createCellReport } from '@/src/lib/services/cellReportsService';
+import { getJson } from '@/src/lib/api/http';
 
-function ResumoTab({ cell, members, reports, onOpenReports, onOpenMembers, onOpenVisitors }: { cell: any, members: any[], reports: any[], onOpenReports: () => void, onOpenMembers: () => void, onOpenVisitors: () => void }) {
+type CellOverview = {
+  generatedAt: string;
+  totals: {
+    members: number;
+    reports: number;
+    visitors: number;
+    attendanceRate: number;
+    schoolEngagementRate: number;
+    avgSchoolProgress: number;
+    completedCourseCount: number;
+    publishedCourses: number;
+    multiplicationReadiness: number;
+  };
+  atRiskMembers: Array<{
+    id: string;
+    name: string;
+    phone: string;
+    absences: number;
+    schoolProgress: number;
+    reasons: string[];
+    riskLevel: string;
+  }>;
+  scaleTasks: Array<{
+    id: string;
+    title: string;
+    assigneeId: string;
+    assignee: string;
+    status: string;
+    tag: string;
+  }>;
+  memberSchool: Array<{
+    id: string;
+    enrollments: number;
+    progress: number;
+    completedCourses: number;
+  }>;
+  memberSummary: {
+    attendanceRate: number;
+    schoolProgress: number;
+  };
+};
+
+function ResumoTab({ cell, members, reports, overview, onOpenReports, onOpenMembers, onOpenVisitors }: { cell: any, members: any[], reports: any[], overview: CellOverview | null, onOpenReports: () => void, onOpenMembers: () => void, onOpenVisitors: () => void }) {
   const reportCount = reports.length;
   const totalVisitors = reports.reduce((sum, report) => sum + Number(report.visitors || 0), 0);
   const monthlyVisitorAverage = reportCount > 0 ? Math.round((totalVisitors / reportCount) * 10) / 10 : 0;
@@ -26,6 +69,11 @@ function ResumoTab({ cell, members, reports, onOpenReports, onOpenMembers, onOpe
   const attendanceTone = attendanceRate >= 70 ? 'text-green-400' : 'text-red-400';
   const attendanceBar = attendanceRate >= 70 ? 'bg-green-400' : 'bg-red-400';
   const reportsStatus = reportCount > 0 ? 'em dia' : 'pendente';
+  const schoolEngagementRate = overview?.totals.schoolEngagementRate ?? 0;
+  const schoolProgress = overview?.totals.avgSchoolProgress ?? 0;
+  const multiplicationReadiness = overview?.totals.multiplicationReadiness ?? Math.min(100, Math.round((members.length / 15) * 100));
+  const schoolTone = schoolEngagementRate >= 70 ? 'text-green-400' : schoolEngagementRate >= 40 ? 'text-yellow-400' : 'text-red-400';
+  const schoolBar = schoolEngagementRate >= 70 ? 'bg-green-400' : schoolEngagementRate >= 40 ? 'bg-yellow-400' : 'bg-red-400';
 
   return (
     <div className="space-y-6">
@@ -61,10 +109,10 @@ function ResumoTab({ cell, members, reports, onOpenReports, onOpenMembers, onOpe
                <div className="space-y-2">
                  <div className="flex justify-between text-sm">
                    <span className="text-white/60">Engajamento Total (Multiplicação Semente)</span>
-                   <span className="text-primary font-bold">0%</span>
+                   <span className="text-primary font-bold">{multiplicationReadiness}%</span>
                  </div>
                  <div className="h-2 bg-black/50 rounded-full overflow-hidden">
-                   <div className="h-full bg-primary w-0"></div>
+                   <div className="h-full bg-primary" style={{ width: `${multiplicationReadiness}%` }}></div>
                  </div>
                  <p className="text-xs text-white/40 italic mt-1">Alvo: 15 membros treinados para abertura de nova célula.</p>
                </div>
@@ -72,11 +120,11 @@ function ResumoTab({ cell, members, reports, onOpenReports, onOpenMembers, onOpe
                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div className="p-4 border border-white/5 rounded-2xl bg-black/20 flex items-center gap-3">
                     <CheckSquare className="text-primary/50 w-5 h-5" />
-                    <span className="text-sm text-white/70">Formar 2 Líderes em Treinamento na Escola IDE</span>
+                    <span className="text-sm text-white/70">{overview?.totals.completedCourseCount || 0} conclusões registradas na Escola IDE</span>
                   </div>
                   <div className="p-4 border border-white/5 rounded-2xl bg-black/20 flex items-center gap-3">
                     <CheckSquare className="text-primary/50 w-5 h-5" />
-                    <span className="text-sm text-white/70">Manter a média acima de 80% de presença</span>
+                    <span className="text-sm text-white/70">Manter assiduidade acima de 70% nos encontros</span>
                   </div>
                </div>
             </CardContent>
@@ -104,12 +152,12 @@ function ResumoTab({ cell, members, reports, onOpenReports, onOpenMembers, onOpe
                  <div className="space-y-2">
                    <div className="flex justify-between text-sm">
                      <span className="font-bold text-white/80">Engajamento na Escola IDE</span>
-                     <span className="text-green-400 font-bold">85%</span>
+                     <span className={`${schoolTone} font-bold`}>{schoolEngagementRate}%</span>
                    </div>
                    <div className="h-2 bg-black/50 rounded-full overflow-hidden">
-                     <div className="h-full bg-green-400 w-[85%]"></div>
+                     <div className={`h-full ${schoolBar}`} style={{ width: `${Math.min(schoolEngagementRate, 100)}%` }}></div>
                    </div>
-                   <p className="text-[10px] text-white/40 uppercase tracking-widest mt-1">Consolidado (Rede)</p>
+                   <p className="text-[10px] text-white/40 uppercase tracking-widest mt-1">Progresso médio dos matriculados: {schoolProgress}%</p>
                  </div>
                </div>
 
@@ -150,20 +198,19 @@ function ResumoTab({ cell, members, reports, onOpenReports, onOpenMembers, onOpe
                <p className="text-[10px] uppercase text-red-400/50">Membros inativos (Faltas ou IDE parada &gt; 3 sem).</p>
              </CardHeader>
              <CardContent className="space-y-3">
-                <div className="p-4 rounded-xl border border-red-500/20 bg-black/20 flex justify-between items-center">
-                  <div>
-                    <h4 className="font-bold text-white text-sm">Lucas Ferreira</h4>
-                    <p className="text-xs text-red-400/70 flex items-center gap-1 mt-1"><AlertCircle className="w-3 h-3"/> Sem freq. há 3 sem.</p>
+                {overview?.atRiskMembers.length ? overview.atRiskMembers.map(member => (
+                  <div key={member.id} className="p-4 rounded-xl border border-red-500/20 bg-black/20 flex justify-between items-center gap-3">
+                    <div>
+                      <h4 className="font-bold text-white text-sm">{member.name}</h4>
+                      <p className="text-xs text-red-400/70 flex items-center gap-1 mt-1"><AlertCircle className="w-3 h-3"/>{member.reasons[0]}</p>
+                    </div>
+                    <Button size="sm" variant="outline" onClick={() => window.location.href = '/membros'} className="border-red-500/20 text-red-400 hover:bg-red-500/10 rounded-full text-xs h-8">Acompanhar</Button>
                   </div>
-                  <Button size="sm" variant="outline" onClick={() => window.location.href = '/membros'} className="border-red-500/20 text-red-400 hover:bg-red-500/10 rounded-full text-xs h-8">WhatsApp</Button>
-                </div>
-                <div className="p-4 rounded-xl border border-red-500/20 bg-black/20 flex justify-between items-center">
-                  <div>
-                    <h4 className="font-bold text-white text-sm">Mariana Costa</h4>
-                    <p className="text-xs text-red-400/70 flex items-center gap-1 mt-1"><AlertCircle className="w-3 h-3"/> Sem acesso à Escola IDE</p>
+                )) : (
+                  <div className="p-4 rounded-xl border border-green-500/20 bg-green-500/5 text-sm text-green-300">
+                    Nenhum alerta critico com base nos ultimos relatorios e matriculas IDE.
                   </div>
-                  <Button size="sm" variant="outline" onClick={() => window.location.href = '/membros'} className="border-red-500/20 text-red-400 hover:bg-red-500/10 rounded-full text-xs h-8">Ligar</Button>
-                </div>
+                )}
              </CardContent>
            </Card>
         </div>
@@ -172,10 +219,12 @@ function ResumoTab({ cell, members, reports, onOpenReports, onOpenMembers, onOpe
   )
 }
 
-function ResumoMembroTab({ cell, userData }: { cell: any, userData: any }) {
+function ResumoMembroTab({ cell, userData, overview }: { cell: any, userData: any, overview: CellOverview | null }) {
   const [showInviteQr, setShowInviteQr] = useState(false);
   const inviteUrl = `${window.location.origin}/celulas?cell=${encodeURIComponent(cell?.id || cell?.name || '')}`;
   const instagramUrl = cell?.instagram || 'https://www.instagram.com/igrejacoroado/';
+  const attendanceRate = overview?.memberSummary.attendanceRate ?? 0;
+  const schoolProgress = overview?.memberSummary.schoolProgress ?? 0;
 
   return (
     <div className="space-y-6">
@@ -204,12 +253,22 @@ function ResumoMembroTab({ cell, userData }: { cell: any, userData: any }) {
             <div className="space-y-2">
               <div className="flex justify-between text-sm">
                 <span className="font-bold text-white/80">Minha Frequência</span>
-                <span className="text-green-400 font-bold">100%</span>
+                <span className="text-green-400 font-bold">{attendanceRate}%</span>
               </div>
               <div className="h-2 bg-black/50 rounded-full overflow-hidden">
-                <div className="h-full bg-green-400 w-[100%]"></div>
+                <div className="h-full bg-green-400" style={{ width: `${Math.min(attendanceRate, 100)}%` }}></div>
               </div>
               <p className="text-[10px] text-white/40 uppercase tracking-widest mt-1">Últimas 4 semanas</p>
+            </div>
+
+            <div className="space-y-2">
+              <div className="flex justify-between text-sm">
+                <span className="font-bold text-white/80">Meu Progresso IDE</span>
+                <span className="text-primary font-bold">{schoolProgress}%</span>
+              </div>
+              <div className="h-2 bg-black/50 rounded-full overflow-hidden">
+                <div className="h-full bg-primary" style={{ width: `${Math.min(schoolProgress, 100)}%` }}></div>
+              </div>
             </div>
             
             <div className="space-y-3">
@@ -258,7 +317,9 @@ function ResumoMembroTab({ cell, userData }: { cell: any, userData: any }) {
   )
 }
 
-function MembrosTab({ members, isLeader }: { members: any[], isLeader: boolean }) {
+function MembrosTab({ members, isLeader, overview }: { members: any[], isLeader: boolean, overview: CellOverview | null }) {
+  const schoolByMember = new Map((overview?.memberSchool || []).map(item => [item.id, item]));
+
   return (
     <div className="space-y-6">
       <div className="flex justify-between items-center bg-zinc-900 border border-white/10 p-4 rounded-2xl">
@@ -267,7 +328,9 @@ function MembrosTab({ members, isLeader }: { members: any[], isLeader: boolean }
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-        {members.map(m => (
+        {members.map(m => {
+          const school = schoolByMember.get(m.id);
+          return (
           <Card key={m.id} className="bg-zinc-900 border-white/10 rounded-[2rem] hover:border-primary/50 transition-colors">
             <CardContent className="p-6 space-y-4">
               <div className="flex items-center gap-4">
@@ -280,12 +343,15 @@ function MembrosTab({ members, isLeader }: { members: any[], isLeader: boolean }
                 </div>
               </div>
               <div className="pt-4 border-t border-white/5 flex flex-wrap gap-2">
-                 <Badge className="bg-green-500/10 text-green-400 border border-green-500/20 text-[10px] uppercase">IDE 100%</Badge>
-                 <Badge className="bg-blue-500/10 text-blue-400 border border-blue-500/20 text-[10px] uppercase">Servindo: Recepção</Badge>
+                 <Badge className={`${school?.enrollments ? 'bg-green-500/10 text-green-400 border-green-500/20' : 'bg-yellow-500/10 text-yellow-400 border-yellow-500/20'} border text-[10px] uppercase`}>
+                   IDE {school?.enrollments ? `${school.progress}%` : 'sem matricula'}
+                 </Badge>
+                 <Badge className="bg-blue-500/10 text-blue-400 border border-blue-500/20 text-[10px] uppercase">{school?.completedCourses || 0} cursos concluidos</Badge>
               </div>
             </CardContent>
           </Card>
-        ))}
+          );
+        })}
         {members.length === 0 && <div className="col-span-full text-center py-10 text-white/40">Nenhum membro encontrado.</div>}
       </div>
     </div>
@@ -330,16 +396,24 @@ function VisitantesTab({ isLeader, visitors }: { isLeader: boolean, visitors: an
   )
 }
 
-function EscalasDinâmicasTab({ isLeader, members }: { isLeader: boolean, members: any[] }) {
-  // Lógica de Sorteio Lazy: Em produção, isso seria do backend. No front, simulamos um state.
-  const [tasks, setTasks] = useState([
-    { id: '1', title: 'Dar Estudo / Ministração', assignee: 'Gabriel Henrique', status: 'Confirmado', icon: <BookOpen className="w-5 h-5 text-blue-400" /> },
-    { id: '2', title: 'Louvor e Adoração', assignee: 'Priscila Mendes', status: 'Confirmado', icon: <Phone className="w-5 h-5 text-purple-400" /> },
-    { id: '3', title: 'Oração Inicial', assignee: null, status: 'Pendente', icon: <Heart className="w-5 h-5 text-red-400" /> },
-    { id: '4', title: 'Dinâmica de Quebra-Gelo', assignee: 'Danilo Soares', status: 'Confirmado', icon: <Target className="w-5 h-5 text-yellow-400" /> },
-    { id: '5', title: 'Recepção / Boas Vindas', assignee: null, status: 'Pendente', icon: <Users className="w-5 h-5 text-green-400" /> },
-    { id: '6', title: 'Lanche / Comes e Bebes', assignee: 'Todos participam', status: 'Mesa da Partilha', icon: <AlertCircle className="w-5 h-5 text-orange-400" /> },
-  ]);
+function EscalasDinâmicasTab({ isLeader, members, overview }: { isLeader: boolean, members: any[], overview: CellOverview | null }) {
+  const scaleIcons = [
+    <BookOpen className="w-5 h-5 text-blue-400" />,
+    <Phone className="w-5 h-5 text-purple-400" />,
+    <Heart className="w-5 h-5 text-red-400" />,
+    <Target className="w-5 h-5 text-yellow-400" />,
+    <Users className="w-5 h-5 text-green-400" />,
+    <AlertCircle className="w-5 h-5 text-orange-400" />,
+  ];
+  const baseTasks = React.useMemo(() => (overview?.scaleTasks || []).map((task, index) => ({
+    ...task,
+    icon: scaleIcons[index % scaleIcons.length],
+  })), [overview?.scaleTasks]);
+  const [tasks, setTasks] = useState<any[]>(baseTasks);
+
+  useEffect(() => {
+    setTasks(baseTasks);
+  }, [baseTasks]);
 
   const handleSortear = () => {
      // Motor Lógico Simplificado: Pega membros que não tem tarefa e aloca nas pendentes.
@@ -368,7 +442,7 @@ function EscalasDinâmicasTab({ isLeader, members }: { isLeader: boolean, member
          </div>
          <div className="flex gap-2">
            {isLeader && <Button onClick={handleSortear} variant="outline" className="border-primary/50 text-primary hover:bg-primary/10 rounded-full font-bold">Sortear Pendentes</Button>}
-            {isLeader && <Button onClick={() => alert('Use Sortear Pendentes para gerar a próxima escala base. A persistência de escalas da célula será consolidada no módulo de escalas.')} className="bg-primary text-black font-bold rounded-full"><Plus className="w-4 h-4 mr-2"/> Nova Escala</Button>}
+            {isLeader && <Button onClick={handleSortear} className="bg-primary text-black font-bold rounded-full"><Plus className="w-4 h-4 mr-2"/> Gerar Escala</Button>}
          </div>
        </div>
 
@@ -551,6 +625,7 @@ export function CellManagementDashboard({ isLeader, cell, userData }: { isLeader
   const [activeTab, setActiveTab] = useState("resumo");
   const [members, setMembers] = useState<any[]>([]);
   const [reports, setReports] = useState<any[]>([]);
+  const [overview, setOverview] = useState<CellOverview | null>(null);
   const isSupervisor = userData?.roles?.includes('supervisor') || userData?.roles?.includes('admin');
 
   useEffect(() => {
@@ -563,6 +638,26 @@ export function CellManagementDashboard({ isLeader, cell, userData }: { isLeader
 
     return () => { unsubM(); unsubR(); };
   }, [cell?.id, userData?.tenantId]);
+
+  useEffect(() => {
+    if (!cell?.id || !auth.currentUser) return;
+    let cancelled = false;
+
+    const loadOverview = async () => {
+      try {
+        const token = await auth.currentUser?.getIdToken();
+        if (!token) return;
+        const data = await getJson<{ overview: CellOverview }>(`/api/cells/${cell.id}/overview`, { token });
+        if (!cancelled) setOverview(data.overview);
+      } catch (error) {
+        console.error('Cell overview failed:', error);
+        if (!cancelled) setOverview(null);
+      }
+    };
+
+    void loadOverview();
+    return () => { cancelled = true; };
+  }, [cell?.id, members.length, reports.length]);
 
   const consolidatedVisitors = React.useMemo(() => {
     const counts: Record<string, { count: number, dates: string[], originalName: string }> = {};
@@ -616,11 +711,7 @@ export function CellManagementDashboard({ isLeader, cell, userData }: { isLeader
           {isSupervisor && (
              <div className="flex items-center gap-4 bg-black/40 p-2 pl-6 rounded-full border border-white/10">
                <span className="text-[10px] uppercase font-bold text-white/40 tracking-widest">Gerir Rede:</span>
-               <select className="bg-zinc-800 text-white border-none rounded-full px-4 py-2 font-bold focus:ring-primary">
-                 <option>{cell.name} (Centro)</option>
-                 <option>Célula Vida (Norte)</option>
-                 <option>Célula Sal (Sul)</option>
-               </select>
+               <span className="bg-zinc-800 text-white rounded-full px-4 py-2 font-bold">{cell.name}</span>
              </div>
           )}
         </div>
@@ -643,17 +734,18 @@ export function CellManagementDashboard({ isLeader, cell, userData }: { isLeader
               cell={cell}
               members={members}
               reports={reports}
+              overview={overview}
               onOpenReports={() => setActiveTab('reports')}
               onOpenMembers={() => setActiveTab('members')}
               onOpenVisitors={() => setActiveTab('visitors')}
             />
           ) : (
-            <ResumoMembroTab cell={cell} userData={userData} />
+            <ResumoMembroTab cell={cell} userData={userData} overview={overview} />
           )}
         </TabsContent>
 
         <TabsContent value="members" className="mt-6 focus-visible:outline-none">
-          <MembrosTab members={members} isLeader={isLeader} />
+          <MembrosTab members={members} isLeader={isLeader} overview={overview} />
         </TabsContent>
         
         <TabsContent value="visitors" className="mt-6 focus-visible:outline-none">
@@ -661,7 +753,7 @@ export function CellManagementDashboard({ isLeader, cell, userData }: { isLeader
         </TabsContent>
         
         <TabsContent value="escalas" className="mt-6 focus-visible:outline-none">
-          <EscalasDinâmicasTab isLeader={isLeader} members={members} />
+          <EscalasDinâmicasTab isLeader={isLeader} members={members} overview={overview} />
         </TabsContent>
 
         {isLeader && (

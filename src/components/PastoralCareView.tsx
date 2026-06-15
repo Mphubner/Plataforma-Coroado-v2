@@ -1,10 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Shield, BrainCircuit, EyeOff, Search, Heart, MapPin, HandHeart, MessageCircle, AlertTriangle, Filter, CheckCircle2, X } from 'lucide-react';
+import { Shield, BrainCircuit, EyeOff, Search, Heart, MapPin, HandHeart, MessageCircle, AlertTriangle, Filter, CheckCircle2, X, Mail } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { db } from '@/lib/firebase';
+import { auth, db } from '@/lib/firebase';
+import { postJson } from '@/src/lib/api/http';
 import { collection, query, where, onSnapshot } from 'firebase/firestore';
 import { updatePrayerRequestStatus, updateVisitorLeadStatus } from '@/src/lib/services/pastoralService';
 
@@ -83,6 +84,26 @@ export function PastoralCareView({ isLoggedIn = true, userData }: { isLoggedIn?:
     } catch (e) {
       console.error(e);
       alert("Nao foi possivel atualizar o visitante.");
+    }
+  };
+
+  const handleSendWelcomeEmail = async (lead: VisitorLead) => {
+    try {
+      const token = await auth.currentUser?.getIdToken();
+      const response = await postJson<{ success: boolean; message: string }>('/api/notifications/welcome-email', {
+        leadId: lead.id,
+        leadName: lead.name,
+        leadEmail: '' // Pode adicionar o campo de email depois
+      }, { token });
+
+      if (response.success) {
+        alert("E-mail de boas-vindas disparado com sucesso via BFF.");
+      } else {
+        alert("Erro ao disparar e-mail.");
+      }
+    } catch (e) {
+      console.error(e);
+      alert("Erro na comunicacao com o BFF.");
     }
   };
 
@@ -353,6 +374,10 @@ export function PastoralCareView({ isLoggedIn = true, userData }: { isLoggedIn?:
                       <CheckCircle2 className="w-4 h-4 mr-2" /> Batizou / Tornou-se Membro
                     </Button>
                   )}
+                  
+                  <Button onClick={() => handleSendWelcomeEmail(selectedLead)} variant="outline" className="w-full border-white/10 hover:bg-white/5 text-blue-400">
+                    <Mail className="w-4 h-4 mr-2" /> Disparar E-mail de Boas-Vindas
+                  </Button>
                   
                   <Button variant="outline" className="w-full border-white/10 hover:bg-white/5">
                     Adicionar Nota no Histórico

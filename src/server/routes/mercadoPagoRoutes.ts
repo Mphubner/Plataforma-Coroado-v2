@@ -81,6 +81,14 @@ export function registerMercadoPagoRoutes(app: express.Express) {
     const paymentId = cleanString(req.body?.data?.id || req.query?.['data.id'] || req.query?.id, 128);
     const accessToken = getMercadoPagoAccessToken();
 
+    console.log('MP Webhook Received:', {
+      eventType,
+      paymentId,
+      bodyType: typeof req.body,
+      queryType: typeof req.query,
+      timestamp: new Date().toISOString()
+    });
+
     if (!paymentId || !accessToken) {
       res.status(202).json({ success: true, ignored: true });
       return;

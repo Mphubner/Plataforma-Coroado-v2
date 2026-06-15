@@ -54,14 +54,17 @@ export function MembersView({ userData }: { userData?: any }) {
   });
 
   useEffect(() => {
+    if (!userData?.tenantId) return;
     const fetchMaps = async () => {
       try {
-        const snapC = await getDocs(collection(db, 'cells'));
+        const qC = query(collection(db, 'cells'), where('tenantId', '==', userData.tenantId));
+        const snapC = await getDocs(qC);
         const cMap: Record<string, string> = {};
         snapC.docs.forEach(d => cMap[d.id] = d.data().name);
         setCellsMap(cMap);
 
-        const snapM = await getDocs(collection(db, 'ministries'));
+        const qM = query(collection(db, 'ministries'), where('tenantId', '==', userData.tenantId));
+        const snapM = await getDocs(qM);
         const mMap: Record<string, string> = {};
         snapM.docs.forEach(d => mMap[d.id] = d.data().name);
         setMinistriesMap(mMap);
@@ -70,7 +73,7 @@ export function MembersView({ userData }: { userData?: any }) {
       }
     };
     fetchMaps();
-  }, []);
+  }, [userData?.tenantId]);
 
   // callAdminApi is removed in favor of httpsCallable
 
@@ -365,12 +368,17 @@ export function MembersView({ userData }: { userData?: any }) {
                       <Input value={editingMember.socialMedia || ""} onChange={e => setEditingMember({ ...editingMember, socialMedia: e.target.value })} className="bg-black border-white/10" placeholder="@usuario" />
                     </div>
                     <div className="space-y-2">
-                      <label className="text-xs font-bold text-white/60">Líder da Célula ID</label>
-                      <Input
+                      <label className="text-xs font-bold text-white/60">Lider da Celula ID</label>
+                      <select
                         value={editingMember.cellId || ""}
                         onChange={e => setEditingMember({ ...editingMember, cellId: e.target.value })}
-                        className="bg-black border-white/10" placeholder="Ex: ID da célula"
-                      />
+                        className="w-full bg-black border border-white/10 rounded-md p-2 text-sm text-white"
+                      >
+                        <option value="">Nenhuma / Não Vinculado</option>
+                        {Object.entries(cellsMap).map(([id, name]) => (
+                          <option key={id} value={id}>{name}</option>
+                        ))}
+                      </select>
                     </div>
                     <div className="space-y-2">
                       <label className="text-xs font-bold text-white/60">Ministério ID</label>

@@ -1,9 +1,18 @@
 import admin from 'firebase-admin';
-import { COLLECTIONS, type PlanRequest, type SchoolProgressRequest, type TransactionReconciliationRequest } from '../lib/domain';
+import { MercadoPagoConfig, Preference } from 'mercadopago';
+import { randomUUID } from 'node:crypto';
+import {
+  COLLECTIONS,
+  type EventEnrollmentRequest,
+  type PlanRequest,
+  type SchoolProgressRequest,
+  type TransactionReconciliationRequest,
+} from '../lib/domain';
 import {
   cleanString,
   DEFAULT_TENANT_ID,
   getAdminDb,
+  getMercadoPagoAccessToken,
   hasAnyRole,
   OWNER_EMAIL,
   type ServerAuthContext,
@@ -83,6 +92,128 @@ export async function checkInEventEnrollment(ctx: ServerAuthContext, enrollmentI
     enrollmentId,
     alreadyCheckedIn: false,
     checkedIn: true,
+  };
+}
+
+export async function createEventEnrollment(ctx: ServerAuthContext, input: EventEnrollmentRequest, origin: string) {
+  assertAuthenticated(ctx);
+
+  const db = getAdminDb();
+  const tenantId = getAuthTenantId(ctx);
+  const eventRef = db.collection(COLLECTIONS.events).doc(input.eventId);
+  const eventSnap = await eventRef.get();
+
+  if (!eventSnap.exists) {
+    throw new OperationError(404, 'Evento nao encontrado');
+  }
+
+  const event = eventSnap.data() || {};
+  if (event.tenantId && event.tenantId !== tenantId) {
+    throw new OperationError(403, 'Evento indisponivel para sua unidade');
+  }
+
+  const enrollmentId = `${input.eventId}_${ctx.authUser?.uid}`;
+  const enrollmentRef = db.collection(COLLECTIONS.eventEnrollments).doc(enrollmentId);
+  const enrollmentSnap = await enrollmentRef.get();
+
+  if (enrollmentSnap.exists) {
+    return {
+      enrollmentId,
+      alreadyEnrolled: true,
+      paymentRequired: enrollmentSnap.data()?.paymentStatus === 'pending',
+      initPoint: cleanString(enrollmentSnap.data()?.paymentInitPoint, 1000),
+    };
+  }
+
+  const isPaid = Boolean(event.isPaid);
+  const price = Number(event.price || 0);
+  if (isPaid && (!Number.isFinite(price) || price <= 0)) {
+    throw new OperationError(400, 'Evento pago sem valor valido');
+  }
+
+  const accessToken = getMercadoPagoAccessToken();
+  if (isPaid && !accessToken) {
+    throw new OperationError(503, 'Mercado Pago nao configurado no backend');
+  }
+
+  const enrollmentData = {
+    eventId: input.eventId,
+    userId: ctx.authUser?.uid,
+    tenantId,
+    checkedIn: false,
+    kids: input.kids.map(kid => ({
+      id: randomUUID(),
+      name: kid.name,
+      age: kid.age,
+      obs: kid.obs,
+      checkedIn: false,
+    })),
+    paymentStatus: isPaid ? 'pending' : 'approved',
+    createdAt: admin.firestore.FieldValue.serverTimestamp(),
+    updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+  };
+
+  await enrollmentRef.set(enrollmentData);
+  await eventRef.set({
+    enrolled: admin.firestore.FieldValue.increment(1),
+    updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+  }, { merge: true });
+
+  if (!isPaid) {
+    return {
+      enrollmentId,
+      alreadyEnrolled: false,
+      paymentRequired: false,
+    };
+  }
+
+  const client = new MercadoPagoConfig({ accessToken, options: { timeout: 5000 } });
+  const preference = new Preference(client);
+  const eventTitle = cleanString(event.title, 120) || 'Evento Coroado';
+
+  const response = await preference.create({
+    body: {
+      items: [{
+        id: input.eventId,
+        title: eventTitle,
+        quantity: 1,
+        unit_price: price,
+        currency_id: 'BRL',
+      }],
+      external_reference: enrollmentId,
+      metadata: {
+        enrollmentId,
+        eventId: input.eventId,
+        userId: ctx.authUser?.uid,
+        tenantId,
+        source: 'event_enrollment',
+      },
+      back_urls: {
+        success: `${origin}/eventos?payment=success`,
+        failure: `${origin}/eventos?payment=failure`,
+        pending: `${origin}/eventos?payment=pending`,
+      },
+      auto_return: 'approved',
+    },
+  });
+
+  const initPoint = response.init_point || response.sandbox_init_point;
+  if (!initPoint) {
+    throw new OperationError(502, 'Mercado Pago nao retornou URL de pagamento');
+  }
+
+  await enrollmentRef.set({
+    preferenceId: response.id || '',
+    paymentInitPoint: initPoint,
+    updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+  }, { merge: true });
+
+  return {
+    enrollmentId,
+    alreadyEnrolled: false,
+    paymentRequired: true,
+    initPoint,
+    preferenceId: response.id || '',
   };
 }
 

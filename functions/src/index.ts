@@ -247,3 +247,5 @@ export const updateUserAccess = functions.https.onCall(async (data: any, context
     throw new functions.https.HttpsError('internal', 'Unable to update user access.');
   }
 });
+
+export { syncFirestoreToSql } from './sync-firestore-to-sql';

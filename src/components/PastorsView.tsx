@@ -7,6 +7,7 @@ import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { auth, db } from '@/lib/firebase';
+import { postJson } from '@/src/lib/api/http';
 import { collection, query, where, onSnapshot, addDoc, updateDoc, deleteDoc, doc, serverTimestamp } from 'firebase/firestore';
 import { PastoralCareView } from './PastoralCareView';
 import {
@@ -136,7 +137,8 @@ export function PastorsView({ isAdmin, userData, isLoggedIn, onLoginClick }: { i
     if (!selectedDate || !selectedTime) return alert("Selecione data e hora.");
     setIsSubmitting(true);
     try {
-      const appointment = await createPastoralAppointment({
+      const token = await auth.currentUser?.getIdToken();
+      const payload = {
         pastorId: selectedPastor?.id || 'plantonista',
         pastorName: selectedPastor?.name || 'Pastor Plantonista',
         userId: userData?.id || '',
@@ -144,12 +146,24 @@ export function PastorsView({ isAdmin, userData, isLoggedIn, onLoginClick }: { i
         tenantId: userData?.tenantId || 'tenant-1',
         date: selectedDate,
         time: selectedTime,
-      });
-      setLastAppointment({ id: appointment.id, date: selectedDate, time: selectedTime, pastor: appointment.pastorName });
-      setShowSuccess(true);
-      setSelectedPastor(null);
-      setSelectedDate('');
-      setSelectedTime('');
+      };
+      const response = await postJson<{ success: boolean; appointment: any; googleCalendarUrl: string }>('/api/pastoral/appointments', payload, { token });
+
+      if (response.success) {
+        setLastAppointment({ 
+          id: response.appointment.id, 
+          date: selectedDate, 
+          time: selectedTime, 
+          pastor: response.appointment.pastorName,
+          googleCalendarUrl: response.googleCalendarUrl
+        });
+        setShowSuccess(true);
+        setSelectedPastor(null);
+        setSelectedDate('');
+        setSelectedTime('');
+      } else {
+        alert("Erro ao criar agendamento.");
+      }
     } catch (e) {
       console.error(e);
       alert("Erro ao agendar.");
@@ -482,251 +496,25 @@ export function PastorsView({ isAdmin, userData, isLoggedIn, onLoginClick }: { i
             </TabsContent>
 
             <TabsContent value="care" className="mt-0">
-              <div className="bg-zinc-900 border border-white/10 rounded-[2.5rem] p-8">
-                <PastoralCareView userData={userData} isLoggedIn={isLoggedIn} />
-              </div>
+              <PastoralCareView isLoggedIn={true} userData={{ tenantId: 'tenant-1' }} />
             </TabsContent>
           </Tabs>
         ) : (
-          /* Public Portal Only */
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
-            {pastorsList.map((pastor, index) => (
-              <motion.div
-                key={pastor.id}
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.5, delay: index * 0.1 }}
-                whileHover={{ y: -10 }}
-              >
-                <div className="glass-card rounded-[2.5rem] overflow-hidden group relative aspect-[4/5]">
-                  <div className="absolute inset-0 bg-gradient-to-t from-black via-black/20 to-transparent z-10" />
-                  <img 
-                    src={pastor.image} 
-                    alt={pastor.name} 
-                    className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-110 grayscale group-hover:grayscale-0"
-                    referrerPolicy="no-referrer"
-                  />
-                  
-                  {/* Content Overlay */}
-                  <div className="absolute bottom-0 left-0 right-0 p-10 z-20 space-y-4">
-                    <div className="space-y-1">
-                      <h2 className="text-3xl font-black font-serif italic text-white group-hover:text-primary transition-colors">{pastor.name}</h2>
-                      <p className="text-primary font-bold uppercase tracking-widest text-xs">{pastor.role}</p>
-                    </div>
-                    
-                    {/* Social Links */}
-                    <div className="flex items-center gap-3 pt-2">
-                      {pastor.social.facebook !== '#' && (
-                        <motion.a 
-                          whileHover={{ scale: 1.1 }}
-                          whileTap={{ scale: 0.9 }}
-                          href={pastor.social.facebook} 
-                          target="_blank" 
-                          rel="noopener noreferrer"
-                          className="w-12 h-12 rounded-full bg-white/5 backdrop-blur-md border border-white/10 flex items-center justify-center text-white hover:bg-primary hover:text-black transition-all"
-                        >
-                          <Facebook className="w-5 h-5" />
-                        </motion.a>
-                      )}
-                      {pastor.social.instagram !== '#' && (
-                        <motion.a 
-                          whileHover={{ scale: 1.1 }}
-                          whileTap={{ scale: 0.9 }}
-                          href={pastor.social.instagram} 
-                          target="_blank" 
-                          rel="noopener noreferrer"
-                          className="w-12 h-12 rounded-full bg-white/5 backdrop-blur-md border border-white/10 flex items-center justify-center text-white hover:bg-primary hover:text-black transition-all"
-                        >
-                          <Instagram className="w-5 h-5" />
-                        </motion.a>
-                      )}
-                      {pastor.social.youtube !== '#' && (
-                        <motion.a 
-                          whileHover={{ scale: 1.1 }}
-                          whileTap={{ scale: 0.9 }}
-                          href={pastor.social.youtube} 
-                          target="_blank" 
-                          rel="noopener noreferrer"
-                          className="w-12 h-12 rounded-full bg-white/5 backdrop-blur-md border border-white/10 flex items-center justify-center text-white hover:bg-primary hover:text-black transition-all"
-                        >
-                          <Youtube className="w-5 h-5" />
-                        </motion.a>
-                      )}
-                    </div>
-                    <div className="flex items-center gap-2 pt-2">
-                      <Button 
-                        onClick={() => setSelectedPastor(pastor)}
-                        size="sm" 
-                        className="bg-primary text-black hover:bg-primary/90 font-bold w-full"
-                      >
-                        Agendar
-                      </Button>
-                    </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            {pastors.map(pastor => (
+              <div key={pastor.id} className="bg-zinc-900 border border-white/10 rounded-3xl p-6">
+                <div className="flex items-center gap-4">
+                  <img src={pastor.image} alt={pastor.name} className="w-16 h-16 rounded-full border-2 border-primary/20 object-cover" />
+                  <div>
+                    <h3 className="font-bold text-lg">{pastor.name}</h3>
+                    <Badge variant="outline" className="border-white/10 text-white/60 text-xs mt-1">{pastor.role}</Badge>
                   </div>
                 </div>
-              </motion.div>
+              </div>
             ))}
           </div>
         )}
       </section>
-
-      {/* CTA Section */}
-      <section className="glass-card rounded-[2.5rem] p-12 md:p-20 text-center space-y-8">
-        <div className="space-y-4">
-          <h2 className="text-4xl md:text-5xl font-black font-serif italic text-white">Precisa de Aconselhamento?</h2>
-          <p className="text-white/50 text-xl max-w-2xl mx-auto font-medium">
-            Nossa equipe pastoral está pronta para ouvir, orar com você e oferecer direcionamento bíblico para os desafios da vida.
-          </p>
-        </div>
-        <Button 
-          onClick={() => setSelectedPastor({ isChoosing: true })}
-          className="bg-primary text-black hover:bg-primary/90 font-black px-10 h-16 text-lg rounded-full shadow-lg shadow-primary/20 transition-all hover:scale-105 active:scale-95"
-        >
-          Agendar com Pastor <ChevronRight className="ml-2 w-6 h-6" />
-        </Button>
-      </section>
-
-      {/* Booking Modal */}
-      <AnimatePresence>
-        {selectedPastor && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80">
-            <motion.div 
-               initial={{ opacity: 0, scale: 0.95 }}
-               animate={{ opacity: 1, scale: 1 }}
-               exit={{ opacity: 0, scale: 0.95 }}
-               className="bg-zinc-900 border border-white/10 rounded-[2.5rem] max-w-lg w-full overflow-hidden relative"
-            >
-              <Button 
-                 variant="ghost" 
-                 size="icon" 
-                 onClick={() => setSelectedPastor(null)}
-                 className="absolute top-4 right-4 bg-black/50 text-white hover:bg-black rounded-full z-10"
-              >
-                <X className="w-5 h-5" />
-              </Button>
-
-              <div className="p-8 space-y-6">
-                {selectedPastor.isChoosing ? (
-                  <div>
-                    <h3 className="text-2xl font-black font-serif italic leading-tight mb-2">Escolha um Pastor</h3>
-                    <p className="text-white/60 mb-4">Com quem você gostaria de agendar seu aconselhamento?</p>
-                    
-                    <div className="space-y-2 max-h-[400px] overflow-y-auto custom-scrollbar">
-                       {pastorsList.map(p => (
-                         <div 
-                            key={p.id} 
-                            onClick={() => setSelectedPastor(p)}
-                            className="flex items-center gap-4 p-4 rounded-2xl border border-white/10 hover:border-primary/50 cursor-pointer transition-all hover:bg-white/5 group"
-                         >
-                            <img src={p.image} alt={p.name} className="w-14 h-14 rounded-full object-cover grayscale group-hover:grayscale-0 transition-all" />
-                            <div>
-                               <p className="font-bold text-white group-hover:text-primary transition-colors text-lg">{p.name}</p>
-                               <p className="text-xs text-primary uppercase tracking-widest">{p.role}</p>
-                            </div>
-                            <ChevronRight className="w-5 h-5 text-white/20 group-hover:text-primary ml-auto transition-colors" />
-                         </div>
-                       ))}
-                    </div>
-                  </div>
-                ) : (
-                  <>
-                    <div>
-                      <Badge className="bg-primary/20 text-primary border-none mb-3">{selectedPastor.role || 'Aconselhamento'}</Badge>
-                      <h3 className="text-2xl font-black font-serif italic leading-tight mb-2">Agendar com {selectedPastor.name}</h3>
-                      <p className="text-white/60">Selecione um horário disponível para conversar com o pastor. Caso não esteja logado, você será direcionado para o acesso da plataforma.</p>
-                    </div>
-                    
-                    <div className="space-y-4">
-                      <div>
-                        <label className="text-xs font-bold text-white/40 uppercase tracking-widest mb-2 block">Dia Disponível</label>
-                        <div className="flex gap-2 overflow-x-auto pb-2 custom-scrollbar">
-                           {availableDates.map(d => {
-                              const dateStr = d.toISOString().split('T')[0];
-                              return (
-                                <button
-                                   key={dateStr}
-                                   onClick={() => setSelectedDate(dateStr)}
-                                   className={`shrink-0 px-4 py-2 rounded-xl border text-sm font-bold transition-all ${selectedDate === dateStr ? 'bg-primary text-black border-primary' : 'bg-black/40 text-white/60 border-white/10 hover:border-white/30'}`}
-                                >
-                                   {d.toLocaleDateString('pt-BR', { weekday: 'short', day: '2-digit', month: '2-digit' }).replace('.', '')}
-                                </button>
-                              )
-                           })}
-                        </div>
-                      </div>
-
-                      {selectedDate && (
-                        <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }}>
-                          <label className="text-xs font-bold text-white/40 uppercase tracking-widest mb-2 block mt-2">Horário</label>
-                          <div className="flex flex-wrap gap-2">
-                            {availableTimes.map(t => (
-                              <button
-                                 key={t}
-                                 onClick={() => setSelectedTime(t)}
-                                 className={`px-4 py-2 rounded-xl border text-sm font-bold transition-all ${selectedTime === t ? 'bg-primary text-black border-primary' : 'bg-black/40 text-white/60 border-white/10 hover:border-white/30'}`}
-                              >
-                                 {t}
-                              </button>
-                            ))}
-                          </div>
-                        </motion.div>
-                      )}
-                    </div>
-
-                    {!isLoggedIn && (
-                      <div className="bg-blue-500/10 border border-blue-500/20 text-blue-400 p-3 rounded-xl flex items-start gap-3 text-sm">
-                        <AlertCircle className="w-5 h-5 shrink-0" />
-                        <p>Você precisará fazer login ou se cadastrar para confirmar este agendamento.</p>
-                      </div>
-                    )}
-
-                    <Button 
-                      onClick={handleBook} 
-                      disabled={!selectedDate || !selectedTime || isSubmitting}
-                      className="w-full h-14 bg-primary text-black font-bold uppercase tracking-wider"
-                    >
-                      {isSubmitting ? 'Reservando...' : (!isLoggedIn ? 'Continuar para Login' : 'Confirmar Agendamento')}
-                    </Button>
-                  </>
-                )}
-              </div>
-            </motion.div>
-          </div>
-        )}
-      </AnimatePresence>
-
-      {/* Success Modal with Calendar Sync */}
-      <AnimatePresence>
-        {showSuccess && lastAppointment && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80">
-            <motion.div 
-               initial={{ opacity: 0, scale: 0.95 }}
-               animate={{ opacity: 1, scale: 1 }}
-               exit={{ opacity: 0, scale: 0.95 }}
-               className="bg-zinc-900 border border-white/10 rounded-[2.5rem] max-w-sm w-full overflow-hidden relative p-8 text-center space-y-6"
-            >
-              <div className="w-16 h-16 bg-green-500/20 text-green-500 rounded-full flex items-center justify-center mx-auto">
-                 <CheckCircle className="w-8 h-8" />
-              </div>
-              <h3 className="text-2xl font-black font-serif italic text-white">Agendado!</h3>
-              <p className="text-white/60 text-sm">
-                 Seu aconselhamento com <strong className="text-white">{lastAppointment.pastor}</strong> foi reservado para o dia <strong>{new Date(lastAppointment.date).toLocaleDateString('pt-BR')}</strong> às <strong>{lastAppointment.time}</strong>.
-              </p>
-              <div className="space-y-3 pt-4">
-                 <Button 
-                   onClick={() => window.open(generateGoogleCalendarUrl(lastAppointment), '_blank')}
-                   className="w-full bg-primary text-black font-bold h-12"
-                 >
-                   Adicionar ao Google Calendar
-                 </Button>
-                 <Button variant="ghost" onClick={() => setShowSuccess(false)} className="w-full text-white/40 hover:text-white">
-                   Fechar
-                 </Button>
-              </div>
-            </motion.div>
-          </div>
-        )}
-      </AnimatePresence>
 
       {/* Pastor Form Modal */}
       <AnimatePresence>

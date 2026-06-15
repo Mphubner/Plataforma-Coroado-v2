@@ -1,5 +1,5 @@
-import NextClientApp from '../NextClientApp';
+import { LojaNativeClient } from './LojaNativeClient';
 
 export default function Page() {
-  return <NextClientApp />;
+  return <LojaNativeClient />;
 }

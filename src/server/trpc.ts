@@ -15,6 +15,16 @@ import {
   updateSchoolProgress,
 } from './operations';
 import { getFinanceOverview } from './queries/financeOverview';
+import { getEventsOverview } from './queries/eventsOverview';
+import { membersRouter } from './routers/membersRouter';
+import { ministriesRouter } from './routers/ministriesRouter';
+import { socialRouter } from './routers/socialRouter';
+import { pastorsRouter } from './routers/pastorsRouter';
+import { cellsRouter } from './routers/cellsRouter';
+import { escolaRouter } from './routers/escolaRouter';
+import { storeRouter } from './routers/storeRouter';
+import { eventsRouter } from './routers/eventsRouter';
+import { gestaoRouter } from './routers/gestaoRouter';
 
 export async function createTrpcContext({ req }: CreateExpressContextOptions): Promise<ServerAuthContext> {
   try {
@@ -52,6 +62,13 @@ function toTrpcError(error: unknown): never {
 export const appRouter = t.router({
   health: t.procedure.query(() => ({ status: 'ok' })),
   events: t.router({
+    overview: t.procedure.query(async ({ ctx }) => {
+      try {
+        return await getEventsOverview(ctx);
+      } catch (error) {
+        toTrpcError(error);
+      }
+    }),
     checkIn: t.procedure
       .input(eventCheckInRequestSchema)
       .mutation(async ({ ctx, input }) => {
@@ -102,6 +119,15 @@ export const appRouter = t.router({
         }
       }),
   }),
+  members: membersRouter,
+  ministries: ministriesRouter,
+  social: socialRouter,
+  pastors: pastorsRouter,
+  cells: cellsRouter,
+  escola: escolaRouter,
+  store: storeRouter,
+  events: eventsRouter,
+  gestao: gestaoRouter,
 });
 
 export type AppRouter = typeof appRouter;
