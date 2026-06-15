@@ -1,5 +1,5 @@
 import { addDoc, collection, doc, serverTimestamp, updateDoc } from 'firebase/firestore';
-import { db } from '@/lib/firebase';
+import { auth, db } from '@/lib/firebase';
 import { COLLECTIONS } from '@/src/lib/domain/collections';
 import {
   toTaskPayload,
@@ -8,9 +8,29 @@ import {
   type TaskUpdatePayloadInput,
 } from '@/src/lib/domain/payloads';
 
-export async function createTask(input: TaskPayloadInput) {
+function readText(input: Record<string, unknown>, key: string) {
+  const value = input[key];
+  return typeof value === 'string' ? value : '';
+}
+
+function normalizeTaskInput(input: Partial<TaskPayloadInput> & Record<string, unknown>): TaskPayloadInput {
+  return {
+    title: input.title || readText(input, 'action_title'),
+    description: input.description || readText(input, 'strategy_detail'),
+    tag: input.tag || readText(input, 'group_department') || readText(input, 'root_problem') || 'Geral',
+    assigneeId: input.assigneeId || readText(input, 'assignee_name') || 'Nao atribuido',
+    status: input.status || 'todo',
+    tenantId: input.tenantId,
+    createdBy: input.createdBy || auth.currentUser?.uid || '',
+    dueDate: input.dueDate || readText(input, 'due_date'),
+    startDate: input.startDate,
+    completedAt: input.completedAt,
+  };
+}
+
+export async function createTask(input: Partial<TaskPayloadInput> & Record<string, unknown>) {
   return addDoc(collection(db, COLLECTIONS.tasks), {
-    ...toTaskPayload(input),
+    ...toTaskPayload(normalizeTaskInput(input)),
     createdAt: serverTimestamp(),
     updatedAt: serverTimestamp(),
   });
@@ -29,13 +49,14 @@ export async function updatePlanningTaskStatus(taskId: string, status: string) {
   await updateDoc(doc(db, COLLECTIONS.tasks, taskId), updateData);
 }
 
-export async function updateTaskDetails(taskId: string, input: Partial<TaskPayloadInput>) {
+export async function updateTaskDetails(taskId: string, input: Partial<TaskPayloadInput> & Record<string, unknown>) {
+  const normalized = normalizeTaskInput(input);
   await updateDoc(doc(db, COLLECTIONS.tasks, taskId), {
-    title: input.title || '',
-    description: input.description || '',
-    tag: input.tag || 'Geral',
-    assigneeId: input.assigneeId || 'Nao atribuido',
-    dueDate: input.dueDate || '',
+    title: normalized.title,
+    description: normalized.description || '',
+    tag: normalized.tag || 'Geral',
+    assigneeId: normalized.assigneeId || 'Nao atribuido',
+    dueDate: normalized.dueDate || '',
     updatedAt: serverTimestamp(),
   });
 }

@@ -1175,7 +1175,7 @@ function SchoolAdmin() {
         createdBy: auth.currentUser.uid,
       });
       setShowAddCourse(false);
-      setNewCourse({ title: '', category: 'Geral', status: 'Rascunho', isSubscriptionOnly: true, monthlyPrice: '' });
+      setNewCourse({ title: '', category: 'Geral', status: 'Rascunho', isSubscriptionOnly: true, monthlyPrice: '', description: '', level: 'Básico' });
     } catch (error) {
       console.error("Error adding course", error);
     }

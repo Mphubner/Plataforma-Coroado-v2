@@ -3,7 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import { motion } from 'motion/react';
 import { SchoolView } from '../../components/SchoolView';
-import { auth } from '../../lib/firebase';
+import { auth } from '../../../lib/firebase';
 import { onAuthStateChanged } from 'firebase/auth';
 import { pagePreset } from '../../lib/motion/presets';
 

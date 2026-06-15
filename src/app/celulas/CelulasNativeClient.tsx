@@ -3,11 +3,11 @@
 import React, { useState, useEffect } from 'react';
 import { motion } from 'motion/react';
 import { Users, MapPin, Search, Clock } from 'lucide-react';
-import { Button } from '../../components/ui/button';
-import { Card, CardHeader, CardTitle, CardContent } from '../../components/ui/card';
-import { Badge } from '../../components/ui/badge';
-import { Input } from '../../components/ui/input';
-import { auth } from '../../lib/firebase';
+import { Button } from '../../../components/ui/button';
+import { Card, CardHeader, CardTitle, CardContent } from '../../../components/ui/card';
+import { Badge } from '../../../components/ui/badge';
+import { Input } from '../../../components/ui/input';
+import { auth } from '../../../lib/firebase';
 import { onAuthStateChanged } from 'firebase/auth';
 import { trpc } from '../../lib/trpc-client';
 import { CellManagementDashboard } from '../../components/CellManagementDashboard';
@@ -26,7 +26,7 @@ export function CelulasNativeClient() {
         const token = await user.getIdTokenResult();
         const profileType = token.claims.profileType || 'member';
         const roles = token.claims.roles || [];
-        const cellId = token.claims.cellId || null;
+        const cellId = typeof token.claims.cellId === 'string' ? token.claims.cellId : null;
         
         setUserData({
           id: user.uid,

@@ -13,6 +13,15 @@ export type AuthedRequest = express.Request & {
 export type ServerAuthContext = {
   authUser?: admin.auth.DecodedIdToken;
   userProfile?: admin.firestore.DocumentData;
+  auth?: {
+    uid: string;
+    email?: string;
+    tenantId?: string;
+    roles: string[];
+    cellId?: string;
+    ministryId?: string;
+    profileType?: string;
+  };
 };
 
 const VALID_ROLES = new Set([
@@ -81,6 +90,19 @@ export async function resolveFirebaseAuthToken(token: string): Promise<ServerAut
   return {
     authUser: decoded,
     userProfile: profile || undefined,
+    auth: {
+      uid: decoded.uid,
+      email: decoded.email,
+      tenantId: cleanString(profile?.tenantId || decoded.tenantId, 128),
+      roles: getRoles(profile).length > 0
+        ? getRoles(profile)
+        : Array.isArray(decoded.roles)
+          ? decoded.roles.map(String)
+          : [],
+      cellId: cleanString(profile?.cellId || decoded.cellId, 128),
+      ministryId: cleanString(profile?.ministryId || decoded.ministryId, 128),
+      profileType: cleanString(profile?.profileType || decoded.profileType, 80),
+    },
   };
 }
 

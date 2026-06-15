@@ -65,6 +65,7 @@ export type ScaleAssignment = {
 export type Scale = {
   id: string;
   ministryId: string;
+  eventId?: string;
   eventName: string;
   date: string;
   time: string;
