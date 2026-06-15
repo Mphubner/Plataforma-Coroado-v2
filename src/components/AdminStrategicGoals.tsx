@@ -9,6 +9,7 @@ import { motion, AnimatePresence } from "motion/react";
 import { AreaChart, Area, BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, ReferenceLine } from 'recharts';
 import { format, parseISO, startOfWeek, endOfWeek, startOfMonth, startOfYear, getWeek, formatISO } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
+import { useCrossModuleMetrics } from '@/src/hooks/useCrossModuleMetrics';
 
 export function AdminStrategicGoals({ userData }: { userData?: any }) {
   const [kpis, setKpis] = useState<any[]>([]);
@@ -18,8 +19,16 @@ export function AdminStrategicGoals({ userData }: { userData?: any }) {
   const [selectedKpi, setSelectedKpi] = useState<any>(null);
   
   // Filters and Controls
-  const [timeView, setTimeView] = useState<'weekly' | 'monthly' | 'yearly'>('yearly');
+  const [timeView, setTimeView] = useState<'weekly' | 'monthly' | 'yearly'>('monthly');
+  const [monthsRange, setMonthsRange] = useState<number>(12); // Custom range filter
+
+  // Cross Module Hook
+  const { virtualKpis, virtualEntries, loading: virtualLoading } = useCrossModuleMetrics(userData?.tenantId, monthsRange);
   
+  // Combine native and virtual data
+  const combinedKpis = useMemo(() => [...kpis, ...virtualKpis], [kpis, virtualKpis]);
+  const combinedEntries = useMemo(() => [...entries, ...virtualEntries], [entries, virtualEntries]);
+
   // Custom Aggregation toggles per KPI (stored in state for session)
   const [kpiAggregations, setKpiAggregations] = useState<Record<string, 'sum' | 'avg' | 'last'>>({
      'kpi_celulas': 'last',
@@ -29,7 +38,12 @@ export function AdminStrategicGoals({ userData }: { userData?: any }) {
      'kpi_freq_br': 'avg',
      'kpi_total_celebracoes': 'avg',
      'kpi_freq_celulas': 'avg',
-     'kpi_lideres': 'last'
+     'kpi_lideres': 'last',
+     'kpi_virt_celulas_freq': 'avg',
+     'kpi_virt_celulas_vis': 'sum',
+     'kpi_virt_escola_ide_ativos': 'sum',
+     'kpi_virt_pastoral_atendimentos': 'sum',
+     'kpi_virt_social_atendimentos': 'sum'
   });
 
   // Form State for new entry
@@ -51,8 +65,13 @@ export function AdminStrategicGoals({ userData }: { userData?: any }) {
 
   // Derived KPIs Calculation (Total Celebrações)
   const computedKpis = useMemo(() => {
-     let list = [...kpis];
-     const order = ['kpi_celulas', 'kpi_batismos', 'kpi_freq_sede', 'kpi_freq_norte', 'kpi_freq_br', 'kpi_total_celebracoes', 'kpi_freq_celulas', 'kpi_lideres'];
+     let list = [...combinedKpis];
+     const order = [
+       'kpi_celulas', 'kpi_batismos', 'kpi_freq_sede', 'kpi_freq_norte', 'kpi_freq_br', 'kpi_total_celebracoes', 
+       'kpi_virt_celulas_freq', 'kpi_virt_celulas_vis', 'kpi_virt_escola_ide_ativos',
+       'kpi_virt_pastoral_atendimentos', 'kpi_virt_social_atendimentos',
+       'kpi_freq_celulas', 'kpi_lideres'
+     ];
      
      // Add pseudo-KPI for Total
      list.push({
@@ -71,16 +90,16 @@ export function AdminStrategicGoals({ userData }: { userData?: any }) {
         const idxB = order.indexOf(b.id);
         return (idxA > -1 ? idxA : 99) - (idxB > -1 ? idxB : 99);
      });
-  }, [kpis]);
+  }, [combinedKpis]);
 
   // Engine: Group and aggregate entries for a KPI
   const getAggregatedData = (kpiId: string) => {
      // For Derived KPI, we need to gather entries from Sede, Norte, BR, aggregate them FIRST, then sum them up.
      let relevantEntries = [];
      if (kpiId === 'kpi_total_celebracoes') {
-         relevantEntries = entries.filter(e => ['kpi_freq_sede', 'kpi_freq_norte', 'kpi_freq_br'].includes(e.kpiName));
+         relevantEntries = combinedEntries.filter(e => ['kpi_freq_sede', 'kpi_freq_norte', 'kpi_freq_br'].includes(e.kpiName));
      } else {
-         relevantEntries = entries.filter(e => e.kpiName === kpiId);
+         relevantEntries = combinedEntries.filter(e => e.kpiName === kpiId);
      }
 
      const aggType = kpiAggregations[kpiId] || 'sum';
@@ -257,7 +276,7 @@ export function AdminStrategicGoals({ userData }: { userData?: any }) {
 
                  {/* Right Column: Entry Form & History */}
                  <div className="space-y-6">
-                    {!selectedKpi.isDerived && (
+                    {(!selectedKpi.isDerived && !selectedKpi.isVirtual) && (
                       <div className="bg-primary/10 border border-primary/20 rounded-xl p-4 space-y-4">
                          <h4 className="text-sm font-bold text-primary mb-2 uppercase tracking-wider flex items-center gap-2">
                            <Plus className="w-4 h-4"/> Novo Lançamento
@@ -280,21 +299,24 @@ export function AdminStrategicGoals({ userData }: { userData?: any }) {
                        <h4 className="text-sm font-bold text-white/40 mb-4 uppercase tracking-wider flex items-center gap-2">
                          <Activity className="w-4 h-4"/> Histórico Bruto
                        </h4>
+                       {selectedKpi.isVirtual && (
+                         <p className="text-xs text-white/50 mb-2">Estes dados são extraídos automaticamente dos módulos da Plataforma e não podem ser excluídos por aqui.</p>
+                       )}
                        <div className="space-y-2 max-h-[300px] overflow-y-auto custom-scrollbar pr-2">
-                          {entries.filter(e => e.kpiName === selectedKpi.id).sort((a,b) => new Date(b.date).getTime() - new Date(a.date).getTime()).map(e => (
+                          {combinedEntries.filter(e => e.kpiName === selectedKpi.id).sort((a,b) => new Date(b.date).getTime() - new Date(a.date).getTime()).map(e => (
                              <div key={e.id} className="flex justify-between items-center p-2 rounded bg-black/40 border border-white/5 hover:border-white/20 transition-colors group">
                                 <div>
                                    <p className="text-xs font-bold text-white">{format(parseISO(e.date), 'dd/MM/yyyy')}</p>
                                    <p className="text-xs text-white/40">{e.actualValue} registros</p>
                                 </div>
-                                {!selectedKpi.isDerived && (
+                                {(!selectedKpi.isDerived && !selectedKpi.isVirtual) && (
                                    <Button variant="ghost" size="icon" className="h-6 w-6 text-red-400 opacity-0 group-hover:opacity-100 transition-opacity" onClick={() => handleDeleteEntry(e.id)}>
                                      <Trash2 className="w-3 h-3"/>
                                    </Button>
                                 )}
                              </div>
                           ))}
-                          {entries.filter(e => e.kpiName === selectedKpi.id).length === 0 && (
+                          {combinedEntries.filter(e => e.kpiName === selectedKpi.id).length === 0 && (
                              <p className="text-xs text-white/30 text-center py-4">Nenhum lançamento encontrado.</p>
                           )}
                        </div>
@@ -308,13 +330,27 @@ export function AdminStrategicGoals({ userData }: { userData?: any }) {
 
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div>
-           <h2 className="text-2xl font-bold flex items-center gap-2"><TrendingUp className="w-6 h-6 text-primary"/> Inteligência & Metricas (KPIs)</h2>
-           <p className="text-sm text-white/60">Acompanhamento dos focos de avanço da igreja através de série temporal.</p>
+           <h2 className="text-2xl font-bold flex items-center gap-2">
+             <TrendingUp className="w-6 h-6 text-primary"/> Inteligência & Metricas 360
+             {virtualLoading && <span className="ml-2 text-xs text-primary animate-pulse font-normal">(Sincronizando Módulos...)</span>}
+           </h2>
+           <p className="text-sm text-white/60">Acompanhamento dos focos de avanço da igreja através de série temporal e coleta automática de outros módulos.</p>
         </div>
-        <div className="flex gap-2 bg-zinc-900 p-1 rounded-lg border border-white/10">
-           <Button size="sm" variant={timeView === 'weekly' ? 'default' : 'ghost'} onClick={() => setTimeView('weekly')}>Semanal</Button>
-           <Button size="sm" variant={timeView === 'monthly' ? 'default' : 'ghost'} onClick={() => setTimeView('monthly')}>Mensal</Button>
-           <Button size="sm" variant={timeView === 'yearly' ? 'default' : 'ghost'} onClick={() => setTimeView('yearly')}>Anual</Button>
+        <div className="flex flex-col items-end gap-2">
+           <div className="flex gap-2 bg-zinc-900 p-1 rounded-lg border border-white/10">
+              <select className="bg-transparent text-sm text-white focus:outline-none" value={monthsRange} onChange={(e) => setMonthsRange(Number(e.target.value))}>
+                 <option value={1}>Último mês</option>
+                 <option value={3}>Últimos 3 meses</option>
+                 <option value={6}>Últimos 6 meses</option>
+                 <option value={12}>Últimos 12 meses</option>
+                 <option value={60}>Histórico Completo</option>
+              </select>
+           </div>
+           <div className="flex gap-2 bg-zinc-900 p-1 rounded-lg border border-white/10">
+             <Button size="sm" variant={timeView === 'weekly' ? 'default' : 'ghost'} onClick={() => setTimeView('weekly')}>Semanal</Button>
+             <Button size="sm" variant={timeView === 'monthly' ? 'default' : 'ghost'} onClick={() => setTimeView('monthly')}>Mensal</Button>
+             <Button size="sm" variant={timeView === 'yearly' ? 'default' : 'ghost'} onClick={() => setTimeView('yearly')}>Anual</Button>
+           </div>
         </div>
       </div>
 
