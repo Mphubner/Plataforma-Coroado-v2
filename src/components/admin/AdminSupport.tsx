@@ -11,9 +11,19 @@ export function AdminSupport() {
 
   return (
     <Card className="bg-zinc-900 border-white/10">
-      <CardHeader>
-        <CardTitle>Central de Suporte</CardTitle>
-        <CardDescription>Responda às dúvidas dos alunos.</CardDescription>
+      <CardHeader className="flex flex-row items-center justify-between pb-2">
+        <div>
+          <CardTitle>Central de Suporte</CardTitle>
+          <CardDescription>Responda às dúvidas dos alunos e gerencie anexos.</CardDescription>
+        </div>
+        <div className="flex items-center gap-2">
+          <Button variant="outline" size="sm" onClick={() => window.open('https://keep.google.com/', '_blank')} className="border-white/10 hover:bg-white/10">
+            Anotações (Keep)
+          </Button>
+          <Button variant="outline" size="sm" onClick={() => window.open('https://drive.google.com/', '_blank')} className="bg-[#1967d2]/10 text-[#4285f4] hover:bg-[#1967d2]/20 border-none">
+            Anexos (Drive)
+          </Button>
+        </div>
       </CardHeader>
       <CardContent className="space-y-4">
         {forumQuestions.length === 0 ? (

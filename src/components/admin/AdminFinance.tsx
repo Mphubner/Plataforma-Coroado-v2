@@ -1,11 +1,16 @@
 import * as React from "react";
+import { motion } from "motion/react";
 import { Plus, TrendingUp, CheckSquare, Shield, X } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { db } from "@/lib/firebase";
-import { collection, query, where, onSnapshot, addDoc, serverTimestamp } from "firebase/firestore";
+import { auth, db } from "@/lib/firebase";
+import { collection, query, where, onSnapshot } from "firebase/firestore";
+import { postJson } from "@/src/lib/api/http";
+import { listItemMotion, pageMotion, panelMotion } from "@/src/lib/motion/presets";
 import type { Plan, Transaction } from "@/src/types";
+
+type ReconciliationStatus = "completed" | "failed" | "cancelled" | "refunded";
 
 export function AdminFinance({ userData }: { userData?: any }) {
   const [transactions, setTransactions] = React.useState<Transaction[]>([]);
@@ -45,17 +50,20 @@ export function AdminFinance({ userData }: { userData?: any }) {
       alert("Por favor preencha o nome e o preço do plano.");
       return;
     }
+    const token = await auth.currentUser?.getIdToken();
+    if (!token) {
+      alert("Sessao expirada. Entre novamente para criar o plano.");
+      return;
+    }
+
     try {
-      await addDoc(collection(db, "plans"), {
+      await postJson('/api/admin/plans', {
         name: planForm.name,
         price: Number(planForm.price),
         interval: planForm.interval,
         type: planForm.type,
-        features: planForm.featuresRaw.split(",").map(f => f.trim()).filter(Boolean),
-        tenantId,
-        createdAt: serverTimestamp(),
-        updatedAt: serverTimestamp(),
-      });
+        featuresRaw: planForm.featuresRaw,
+      }, { token });
       setShowPlanModal(false);
       setPlanForm({ name: "", price: "", interval: "monthly", type: "individual", featuresRaw: "" });
     } catch (e) {
@@ -67,9 +75,69 @@ export function AdminFinance({ userData }: { userData?: any }) {
   const mrr = transactions.filter(t => t.type === 'subscription' && t.status === 'completed').reduce((acc, t) => acc + t.amount, 0);
   const totalRevenue = transactions.filter(t => t.status === 'completed').reduce((acc, t) => acc + t.amount, 0);
   const activeSubscribers = Array.from(new Set(transactions.filter(t => t.type === 'subscription' && t.status === 'completed').map(t => t.userId))).length;
+  const downloadFile = (filename: string, content: string, type: string) => {
+    const blob = new Blob([content], { type });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = filename;
+    link.click();
+    URL.revokeObjectURL(url);
+  };
+  const handleExportCsv = () => {
+    const rows = [
+      ['id', 'userId', 'type', 'status', 'method', 'amount', 'date'],
+      ...transactions.map(tx => [
+        tx.id || '',
+        tx.userId || '',
+        tx.type || '',
+        tx.status || '',
+        tx.method || '',
+        String(tx.amount || 0),
+        tx.date || ''
+      ])
+    ];
+    const csv = rows.map(row => row.map(cell => `"${String(cell).replace(/"/g, '""')}"`).join(',')).join('\n');
+    downloadFile(`financeiro_coroado_${new Date().toISOString().split('T')[0]}.csv`, csv, 'text/csv;charset=utf-8');
+  };
+  const handleDownloadReport = () => {
+    const report = [
+      'Relatorio Financeiro Coroado',
+      `Data: ${new Date().toLocaleDateString()}`,
+      '',
+      `MRR: R$ ${mrr.toFixed(2).replace('.', ',')}`,
+      `Receita total: R$ ${totalRevenue.toFixed(2).replace('.', ',')}`,
+      `Assinantes ativos: ${activeSubscribers}`,
+      `Planos cadastrados: ${plans.length}`,
+      `Transacoes registradas: ${transactions.length}`,
+      '',
+      'Observacao: confirme manualmente transacoes pendentes antes de usar este relatorio como fechamento financeiro.'
+    ].join('\n');
+    downloadFile(`relatorio_financeiro_coroado_${new Date().toISOString().split('T')[0]}.txt`, report, 'text/plain;charset=utf-8');
+  };
+
+  const handleReconcileTransaction = async (transactionId: string, status: ReconciliationStatus) => {
+    const token = await auth.currentUser?.getIdToken();
+
+    if (!token) {
+      alert("Sessao expirada. Entre novamente para conciliar a transacao.");
+      return;
+    }
+
+    const note = status === "completed"
+      ? "Conciliado manualmente pelo painel financeiro."
+      : window.prompt("Observacao da conciliacao") || "Conciliacao manual pelo painel financeiro.";
+
+    try {
+      await postJson(`/api/admin/transactions/${transactionId}/reconcile`, { status, note }, { token });
+    } catch (e) {
+      console.error(e);
+      alert("Erro ao conciliar transacao: " + (e as Error).message);
+    }
+  };
 
   return (
-    <div className="space-y-6">
+    <motion.div {...pageMotion} className="space-y-6">
       {/* Modal Novo Plano */}
       {showPlanModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
@@ -150,12 +218,21 @@ export function AdminFinance({ userData }: { userData?: any }) {
           <h2 className="text-2xl font-bold">Dashboard Financeiro</h2>
           <p className="text-white/60">Acompanhamento de MRR, assinaturas e vendas avulsas.</p>
         </div>
-        <Button onClick={() => setShowPlanModal(true)} className="bg-primary text-black">
-          <Plus className="mr-2 h-4 w-4" /> Novo Plano
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button variant="outline" className="bg-[#0f9d58]/10 text-[#0f9d58] border-none hover:bg-[#0f9d58]/20 hidden md:flex" onClick={handleExportCsv}>
+            Baixar CSV
+          </Button>
+          <Button variant="outline" className="bg-[#4285f4]/10 text-[#4285f4] border-none hover:bg-[#4285f4]/20 hidden md:flex" onClick={handleDownloadReport}>
+            Relatório TXT
+          </Button>
+          <Button onClick={() => setShowPlanModal(true)} className="bg-primary text-black">
+            <Plus className="mr-2 h-4 w-4" /> Novo Plano
+          </Button>
+        </div>
       </div>
 
       <div className="grid md:grid-cols-4 gap-4">
+        <motion.div {...panelMotion}>
         <Card className="bg-zinc-900 border-white/10">
           <CardContent className="p-6">
             <p className="text-[10px] uppercase tracking-wider text-white/40 font-bold mb-2">MRR (Receita Recorrente)</p>
@@ -163,6 +240,8 @@ export function AdminFinance({ userData }: { userData?: any }) {
             <p className="text-xs text-green-400 mt-2 flex items-center gap-1"><TrendingUp className="h-3 w-3" /> Atualizado em tempo real</p>
           </CardContent>
         </Card>
+        </motion.div>
+        <motion.div {...panelMotion}>
         <Card className="bg-zinc-900 border-white/10">
           <CardContent className="p-6">
             <p className="text-[10px] uppercase tracking-wider text-white/40 font-bold mb-2">Receita Total</p>
@@ -170,6 +249,8 @@ export function AdminFinance({ userData }: { userData?: any }) {
             <p className="text-xs text-white/60 mt-2">Vendas de cursos e planos</p>
           </CardContent>
         </Card>
+        </motion.div>
+        <motion.div {...panelMotion}>
         <Card className="bg-zinc-900 border-white/10">
           <CardContent className="p-6">
             <p className="text-[10px] uppercase tracking-wider text-white/40 font-bold mb-2">Assinantes Ativos</p>
@@ -177,6 +258,8 @@ export function AdminFinance({ userData }: { userData?: any }) {
             <p className="text-xs text-white/60 mt-2">Base de membros assinantes</p>
           </CardContent>
         </Card>
+        </motion.div>
+        <motion.div {...panelMotion}>
         <Card className="bg-zinc-900 border-white/10">
           <CardContent className="p-6">
             <p className="text-[10px] uppercase tracking-wider text-white/40 font-bold mb-2">LTV Estimado</p>
@@ -184,6 +267,7 @@ export function AdminFinance({ userData }: { userData?: any }) {
             <p className="text-xs text-white/60 mt-2">Receita média por assinante</p>
           </CardContent>
         </Card>
+        </motion.div>
       </div>
 
       <div className="grid md:grid-cols-2 gap-6">
@@ -192,8 +276,8 @@ export function AdminFinance({ userData }: { userData?: any }) {
             <CardTitle>Planos de Assinatura</CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
-            {plans.map(plan => (
-              <div key={plan.id} className="p-4 rounded-xl bg-white/5 border border-white/10 flex justify-between items-center">
+            {plans.map((plan, index) => (
+              <motion.div key={plan.id} {...listItemMotion(index)} className="p-4 rounded-xl bg-white/5 border border-white/10 flex justify-between items-center">
                 <div>
                   <h4 className="font-bold">{plan.name}</h4>
                   <p className="text-xs text-white/60">{plan.interval === 'monthly' ? 'Mensal' : 'Anual'} • {plan.type === 'individual' ? 'Individual' : 'Família'}</p>
@@ -204,7 +288,7 @@ export function AdminFinance({ userData }: { userData?: any }) {
                 <div className="text-right">
                   <p className="font-bold text-primary">R$ {plan.price.toFixed(2).replace('.', ',')}</p>
                 </div>
-              </div>
+              </motion.div>
             ))}
             {plans.length === 0 && <div className="text-sm text-white/40">Nenhum plano cadastrado.</div>}
           </CardContent>
@@ -215,8 +299,8 @@ export function AdminFinance({ userData }: { userData?: any }) {
             <CardTitle>Transações Recentes</CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
-            {transactions.map(tx => (
-              <div key={tx.id} className="p-4 rounded-xl bg-white/5 border border-white/10 flex justify-between items-center">
+            {transactions.map((tx, index) => (
+              <motion.div key={tx.id} {...listItemMotion(index)} className="p-4 rounded-xl bg-white/5 border border-white/10 flex justify-between items-center">
                 <div className="flex items-center gap-3">
                   <div className={`h-8 w-8 rounded-full flex items-center justify-center ${tx.method === 'pix' ? 'bg-green-500/20 text-green-400' : 'bg-blue-500/20 text-blue-400'}`}>
                     {tx.method === 'pix' ? <CheckSquare className="h-4 w-4" /> : <Shield className="h-4 w-4" />}
@@ -226,16 +310,34 @@ export function AdminFinance({ userData }: { userData?: any }) {
                     <p className="text-xs text-white/60">{new Date(tx.date).toLocaleDateString('pt-BR')}</p>
                   </div>
                 </div>
-                <div className="text-right">
+                <div className="text-right space-y-2">
                    <p className="font-bold">R$ {tx.amount.toFixed(2).replace('.', ',')}</p>
-                   <p className={`text-[10px] uppercase font-bold ${tx.status === 'completed' ? 'text-green-400' : 'text-yellow-400'}`}>{tx.status}</p>
+                   <p className={`text-[10px] uppercase font-bold ${tx.status === 'completed' ? 'text-green-400' : tx.status === 'pending' ? 'text-yellow-400' : 'text-red-400'}`}>{tx.status}</p>
+                   {tx.status === 'pending' && (
+                    <div className="flex flex-wrap justify-end gap-2">
+                      <Button
+                        size="sm"
+                        className="bg-green-500/15 text-green-300 hover:bg-green-500/25"
+                        onClick={() => handleReconcileTransaction(tx.id, "completed")}
+                      >
+                        <CheckSquare className="mr-1 h-3 w-3" /> Confirmar
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="destructive"
+                        onClick={() => handleReconcileTransaction(tx.id, "failed")}
+                      >
+                        <X className="mr-1 h-3 w-3" /> Rejeitar
+                      </Button>
+                    </div>
+                   )}
                 </div>
-              </div>
+              </motion.div>
             ))}
             {transactions.length === 0 && <div className="text-sm text-white/40">Nenhuma transação recente.</div>}
           </CardContent>
         </Card>
       </div>
-    </div>
+    </motion.div>
   );
 }

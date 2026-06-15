@@ -8,10 +8,10 @@ import { CheckCircle2, ChevronRight, Mail, Phone, MapPin, Users, User, Heart, Sh
 
 import { getRedirectResult, signInWithPopup, signInWithRedirect, signOut, type User as FirebaseUser } from 'firebase/auth';
 import { doc, getDoc, setDoc, serverTimestamp, collection, getDocs, query } from 'firebase/firestore';
-import { auth, db, googleProvider } from '@/lib/firebase';
+import { auth, db, googleProvider, googleWorkspaceProvider } from '@/lib/firebase';
 import { normalizeRoles, type UserProfile } from '@/src/lib/permissions';
 
-type AuthState = 'login' | 'onboarding' | 'pending';
+type AuthState = 'login' | 'onboarding' | 'pending' | 'elevation';
 
 interface AuthViewProps {
   onLoginComplete: () => void | Promise<void>;
@@ -92,7 +92,12 @@ export function AuthView({ onLoginComplete, initialState = 'login', currentUserD
     if (userDoc.exists()) {
       const userData = userDoc.data();
       if (userData.isApproved) {
-        await onLoginComplete();
+        const isLeader = userData.roles?.some((r: string) => ['cellLeader', 'ministryLeader', 'supervisor', 'networkPastor', 'auxPastor', 'seniorPastor', 'admin', 'leader', 'pastor'].includes(r));
+        if (isLeader && !userData.workspaceConnected) {
+          setAuthState('elevation');
+        } else {
+          await onLoginComplete();
+        }
       } else {
         setAuthState('pending');
       }
@@ -105,6 +110,33 @@ export function AuthView({ onLoginComplete, initialState = 'login', currentUserD
       email: user.email || ''
     }));
     setAuthState('onboarding');
+  };
+
+  const handleWorkspaceConnect = async () => {
+    try {
+      setLoading(true);
+      await signInWithPopup(auth, googleWorkspaceProvider);
+      if (auth.currentUser) {
+        await setDoc(doc(db, 'users', auth.currentUser.uid), {
+          workspaceConnected: true,
+          googleWorkspaceConnectedAt: serverTimestamp(),
+          updatedAt: serverTimestamp(),
+        }, { merge: true });
+      }
+      await onLoginComplete();
+    } catch (error) {
+      console.error("Workspace connect failed:", error);
+      await onLoginComplete();
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleSkipWorkspace = async () => {
+    if (auth.currentUser) {
+      await setDoc(doc(db, 'users', auth.currentUser.uid), { workspaceConnected: 'skipped' }, { merge: true });
+    }
+    await onLoginComplete();
   };
 
   useEffect(() => {

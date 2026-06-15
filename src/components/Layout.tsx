@@ -44,8 +44,8 @@ import {
 } from "@/components/ui/dropdown-menu"
 import { can } from "@/src/lib/permissions"
 import { auth, db, googleWorkspaceProvider } from "@/lib/firebase"
-import { signInWithPopup, GoogleAuthProvider } from "firebase/auth"
-import { doc, updateDoc } from "firebase/firestore"
+import { signInWithPopup } from "firebase/auth"
+import { doc, serverTimestamp, updateDoc } from "firebase/firestore"
 
 interface LayoutProps {
   children: React.ReactNode
@@ -214,7 +214,7 @@ export function Layout({ children, activeTab, setActiveTab, isLoggedIn = true, u
                 <DropdownMenu>
                   <DropdownMenuTrigger className="relative h-8 w-8 rounded-full outline-none focus-visible:ring-2 focus-visible:ring-primary">
                     <Avatar className="h-8 w-8 border border-white/10">
-                      <AvatarImage src={userData?.photoURL || ""} alt={userData?.name || "User"} />
+                      <AvatarImage src={String(userData?.photoURL || "")} alt={String(userData?.name || "User")} />
                       <AvatarFallback>{getInitials(userData?.name)}</AvatarFallback>
                     </Avatar>
                   </DropdownMenuTrigger>
@@ -234,15 +234,13 @@ export function Layout({ children, activeTab, setActiveTab, isLoggedIn = true, u
                         <DropdownMenuItem 
                           onClick={async () => {
                             try {
-                              const result = await signInWithPopup(auth, googleWorkspaceProvider);
-                              const credential = GoogleAuthProvider.credentialFromResult(result);
-                              if (credential?.accessToken) {
-                                await updateDoc(doc(db, 'users', auth.currentUser!.uid), {
-                                  googleAccessToken: credential.accessToken,
-                                  googleWorkspaceConnected: true
-                                });
-                                alert('Google Workspace conectado com sucesso!');
-                              }
+                              await signInWithPopup(auth, googleWorkspaceProvider);
+                              await updateDoc(doc(db, 'users', auth.currentUser!.uid), {
+                                googleWorkspaceConnected: true,
+                                googleWorkspaceConnectedAt: serverTimestamp(),
+                                updatedAt: serverTimestamp()
+                              });
+                              alert('Google Workspace conectado com sucesso!');
                             } catch (e) {
                               console.error(e);
                               alert('Erro ao conectar Google Workspace');
@@ -331,15 +329,13 @@ export function Layout({ children, activeTab, setActiveTab, isLoggedIn = true, u
                       <Button 
                         onClick={async () => {
                           try {
-                            const result = await signInWithPopup(auth, googleWorkspaceProvider);
-                            const credential = GoogleAuthProvider.credentialFromResult(result);
-                            if (credential?.accessToken) {
-                              await updateDoc(doc(db, 'users', auth.currentUser!.uid), {
-                                googleAccessToken: credential.accessToken,
-                                googleWorkspaceConnected: true
-                              });
-                              alert('Google Workspace conectado com sucesso!');
-                            }
+                            await signInWithPopup(auth, googleWorkspaceProvider);
+                            await updateDoc(doc(db, 'users', auth.currentUser!.uid), {
+                              googleWorkspaceConnected: true,
+                              googleWorkspaceConnectedAt: serverTimestamp(),
+                              updatedAt: serverTimestamp()
+                            });
+                            alert('Google Workspace conectado com sucesso!');
                           } catch (e) {
                             console.error(e);
                             alert('Erro ao conectar Google Workspace');

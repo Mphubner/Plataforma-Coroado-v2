@@ -1,15 +1,32 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Users, Calendar, MapPin, Plus, Target, CheckSquare, Clock, Phone, AlertCircle, Edit, ListTodo, Trophy, BadgeAlert, Share2, QrCode, BookOpen, Heart } from 'lucide-react';
+import { Users, Calendar, MapPin, Plus, Target, CheckSquare, Clock, Phone, AlertCircle, Edit, ListTodo, Trophy, BadgeAlert, Share2, QrCode, BookOpen, Heart, MessageSquare } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { db } from '@/lib/firebase';
-import { collection, query, where, onSnapshot, addDoc, serverTimestamp } from 'firebase/firestore';
+import { auth, db } from '@/lib/firebase';
+import { collection, query, where, onSnapshot } from 'firebase/firestore';
+import ReactQrCode from 'react-qr-code';
+import { COLLECTIONS } from '@/src/lib/domain/collections';
+import { createCellReport } from '@/src/lib/services/cellReportsService';
 
-function ResumoTab({ cell, members, reports }: { cell: any, members: any[], reports: any[] }) {
+function ResumoTab({ cell, members, reports, onOpenReports, onOpenMembers, onOpenVisitors }: { cell: any, members: any[], reports: any[], onOpenReports: () => void, onOpenMembers: () => void, onOpenVisitors: () => void }) {
+  const reportCount = reports.length;
+  const totalVisitors = reports.reduce((sum, report) => sum + Number(report.visitors || 0), 0);
+  const monthlyVisitorAverage = reportCount > 0 ? Math.round((totalVisitors / reportCount) * 10) / 10 : 0;
+  const lastFourReports = reports
+    .filter(report => report.date)
+    .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
+    .slice(0, 4);
+  const attendanceRate = members.length > 0 && lastFourReports.length > 0
+    ? Math.round((lastFourReports.reduce((sum, report) => sum + Number(report.present || 0), 0) / (lastFourReports.length * members.length)) * 100)
+    : 0;
+  const attendanceTone = attendanceRate >= 70 ? 'text-green-400' : 'text-red-400';
+  const attendanceBar = attendanceRate >= 70 ? 'bg-green-400' : 'bg-red-400';
+  const reportsStatus = reportCount > 0 ? 'em dia' : 'pendente';
+
   return (
     <div className="space-y-6">
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
@@ -22,13 +39,13 @@ function ResumoTab({ cell, members, reports }: { cell: any, members: any[], repo
         <Card className="bg-zinc-900 border-white/10 rounded-[2rem]">
           <CardContent className="p-8">
             <p className="text-[10px] uppercase font-bold text-white/40 mb-2 tracking-widest">Média Mensal de Visitantes</p>
-            <div className="text-5xl font-black text-white">2 <span className="text-sm font-medium text-white/40 ml-2">novos contatos</span></div>
+            <div className="text-5xl font-black text-white">{monthlyVisitorAverage} <span className="text-sm font-medium text-white/40 ml-2">por encontro</span></div>
           </CardContent>
         </Card>
         <Card className="bg-zinc-900 border-white/10 rounded-[2rem]">
           <CardContent className="p-8">
             <p className="text-[10px] uppercase font-bold text-white/40 mb-2 tracking-widest">Relatórios Lançados</p>
-            <div className="text-5xl font-black text-white">0 <span className="text-sm font-medium text-green-400 ml-2">100% em dia</span></div>
+            <div className="text-5xl font-black text-white">{reportCount} <span className="text-sm font-medium text-green-400 ml-2">{reportsStatus}</span></div>
           </CardContent>
         </Card>
       </div>
@@ -77,12 +94,12 @@ function ResumoTab({ cell, members, reports }: { cell: any, members: any[], repo
                  <div className="space-y-2">
                    <div className="flex justify-between text-sm">
                      <span className="font-bold text-white/80">Assiduidade aos Encontros</span>
-                     <span className="text-red-400 font-bold">65%</span>
+                     <span className={`${attendanceTone} font-bold`}>{attendanceRate}%</span>
                    </div>
                    <div className="h-2 bg-black/50 rounded-full overflow-hidden">
-                     <div className="h-full bg-red-400 w-[65%]"></div>
+                     <div className={`h-full ${attendanceBar}`} style={{ width: `${Math.min(attendanceRate, 100)}%` }}></div>
                    </div>
-                   <p className="text-[10px] text-white/40 uppercase tracking-widest mt-1">Últimas 4 semanas: Abaixo da meta de 70%</p>
+                   <p className="text-[10px] text-white/40 uppercase tracking-widest mt-1">Últimos {lastFourReports.length || 0} encontros: meta de 70%</p>
                  </div>
                  <div className="space-y-2">
                    <div className="flex justify-between text-sm">
@@ -99,8 +116,8 @@ function ResumoTab({ cell, members, reports }: { cell: any, members: any[], repo
                <div className="p-4 border border-red-500/20 bg-red-500/5 rounded-2xl flex gap-4 items-start">
                  <BadgeAlert className="text-red-400 w-5 h-5 shrink-0 mt-0.5" />
                  <div>
-                   <h4 className="text-red-400 font-bold mb-1">Alerta de Quebra de Engajamento</h4>
-                   <p className="text-sm text-red-400/70">A assiduidade aos encontros da célula caiu para 65%. Considere realizar visitas pastorais.</p>
+                   <h4 className="text-red-400 font-bold mb-1">{attendanceRate >= 70 ? 'Acompanhamento Preventivo' : 'Alerta de Quebra de Engajamento'}</h4>
+                   <p className="text-sm text-red-400/70">A assiduidade atual está em {attendanceRate}%. {attendanceRate >= 70 ? 'Mantenha o acompanhamento de discipulado.' : 'Considere realizar visitas pastorais.'}</p>
                  </div>
                </div>
             </CardContent>
@@ -113,13 +130,13 @@ function ResumoTab({ cell, members, reports }: { cell: any, members: any[], repo
                <CardTitle className="text-lg font-bold font-serif italic">Ações de Liderança</CardTitle>
              </CardHeader>
              <CardContent className="space-y-3">
-               <Button className="w-full bg-primary text-black font-bold h-12 rounded-xl">
+               <Button onClick={onOpenReports} className="w-full bg-primary text-black font-bold h-12 rounded-xl">
                  <CheckSquare className="w-4 h-4 mr-2" /> Lançar Encontro Semanal
                </Button>
-               <Button variant="outline" className="w-full border-white/10 hover:bg-white/5 h-12 rounded-xl">
+               <Button onClick={onOpenMembers} variant="outline" className="w-full border-white/10 hover:bg-white/5 h-12 rounded-xl">
                  <Plus className="w-4 h-4 mr-2" /> Adicionar Novo Membro
                </Button>
-               <Button variant="outline" className="w-full border-white/10 hover:bg-white/5 h-12 rounded-xl">
+               <Button onClick={onOpenVisitors} variant="outline" className="w-full border-white/10 hover:bg-white/5 h-12 rounded-xl">
                  <Plus className="w-4 h-4 mr-2" /> Registrar Novo Visitante
                </Button>
              </CardContent>
@@ -138,14 +155,14 @@ function ResumoTab({ cell, members, reports }: { cell: any, members: any[], repo
                     <h4 className="font-bold text-white text-sm">Lucas Ferreira</h4>
                     <p className="text-xs text-red-400/70 flex items-center gap-1 mt-1"><AlertCircle className="w-3 h-3"/> Sem freq. há 3 sem.</p>
                   </div>
-                  <Button size="sm" variant="outline" className="border-red-500/20 text-red-400 hover:bg-red-500/10 rounded-full text-xs h-8">WhatsApp</Button>
+                  <Button size="sm" variant="outline" onClick={() => window.location.href = '/membros'} className="border-red-500/20 text-red-400 hover:bg-red-500/10 rounded-full text-xs h-8">WhatsApp</Button>
                 </div>
                 <div className="p-4 rounded-xl border border-red-500/20 bg-black/20 flex justify-between items-center">
                   <div>
                     <h4 className="font-bold text-white text-sm">Mariana Costa</h4>
                     <p className="text-xs text-red-400/70 flex items-center gap-1 mt-1"><AlertCircle className="w-3 h-3"/> Sem acesso à Escola IDE</p>
                   </div>
-                  <Button size="sm" variant="outline" className="border-red-500/20 text-red-400 hover:bg-red-500/10 rounded-full text-xs h-8">Ligar</Button>
+                  <Button size="sm" variant="outline" onClick={() => window.location.href = '/membros'} className="border-red-500/20 text-red-400 hover:bg-red-500/10 rounded-full text-xs h-8">Ligar</Button>
                 </div>
              </CardContent>
            </Card>
@@ -156,8 +173,28 @@ function ResumoTab({ cell, members, reports }: { cell: any, members: any[], repo
 }
 
 function ResumoMembroTab({ cell, userData }: { cell: any, userData: any }) {
+  const [showInviteQr, setShowInviteQr] = useState(false);
+  const inviteUrl = `${window.location.origin}/celulas?cell=${encodeURIComponent(cell?.id || cell?.name || '')}`;
+  const instagramUrl = cell?.instagram || 'https://www.instagram.com/igrejacoroado/';
+
   return (
     <div className="space-y-6">
+      <AnimatePresence>
+        {showInviteQr && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
+            <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.95 }} className="bg-zinc-900 border border-white/10 rounded-[2rem] p-8 w-full max-w-sm text-center space-y-5">
+              <div className="bg-white p-4 rounded-2xl inline-block">
+                <ReactQrCode value={inviteUrl} size={180} />
+              </div>
+              <div>
+                <h3 className="font-black text-xl text-white">Convite da célula</h3>
+                <p className="text-xs text-white/50 break-all mt-2">{inviteUrl}</p>
+              </div>
+              <Button onClick={() => setShowInviteQr(false)} variant="outline" className="w-full border-white/10">Fechar</Button>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         <Card className="bg-zinc-900 border-white/10 rounded-[2rem]">
           <CardHeader>
@@ -202,13 +239,16 @@ function ResumoMembroTab({ cell, userData }: { cell: any, userData: any }) {
             <p className="text-sm text-white/70">Compartilhe o link da célula para amigos e interessados.</p>
           </CardHeader>
           <CardContent className="space-y-3 relative z-10">
-            <Button className="w-full bg-primary text-black font-bold h-12 rounded-xl hover:bg-primary/90">
+            <Button onClick={async () => {
+              await navigator.clipboard.writeText(inviteUrl);
+              alert('Link da célula copiado.');
+            }} className="w-full bg-primary text-black font-bold h-12 rounded-xl hover:bg-primary/90">
               Copiar Link Compartilhável
             </Button>
-            <Button variant="outline" className="w-full border-white/10 hover:bg-white/5 h-12 rounded-xl text-white">
+            <Button onClick={() => setShowInviteQr(true)} variant="outline" className="w-full border-white/10 hover:bg-white/5 h-12 rounded-xl text-white">
               <QrCode className="w-4 h-4 mr-2" /> Mostrar QR Code
             </Button>
-            <Button variant="outline" className="w-full border-white/10 hover:bg-white/5 h-12 rounded-xl text-white">
+            <Button onClick={() => window.open(instagramUrl, '_blank')} variant="outline" className="w-full border-white/10 hover:bg-white/5 h-12 rounded-xl text-white">
               <Phone className="w-4 h-4 mr-2" /> Nosso Instagram
             </Button>
           </CardContent>
@@ -223,7 +263,7 @@ function MembrosTab({ members, isLeader }: { members: any[], isLeader: boolean }
     <div className="space-y-6">
       <div className="flex justify-between items-center bg-zinc-900 border border-white/10 p-4 rounded-2xl">
          <h3 className="font-bold font-serif italic text-xl pl-2">Nossa Família de Membros</h3>
-         {isLeader && <Button className="bg-primary text-black font-bold rounded-full"><Plus className="w-4 h-4 mr-2"/> Adicionar</Button>}
+         {isLeader && <Button onClick={() => window.location.href = '/membros'} className="bg-primary text-black font-bold rounded-full"><Plus className="w-4 h-4 mr-2"/> Adicionar</Button>}
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -261,7 +301,7 @@ function VisitantesTab({ isLeader, visitors }: { isLeader: boolean, visitors: an
            <h3 className="font-bold font-serif italic text-xl">Consolidação de Visitantes de Perto</h3>
            <p className="text-white/50 text-sm mt-1">Faça o acompanhamento estratégico das primeiras visitas</p>
          </div>
-         {isLeader && <Button className="bg-primary text-black font-bold rounded-full"><Plus className="w-4 h-4 mr-2"/> Registrar</Button>}
+         {isLeader && <Button onClick={() => alert('Para registrar visitante com vínculo à célula, lance um relatório de encontro com o visitante informado.')} className="bg-primary text-black font-bold rounded-full"><Plus className="w-4 h-4 mr-2"/> Registrar</Button>}
        </div>
 
        <div className="space-y-4">
@@ -279,9 +319,9 @@ function VisitantesTab({ isLeader, visitors }: { isLeader: boolean, visitors: an
                 </div>
              </div>
              <div className="flex gap-2 w-full md:w-auto">
-               <Button variant="outline" className="flex-1 md:flex-none border-white/10 hover:bg-white/5 rounded-full"><Phone className="w-4 h-4 mr-2"/> Enviar Mensagem</Button>
-               {isLeader && v.count >= 3 && <Button variant="outline" className="flex-1 md:flex-none border-green-500/20 text-green-400 hover:bg-green-500/10 rounded-full"><Users className="w-4 h-4 mr-2"/> Tornar Membro</Button>}
-               {isLeader && v.count < 3 && <Button variant="outline" className="flex-1 md:flex-none border-primary/20 text-primary hover:bg-primary/10 rounded-full"><Heart className="w-4 h-4 mr-2"/> Consolidar</Button>}
+               <Button onClick={() => alert('Este visitante veio de relatórios da célula. Cadastre o WhatsApp no próximo lançamento para abrir contato direto.')} variant="outline" className="flex-1 md:flex-none border-white/10 hover:bg-white/5 rounded-full"><Phone className="w-4 h-4 mr-2"/> Enviar Mensagem</Button>
+               {isLeader && v.count >= 3 && <Button onClick={() => window.location.href = '/membros'} variant="outline" className="flex-1 md:flex-none border-green-500/20 text-green-400 hover:bg-green-500/10 rounded-full"><Users className="w-4 h-4 mr-2"/> Tornar Membro</Button>}
+               {isLeader && v.count < 3 && <Button onClick={() => alert('Plano de consolidação criado: entre em contato, convide para o próximo encontro e registre a nova presença no relatório semanal.')} variant="outline" className="flex-1 md:flex-none border-primary/20 text-primary hover:bg-primary/10 rounded-full"><Heart className="w-4 h-4 mr-2"/> Consolidar</Button>}
              </div>
            </div>
          ))}
@@ -328,7 +368,7 @@ function EscalasDinâmicasTab({ isLeader, members }: { isLeader: boolean, member
          </div>
          <div className="flex gap-2">
            {isLeader && <Button onClick={handleSortear} variant="outline" className="border-primary/50 text-primary hover:bg-primary/10 rounded-full font-bold">Sortear Pendentes</Button>}
-           {isLeader && <Button className="bg-primary text-black font-bold rounded-full"><Plus className="w-4 h-4 mr-2"/> Nova Escala</Button>}
+            {isLeader && <Button onClick={() => alert('Use Sortear Pendentes para gerar a próxima escala base. A persistência de escalas da célula será consolidada no módulo de escalas.')} className="bg-primary text-black font-bold rounded-full"><Plus className="w-4 h-4 mr-2"/> Nova Escala</Button>}
          </div>
        </div>
 
@@ -346,7 +386,7 @@ function EscalasDinâmicasTab({ isLeader, members }: { isLeader: boolean, member
               </div>
               <div className="text-right">
                 {t.status === 'Pendente' ? (
-                   <Button variant="link" className="text-primary font-bold uppercase tracking-widest text-xs">Eu Quero</Button>
+                   <Button onClick={() => alert('Interesse registrado visualmente. O líder deve confirmar a escala no próximo lançamento.')} variant="link" className="text-primary font-bold uppercase tracking-widest text-xs">Eu Quero</Button>
                 ) : (
                    <span className={`text-[10px] uppercase font-bold tracking-widest ${t.status.includes('Confirmado') ? 'text-green-400' : 'text-yellow-400'}`}>
                      {t.status}
@@ -374,18 +414,14 @@ function RelatoriosTab({ isLeader, reports, members, cell, userData }: { isLeade
     if (!userData?.tenantId || !cell?.id) return;
     setSubmitting(true);
     try {
-      await addDoc(collection(db, 'cell_reports'), {
+      await createCellReport({
         cellId: cell.id,
-        tenantId: userData.tenantId,
         date,
-        type: 'presence',
         meetingType,
-        present: presentMembers.length,
-        visitors: hasVisitors && visitorName.trim() !== '' ? 1 : 0,
+        tenantId: userData.tenantId,
         presentMembersIds: presentMembers,
-        visitorData: hasVisitors ? { name: visitorName } : null,
-        createdBy: userData.id,
-        createdAt: serverTimestamp()
+        createdBy: auth.currentUser?.uid || userData.id,
+        visitorName: hasVisitors ? visitorName : '',
       });
       setIsModalOpen(false);
       setPresentMembers([]);
@@ -422,7 +458,13 @@ function RelatoriosTab({ isLeader, reports, members, cell, userData }: { isLeade
                  <p className="font-bold text-lg">{new Date(r.date).toLocaleDateString()} <span className="text-sm font-normal text-white/40 ml-2">({r.meetingType || 'Célula'})</span></p>
                  <p className="text-sm text-white/60 mt-1">Presentes: {r.present} | Visitantes: {r.visitors}</p>
                </div>
-               <Button variant="outline" className="border-white/10 rounded-full">Ver Detalhes</Button>
+               <Button
+                 onClick={() => alert(r.summary || `${r.meetingType || 'Encontro'}: ${r.present || 0} presentes e ${r.visitors || 0} visitantes.`)}
+                 variant="outline"
+                 className="border-white/10 rounded-full"
+               >
+                 Ver Detalhes
+               </Button>
              </div>
            ))
          )}
@@ -516,7 +558,7 @@ export function CellManagementDashboard({ isLeader, cell, userData }: { isLeader
     const qM = query(collection(db, 'users'), where('tenantId', '==', userData.tenantId), where('cellId', '==', cell.id));
     const unsubM = onSnapshot(qM, (snap) => setMembers(snap.docs.map(d => ({id: d.id, ...d.data()}))));
     
-    const qR = query(collection(db, 'cell_reports'), where('tenantId', '==', userData.tenantId), where('cellId', '==', cell.id));
+    const qR = query(collection(db, COLLECTIONS.cellReports), where('tenantId', '==', userData.tenantId), where('cellId', '==', cell.id));
     const unsubR = onSnapshot(qR, (snap) => setReports(snap.docs.map(d => ({id: d.id, ...d.data()}))));
 
     return () => { unsubM(); unsubR(); };
@@ -559,6 +601,16 @@ export function CellManagementDashboard({ isLeader, cell, userData }: { isLeader
             <p className="text-white/60 flex items-center gap-3 text-lg font-medium">
               <MapPin className="w-5 h-5 text-primary" /> {cell.neighborhood} - {cell.city || 'São Paulo'} • <Clock className="w-5 h-5 text-primary ml-2" /> {cell.day} às {cell.time}
             </p>
+            <div className="flex gap-3 pt-2">
+              <Button 
+                variant="outline" 
+                className="bg-zinc-800/50 border-white/10 hover:bg-white/10 rounded-full text-white"
+                onClick={() => window.open('https://chat.google.com/', '_blank')}
+              >
+                <MessageSquare className="w-4 h-4 mr-2" />
+                Espaço no Google Chat
+              </Button>
+            </div>
           </div>
           
           {isSupervisor && (
@@ -587,7 +639,14 @@ export function CellManagementDashboard({ isLeader, cell, userData }: { isLeader
 
         <TabsContent value="resumo" className="mt-6 focus-visible:outline-none">
           {isLeader ? (
-            <ResumoTab cell={cell} members={members} reports={reports} />
+            <ResumoTab
+              cell={cell}
+              members={members}
+              reports={reports}
+              onOpenReports={() => setActiveTab('reports')}
+              onOpenMembers={() => setActiveTab('members')}
+              onOpenVisitors={() => setActiveTab('visitors')}
+            />
           ) : (
             <ResumoMembroTab cell={cell} userData={userData} />
           )}

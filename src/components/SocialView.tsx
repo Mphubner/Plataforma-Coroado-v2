@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion, AnimatePresence } from 'motion/react';
 import { Heart, Users, HandHeart, ChevronRight, Instagram, Plus, Calendar as CalendarIcon, Settings, HeartPulse, HeartHandshake } from 'lucide-react';
 import { Button, buttonVariants } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
@@ -9,7 +9,14 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { cn } from '@/lib/utils';
 import type { UserProfile } from '@/src/lib/permissions';
 import { db } from '@/lib/firebase';
-import { collection, getDocs, addDoc, updateDoc, deleteDoc, doc, serverTimestamp, query, where, onSnapshot } from 'firebase/firestore';
+import { collection, getDocs, query, where, onSnapshot } from 'firebase/firestore';
+import { COLLECTIONS } from '@/src/lib/domain/collections';
+import {
+  createSocialAppointment,
+  deleteSocialProfessional,
+  saveSocialProfessional,
+  updateSocialAppointmentStatus,
+} from '@/src/lib/services/socialService';
 
 // --- SUBCOMPONENTS FOR TABS ---
 
@@ -22,7 +29,7 @@ function PublicPortal({ onLoginClick, isLoggedIn, userData }: { onLoginClick?: (
   const [showSuccess, setShowSuccess] = useState(false);
 
   React.useEffect(() => {
-    const q = query(collection(db, 'social_professionals'), where('isPublic', '==', true));
+    const q = query(collection(db, COLLECTIONS.socialProfessionals), where('isPublic', '==', true));
     const unsub = onSnapshot(q, (snapshot) => {
       setPublicProfs(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as SocialProfessional)));
     });
@@ -34,19 +41,16 @@ function PublicPortal({ onLoginClick, isLoggedIn, userData }: { onLoginClick?: (
     if (!selectedDate || !selectedTime || !selectedProf) return;
     setIsSubmitting(true);
     try {
-      await addDoc(collection(db, 'social_appointments'), {
+      await createSocialAppointment({
         userName: userData?.name || 'Usuário',
-        userId: userData?.uid || 'anonymous',
+        userId: userData?.id || userData?.uid || '',
         professionalId: selectedProf.id,
         professionalName: selectedProf.name,
         specialty: selectedProf.specialty,
         date: selectedDate,
         time: selectedTime,
-        status: 'pending',
         price: selectedProf.price || null,
-        paymentStatus: selectedProf.price ? 'pending' : 'paid',
-        createdAt: serverTimestamp(),
-        tenantId: 'default'
+        tenantId: userData?.tenantId || 'tenant-1'
       });
       setShowSuccess(true);
       setTimeout(() => {
@@ -369,7 +373,7 @@ export interface SocialProfessional {
   tenantId?: string;
 }
 
-function ProfessionalsTab() {
+function ProfessionalsTab({ userData }: { userData: UserProfile | null }) {
   const [professionals, setProfessionals] = useState<SocialProfessional[]>([]);
   const [showModal, setShowModal] = useState(false);
   const [editingProf, setEditingProf] = useState<Partial<SocialProfessional> | null>(null);
@@ -378,9 +382,11 @@ function ProfessionalsTab() {
   const fetchProfessionals = async () => {
     setIsLoading(true);
     try {
-      const q = collection(db, 'social_professionals');
+      const q = collection(db, COLLECTIONS.socialProfessionals);
       const snapshot = await getDocs(q);
-      const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })) as SocialProfessional[];
+      const data = snapshot.docs
+        .map(doc => ({ id: doc.id, ...doc.data() }) as SocialProfessional)
+        .filter(prof => !userData?.tenantId || prof.tenantId === userData.tenantId);
       setProfessionals(data);
     } catch (error) {
       console.error("Erro ao buscar profissionais:", error);
@@ -398,15 +404,10 @@ function ProfessionalsTab() {
     if (!editingProf?.name || !editingProf?.specialty) return;
 
     try {
-      if (editingProf.id) {
-        await updateDoc(doc(db, 'social_professionals', editingProf.id), editingProf);
-      } else {
-        await addDoc(collection(db, 'social_professionals'), {
-          ...editingProf,
-          createdAt: serverTimestamp(),
-          tenantId: 'default'
-        });
-      }
+      await saveSocialProfessional({
+        ...editingProf,
+        tenantId: userData?.tenantId || 'tenant-1',
+      });
       setShowModal(false);
       setEditingProf(null);
       fetchProfessionals();
@@ -419,7 +420,7 @@ function ProfessionalsTab() {
   const handleDelete = async (id: string) => {
     if (!confirm("Tem certeza que deseja excluir este profissional?")) return;
     try {
-      await deleteDoc(doc(db, 'social_professionals', id));
+      await deleteSocialProfessional(id);
       fetchProfessionals();
     } catch (error) {
       console.error("Erro ao excluir:", error);
@@ -531,13 +532,14 @@ function AppointmentsTab({ userData }: { userData: any }) {
   const [isLoading, setIsLoading] = useState(true);
 
   React.useEffect(() => {
+    const tenantId = userData?.tenantId || 'tenant-1';
     setIsLoading(true);
-    const unsub = onSnapshot(query(collection(db, 'social_appointments')), (snap) => {
+    const unsub = onSnapshot(query(collection(db, COLLECTIONS.socialAppointments), where('tenantId', '==', tenantId)), (snap) => {
       setAppointments(snap.docs.map(doc => ({ id: doc.id, ...doc.data() })));
       setIsLoading(false);
     });
     return () => unsub();
-  }, []);
+  }, [userData?.tenantId]);
 
   const total = appointments.length;
   const socialCount = appointments.filter(a => !a.price).length;
@@ -545,30 +547,7 @@ function AppointmentsTab({ userData }: { userData: any }) {
 
   const handleUpdateStatus = async (app: any, status: string) => {
     try {
-      await updateDoc(doc(db, 'social_appointments', app.id), { status });
-      if (status === 'approved' && userData?.googleAccessToken) {
-        const startDate = new Date(`${app.date}T${app.time}:00-03:00`);
-        const endDate = new Date(startDate.getTime() + 60 * 60 * 1000);
-        const res = await fetch("https://www.googleapis.com/calendar/v3/calendars/primary/events", {
-          method: "POST",
-          headers: {
-            "Authorization": `Bearer ${userData.googleAccessToken}`,
-            "Content-Type": "application/json"
-          },
-          body: JSON.stringify({
-            summary: `Atendimento Social com ${app.userName}`,
-            description: `Especialidade: ${app.specialty}\nAgendamento confirmado via Plataforma Coroado.`,
-            start: { dateTime: startDate.toISOString() },
-            end: { dateTime: endDate.toISOString() }
-          })
-        });
-        if (res.ok) {
-          alert("Atendimento aprovado e salvo no seu Google Calendar!");
-        } else {
-          console.error(await res.json());
-          alert("Erro ao salvar no Google Calendar. Token pode ter expirado, reconecte no menu superior.");
-        }
-      }
+      await updateSocialAppointmentStatus(app.id, status as any);
     } catch (e) {
       console.error(e);
       alert('Erro ao atualizar status.');
@@ -693,7 +672,7 @@ export function SocialView({
   const [activeTab, setActiveTab] = useState("portal");
 
   if (!isAdmin) {
-    return <PublicPortal onLoginClick={onLoginClick} isLoggedIn={isLoggedIn} />;
+    return <PublicPortal onLoginClick={onLoginClick} isLoggedIn={isLoggedIn} userData={userData} />;
   }
 
   return (
@@ -743,11 +722,11 @@ export function SocialView({
             transition={{ duration: 0.2 }}
           >
             <TabsContent value="portal" className="mt-0 outline-none">
-              <PublicPortal onLoginClick={onLoginClick} isLoggedIn={isLoggedIn} />
+              <PublicPortal onLoginClick={onLoginClick} isLoggedIn={isLoggedIn} userData={userData} />
             </TabsContent>
             
             <TabsContent value="professionals" className="mt-0 outline-none">
-              <ProfessionalsTab />
+              <ProfessionalsTab userData={userData} />
             </TabsContent>
 
             <TabsContent value="appointments" className="mt-0 outline-none">

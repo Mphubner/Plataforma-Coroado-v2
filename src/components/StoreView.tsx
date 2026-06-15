@@ -12,7 +12,7 @@ import {
   Heart,
   Share2,
   RefreshCw,
-  Loader2
+  Mail
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
@@ -23,7 +23,9 @@ import { Separator } from '@/components/ui/separator';
 import { cn } from '@/lib/utils';
 import { auth, db } from '@/lib/firebase';
 import { collection, query, where, onSnapshot, addDoc, updateDoc, deleteDoc, doc, writeBatch, serverTimestamp } from 'firebase/firestore';
-import ReactQrCode from 'react-qr-code';
+import { postJson } from '@/src/lib/api/http';
+import { toCheckoutPayload } from '@/src/lib/domain/payloads';
+import { pageMotion } from '@/src/lib/motion/presets';
 
 interface StoreViewProps {
   isAdmin?: boolean;
@@ -181,12 +183,15 @@ function StoreOrdersTab({ tenantId, userData }: { tenantId: string; userData: an
   };
 
   return (
-    <div className="space-y-6">
+    <motion.div {...pageMotion} className="space-y-6">
       <div className="flex justify-between items-end">
         <div className="space-y-1">
           <h2 className="text-2xl font-black font-serif italic text-white">Gestão de Pedidos</h2>
           <p className="text-white/50 text-sm">Controle de envio, retirada e status dos pagamentos.</p>
         </div>
+        <Button variant="outline" className="bg-[#ea4335]/10 text-[#ea4335] border-none hover:bg-[#ea4335]/20 hidden md:flex" onClick={() => window.open('https://mail.google.com/', '_blank')}>
+          <Mail className="w-4 h-4 mr-2" /> Gmail (Comunicações)
+        </Button>
       </div>
       
       {loading ? (
@@ -239,36 +244,30 @@ function StoreOrdersTab({ tenantId, userData }: { tenantId: string; userData: an
                    variant="outline" 
                    className="text-xs bg-white/5 border-white/10"
                    onClick={async () => {
-                     if (!userData?.googleAccessToken) {
-                       alert("Você precisa conectar sua conta do Google Workspace no menu superior primeiro para delegar tarefas.");
+                     if (!userData?.id) {
+                       alert("Voce precisa estar logado para delegar tarefas.");
                        return;
                      }
                      try {
-                       const res = await fetch("https://tasks.googleapis.com/tasks/v1/lists/@default/tasks", {
-                         method: "POST",
-                         headers: {
-                           "Authorization": `Bearer ${userData.googleAccessToken}`,
-                           "Content-Type": "application/json"
-                         },
-                         body: JSON.stringify({
-                           title: `[Loja] Separar Pedido #${order.id.substring(0, 8).toUpperCase()}`,
-                           notes: `Cliente: ${order.userName}\nValor: R$ ${order.total}\nItens:\n${order.items.map((i: any) => `- ${i.quantity}x ${i.name}`).join('\n')}`
-                         })
+                       await addDoc(collection(db, 'tasks'), {
+                         title: `[Loja] Separar Pedido #${order.id.substring(0, 8).toUpperCase()}`,
+                         tag: 'Loja',
+                         status: 'todo',
+                         assigneeId: '',
+                         description: `Cliente: ${order.userName}\nValor: R$ ${order.total}\nItens:\n${order.items.map((i: any) => `- ${i.quantity}x ${i.name}`).join('\n')}`,
+                         tenantId,
+                         createdBy: auth.currentUser?.uid || userData.id,
+                         createdAt: serverTimestamp(),
+                         updatedAt: serverTimestamp(),
                        });
-                       if (res.ok) {
-                         alert("Tarefa delegada e criada no seu Google Tasks com sucesso!");
-                       } else {
-                         const errorData = await res.json();
-                         console.error(errorData);
-                         alert("Erro ao criar tarefa no Google Tasks. O token pode ter expirado, reconecte no menu superior.");
-                       }
+                       alert("Tarefa interna criada no planejamento da plataforma.");
                      } catch (e) {
                        console.error(e);
-                       alert("Erro ao comunicar com Google Tasks.");
+                       alert("Erro ao criar tarefa interna.");
                      }
                    }}
                  >
-                   Delegar Tarefa (Google Tasks)
+                   Delegar Tarefa
                  </Button>
                  <div className="flex-1" />
                  {order.status === 'paid' && (
@@ -286,7 +285,7 @@ function StoreOrdersTab({ tenantId, userData }: { tenantId: string; userData: an
           ))}
         </div>
       )}
-    </div>
+    </motion.div>
   );
 }
 
@@ -294,12 +293,11 @@ export function StoreView({ isAdmin = false, userData }: StoreViewProps) {
   const [selectedCategory, setSelectedCategory] = useState("Todos");
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
+  const [selectedSize, setSelectedSize] = useState("");
+  const [selectedColor, setSelectedColor] = useState("");
   const [cart, setCart] = useState<{ product: Product; quantity: number; size?: string; color?: string }[]>([]);
   const [isCartOpen, setIsCartOpen] = useState(false);
   const [storeTab, setStoreTab] = useState("shop");
-
-  const [showSimulatedCheckoutModal, setShowSimulatedCheckoutModal] = useState(false);
-  const [isSimulatingPayment, setIsSimulatingPayment] = useState(false);
 
   const [dbProducts, setDbProducts] = useState<Product[]>([]);
   const [newProductForm, setNewProductForm] = useState({
@@ -324,62 +322,19 @@ export function StoreView({ isAdmin = false, userData }: StoreViewProps) {
       }
 
       const idToken = await currentUser.getIdToken();
-      const response = await fetch('/api/checkout', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${idToken}`,
-        },
-        body: JSON.stringify({ items: cart })
-      });
-      const data = await response.json();
-      if (data.success && data.init_point) {
+      const data = await postJson<{ init_point: string; orderId: string }>(
+        '/api/checkout',
+        toCheckoutPayload(cart),
+        { token: idToken },
+      );
+      if (data.init_point) {
         window.location.href = data.init_point;
       } else {
-        console.warn('Backend checkout failed, opening simulation:', data.error);
-        setShowSimulatedCheckoutModal(true);
+        alert('Nao foi possivel iniciar o checkout agora.');
       }
     } catch (e) {
-      console.warn('Network checkout failed, opening simulation:', e);
-      setShowSimulatedCheckoutModal(true);
-    }
-  };
-
-  const handleSimulatedPaymentSuccess = async () => {
-    setIsSimulatingPayment(true);
-    try {
-      await new Promise(resolve => setTimeout(resolve, 3000));
-      
-      const currentUser = auth.currentUser;
-      const totalAmount = cart.reduce((total, item) => total + (item.product.price * item.quantity), 0);
-      await addDoc(collection(db, 'orders'), {
-        userId: currentUser?.uid || 'anonymous',
-        userName: currentUser?.displayName || userData?.name || 'Membro',
-        tenantId,
-        items: cart.map(item => ({
-          productId: String(item.product.id),
-          name: item.product.name,
-          quantity: item.quantity,
-          price: item.product.price,
-          size: item.size || '',
-          color: item.color || ''
-        })),
-        total: totalAmount,
-        status: 'paid',
-        paymentMethod: 'pix_simulation',
-        createdAt: serverTimestamp(),
-        updatedAt: serverTimestamp()
-      });
-      
-      alert("Pagamento simulado aprovado com sucesso! Obrigado pela compra.");
-      setCart([]);
-      setShowSimulatedCheckoutModal(false);
-      setIsCartOpen(false);
-    } catch (e) {
       console.error(e);
-      alert("Erro ao processar pedido simulado: " + (e as Error).message);
-    } finally {
-      setIsSimulatingPayment(false);
+      alert('Nao foi possivel iniciar o checkout. Verifique sua conexao e tente novamente.');
     }
   };
 
@@ -390,6 +345,11 @@ export function StoreView({ isAdmin = false, userData }: StoreViewProps) {
     });
     return () => unsub();
   }, [tenantId]);
+
+  useEffect(() => {
+    setSelectedSize(selectedProduct?.sizes?.[0] || "");
+    setSelectedColor(selectedProduct?.colors?.[0] || "");
+  }, [selectedProduct]);
 
   const handleSeedProducts = async () => {
     try {
@@ -468,7 +428,7 @@ export function StoreView({ isAdmin = false, userData }: StoreViewProps) {
     }
   };
 
-  const catalogProducts = dbProducts.length > 0 ? dbProducts : PRODUCTS;
+  const catalogProducts = dbProducts.length > 0 ? dbProducts : (import.meta.env.DEV ? PRODUCTS : []);
 
   const filteredProducts = catalogProducts.filter(p => {
     const matchesCategory = selectedCategory === "Todos" || p.category === selectedCategory;
@@ -824,7 +784,8 @@ export function StoreView({ isAdmin = false, userData }: StoreViewProps) {
                         {selectedProduct.sizes.map(size => (
                           <button
                             key={size}
-                            className="w-14 h-14 rounded-2xl border border-white/10 flex items-center justify-center font-black text-sm hover:border-primary hover:text-primary transition-all"
+                            onClick={() => setSelectedSize(size)}
+                            className={`w-14 h-14 rounded-2xl border flex items-center justify-center font-black text-sm transition-all ${selectedSize === size ? 'border-primary bg-primary text-black' : 'border-white/10 hover:border-primary hover:text-primary'}`}
                           >
                             {size}
                           </button>
@@ -840,7 +801,8 @@ export function StoreView({ isAdmin = false, userData }: StoreViewProps) {
                         {selectedProduct.colors.map(color => (
                           <button
                             key={color}
-                            className="px-6 h-12 rounded-2xl border border-white/10 flex items-center justify-center font-bold text-sm hover:border-primary hover:text-primary transition-all"
+                            onClick={() => setSelectedColor(color)}
+                            className={`px-6 h-12 rounded-2xl border flex items-center justify-center font-bold text-sm transition-all ${selectedColor === color ? 'border-primary bg-primary text-black' : 'border-white/10 hover:border-primary hover:text-primary'}`}
                           >
                             {color}
                           </button>
@@ -852,7 +814,7 @@ export function StoreView({ isAdmin = false, userData }: StoreViewProps) {
                   <div className="flex gap-4 pt-4">
                     <Button 
                       onClick={() => {
-                        addToCart(selectedProduct);
+                        addToCart(selectedProduct, 1, selectedSize || undefined, selectedColor || undefined);
                         setIsCartOpen(true);
                       }}
                       className="flex-1 bg-primary text-black hover:bg-primary/90 font-black h-16 rounded-full text-lg shadow-lg shadow-primary/20"
@@ -862,7 +824,7 @@ export function StoreView({ isAdmin = false, userData }: StoreViewProps) {
                     <Button 
                       variant="outline"
                       onClick={() => {
-                        addToCart(selectedProduct);
+                        addToCart(selectedProduct, 1, selectedSize || undefined, selectedColor || undefined);
                         setIsCartOpen(true);
                       }}
                       className="flex-1 border-white/10 hover:bg-white/5 h-16 rounded-full font-black text-lg"
@@ -1017,45 +979,6 @@ export function StoreView({ isAdmin = false, userData }: StoreViewProps) {
         )}
       </AnimatePresence>
 
-      {/* Modal de Checkout Simulado */}
-      <AnimatePresence>
-        {showSimulatedCheckoutModal && (
-          <div className="fixed inset-0 z-[200] flex items-center justify-center p-4">
-            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setShowSimulatedCheckoutModal(false)} className="absolute inset-0 bg-black/80 backdrop-blur-sm" />
-            <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.95 }} className="relative w-full max-w-sm glass-card p-8 rounded-[2rem] space-y-6 text-center">
-              <div className="w-16 h-16 bg-primary/20 rounded-full flex items-center justify-center mx-auto border border-primary/50 text-primary">
-                <ShoppingBag className="w-8 h-8" />
-              </div>
-              <div>
-                <h3 className="font-black text-2xl font-serif italic">Coroado Pay (PIX)</h3>
-                <p className="text-sm text-white/60 mt-2">Finalize sua compra pagando via PIX simulado.</p>
-              </div>
-
-              {isSimulatingPayment ? (
-                <div className="space-y-4 py-4">
-                  <Loader2 className="w-12 h-12 text-primary animate-spin mx-auto" />
-                  <p className="text-sm text-white/60 font-bold uppercase tracking-wider">Confirmando pagamento...</p>
-                </div>
-              ) : (
-                <div className="space-y-6">
-                  <div className="bg-white p-4 rounded-2xl inline-block mx-auto">
-                    <ReactQrCode value={`00020101021126580014br.gov.bcb.pix0136coroado@igreja.com.br5204000053039865802BR5915IGREJA COROADO6009SAO PAULO62070503***6304`} size={180} />
-                    <p className="text-black text-[10px] mt-2 font-black uppercase tracking-widest">Aproxime o app do seu banco</p>
-                  </div>
-                  <div className="space-y-2">
-                    <Button onClick={handleSimulatedPaymentSuccess} className="w-full bg-primary text-black font-black h-12 rounded-full uppercase text-xs tracking-wider">
-                      Simular Sucesso do Pagamento
-                    </Button>
-                    <Button variant="ghost" onClick={() => setShowSimulatedCheckoutModal(false)} className="w-full text-white/40 hover:text-white">
-                      Cancelar
-                    </Button>
-                  </div>
-                </div>
-              )}
-            </motion.div>
-          </div>
-        )}
-      </AnimatePresence>
         </>
       )}
     </div>

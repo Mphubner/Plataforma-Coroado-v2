@@ -5,8 +5,14 @@ import { Plus, CheckCircle2, Clock, PlayCircle, X, MessageSquare, AlignLeft, Use
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { auth, db } from "@/lib/firebase";
-import { collection, query, where, onSnapshot, addDoc, updateDoc, doc, serverTimestamp, getDoc } from "firebase/firestore";
+import { collection, query, where, onSnapshot, doc, getDoc } from "firebase/firestore";
 import { motion, AnimatePresence } from "motion/react";
+import {
+  createTask,
+  createTaskUpdate,
+  updatePlanningTaskStatus,
+  updateTaskDetails,
+} from "@/src/lib/services/planningService";
 
 type Task = {
   id: string;
@@ -101,14 +107,7 @@ export function AdminPlanningKanban() {
   const moveTask = async (taskId: string, targetColId: string) => {
     if (!auth.currentUser) return;
     try {
-      const updateData: any = {
-        status: targetColId,
-        updatedAt: serverTimestamp()
-      };
-      if (targetColId === 'done') {
-         updateData.completedAt = new Date().toISOString().split('T')[0];
-      }
-      await updateDoc(doc(db, 'tasks', taskId), updateData);
+      await updatePlanningTaskStatus(taskId, targetColId);
     } catch (error) {
       console.error("Error updating task:", error);
     }
@@ -117,13 +116,12 @@ export function AdminPlanningKanban() {
   const handleUpdateTask = async () => {
      if (!selectedTask || !auth.currentUser) return;
      try {
-       await updateDoc(doc(db, 'tasks', selectedTask.id), {
+       await updateTaskDetails(selectedTask.id, {
          title: selectedTask.title,
          description: selectedTask.description,
          tag: selectedTask.tag,
          assigneeId: selectedTask.assigneeId,
          dueDate: selectedTask.dueDate || '',
-         updatedAt: serverTimestamp()
        });
        setSelectedTask(null);
      } catch(e) {
@@ -134,7 +132,7 @@ export function AdminPlanningKanban() {
   const handleAddTask = async () => {
     if (!auth.currentUser || !tenantId || !newTaskTitle) return;
     try {
-      await addDoc(collection(db, 'tasks'), {
+      await createTask({
         title: newTaskTitle,
         description: newTaskDescription,
         tag: newTaskTag || 'Geral',
@@ -145,8 +143,6 @@ export function AdminPlanningKanban() {
         dueDate: newTaskDueDate || '',
         startDate: new Date().toISOString().split('T')[0],
         completedAt: '',
-        createdAt: serverTimestamp(),
-        updatedAt: serverTimestamp()
       });
       setShowModal(false);
       setNewTaskTitle("");
@@ -162,13 +158,12 @@ export function AdminPlanningKanban() {
   const submitComment = async () => {
      if (!newComment.trim() || !selectedTask?.id || !tenantId || !auth.currentUser) return;
      try {
-        await addDoc(collection(db, 'task_updates'), {
+        await createTaskUpdate({
            taskId: selectedTask.id,
            content: newComment,
            authorName: auth.currentUser.displayName || auth.currentUser.email || 'Usuário',
            date: new Date().toISOString(),
            tenantId: tenantId,
-           createdAt: serverTimestamp()
         });
         setNewComment("");
      } catch(e) {

@@ -1,8 +1,10 @@
 import React from 'react';
+import { motion } from 'motion/react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Users, Activity, Target, ShieldCheck, Heart, Crosshair, ArrowRight, BookOpen, Badge } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { pageMotion } from '@/src/lib/motion/presets';
 
 function PersonalDashboard({ events, myScales }: { events: any[], myScales: any[] }) {
   return (
@@ -245,11 +247,11 @@ function MacroDashboard() {
 export function HomeDashboard({ userData, events, myScales }: { userData: any, events: any[], myScales: any[] }) {
   const roles = userData?.roles || [];
   const isAdmin = roles.includes('admin');
-  const isSeniorPastor = roles.includes('senior_pastor') || isAdmin;
-  const isNetworkPastor = roles.includes('network_pastor');
-  const isMinistryLeader = roles.includes('ministry_leader') || isAdmin;
-  const isSupervisor = roles.includes('supervisor') || roles.includes('network_pastor') || isAdmin;
-  const isCellLeader = roles.includes('leader') || isSupervisor || isAdmin;
+  const isSeniorPastor = roles.includes('seniorPastor') || isAdmin;
+  const isNetworkPastor = roles.includes('networkPastor');
+  const isMinistryLeader = roles.includes('ministryLeader') || isAdmin;
+  const isSupervisor = roles.includes('supervisor') || roles.includes('networkPastor') || isAdmin;
+  const isCellLeader = roles.includes('cellLeader') || isSupervisor || isAdmin;
 
   let defaultTab = "personal";
   if (isSeniorPastor || isNetworkPastor) defaultTab = "macro";
@@ -257,7 +259,7 @@ export function HomeDashboard({ userData, events, myScales }: { userData: any, e
   else if (isCellLeader) defaultTab = "leader";
 
   return (
-    <div className="space-y-8">
+    <motion.div {...pageMotion} className="space-y-8">
       <div className="flex items-center gap-4">
         <div className="w-16 h-16 rounded-full bg-primary/20 flex items-center justify-center border border-primary/50 shadow-lg shadow-primary/20">
           <Heart className="w-8 h-8 text-primary" />
@@ -321,6 +323,6 @@ export function HomeDashboard({ userData, events, myScales }: { userData: any, e
           </TabsContent>
         )}
       </Tabs>
-    </div>
+    </motion.div>
   );
 }

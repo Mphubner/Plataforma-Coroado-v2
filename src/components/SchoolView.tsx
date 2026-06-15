@@ -19,12 +19,17 @@ import { Input } from "@/components/ui/input"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Separator } from "@/components/ui/separator"
 import { db, auth } from "@/lib/firebase"
-import { collection, query, where, onSnapshot, addDoc, updateDoc, doc, deleteDoc, serverTimestamp, getDoc } from "firebase/firestore"
+import { collection, query, where, onSnapshot, doc, getDoc } from "firebase/firestore"
 import { onAuthStateChanged } from "firebase/auth"
-import { httpsCallable } from "firebase/functions"
-import { functions } from "@/lib/firebase"
-import ReactQrCode from 'react-qr-code';
 import { AdminQuizzes } from "./admin";
+import { postJson } from '@/src/lib/api/http';
+import {
+  createCourse,
+  createCourseLesson,
+  createCourseModule,
+  createLearningPath,
+  updateLearningPathCourses,
+} from '@/src/lib/services/schoolService';
 
 // Simple Progress component
 function Progress({ value, className }: { value: number, className?: string }) {
@@ -33,6 +38,61 @@ function Progress({ value, className }: { value: number, className?: string }) {
       <div className="h-full bg-primary transition-all duration-500" style={{ width: `${value}%` }} />
     </div>
   )
+}
+
+function escapeCertificateText(value: string) {
+  return value.replace(/[&<>"']/g, (char) => ({
+    '&': '&amp;',
+    '<': '&lt;',
+    '>': '&gt;',
+    '"': '&quot;',
+    "'": '&#39;'
+  }[char] || char));
+}
+
+function downloadCertificateHtml(cert: { name: string; course: string; date: string; code: string }) {
+  const html = `<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8" />
+  <title>Certificado ${escapeCertificateText(cert.code)}</title>
+  <style>
+    body { margin: 0; font-family: Georgia, serif; background: #111; color: #111; }
+    .page { width: 1120px; min-height: 760px; margin: 32px auto; background: #f8f4ea; border: 18px solid #c9a227; padding: 72px; box-sizing: border-box; text-align: center; }
+    .eyebrow { letter-spacing: 0.28em; text-transform: uppercase; font: 700 13px Arial, sans-serif; color: #7c6518; }
+    h1 { font-size: 72px; margin: 36px 0 16px; font-style: italic; }
+    .body { font: 22px Arial, sans-serif; line-height: 1.7; max-width: 760px; margin: 0 auto; }
+    .name { font-size: 44px; font-weight: 700; margin: 36px 0 12px; border-bottom: 2px solid #222; display: inline-block; padding: 0 48px 10px; }
+    .course { font-weight: 700; color: #7c6518; }
+    .footer { display: flex; justify-content: space-between; align-items: end; margin-top: 96px; font: 14px Arial, sans-serif; text-align: left; }
+    .signature { border-top: 1px solid #222; padding-top: 10px; min-width: 260px; text-align: center; }
+    @media print { body { background: white; } .page { margin: 0; width: auto; min-height: 95vh; } }
+  </style>
+</head>
+<body>
+  <main class="page">
+    <div class="eyebrow">Igreja Coroado - Escola IDE</div>
+    <h1>Certificado</h1>
+    <p class="body">Certificamos que</p>
+    <div class="name">${escapeCertificateText(cert.name)}</div>
+    <p class="body">concluiu o curso <span class="course">${escapeCertificateText(cert.course)}</span>, conforme registros acadêmicos da plataforma.</p>
+    <div class="footer">
+      <div>
+        <strong>Emissão:</strong> ${escapeCertificateText(cert.date)}<br />
+        <strong>Código:</strong> ${escapeCertificateText(cert.code)}
+      </div>
+      <div class="signature">Coordenação Escola IDE</div>
+    </div>
+  </main>
+</body>
+</html>`;
+  const blob = new Blob([html], { type: 'text/html;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = `${cert.code}.html`;
+  link.click();
+  URL.revokeObjectURL(url);
 }
 
 export function SchoolView({ userRole = [], isAdmin = false }: { userRole?: string[], isAdmin?: boolean }) {
@@ -63,34 +123,33 @@ export function SchoolView({ userRole = [], isAdmin = false }: { userRole?: stri
     if (!user?.uid) return;
     setLoadingSubscription(true);
     try {
-      const createSubscriptionCall = httpsCallable(functions, 'createSubscription');
-      const result = await createSubscriptionCall({
-        userId: user.uid,
-        email: user.email || 'aluno@email.com',
-        amount: 29.90,
+      const token = await auth.currentUser?.getIdToken();
+      if (!token) {
+        alert("Sessao expirada. Entre novamente para assinar a Escola IDE.");
+        return;
+      }
+
+      const data = await postJson<{ initPoint: string; subscriptionId: string; preapprovalId: string }>('/api/school/subscriptions', {
         planTitle: 'Escola IDE Premium',
-        enrollmentId: user.uid // Using userId as external reference to update user later
-      });
-      const data = result.data as any;
+        amount: 29.90,
+      }, { token });
       
       if (data.initPoint) {
-        window.open(data.initPoint, '_blank');
+        window.location.href = data.initPoint;
         setShowSubscriptionModal(false);
       } else {
         alert("Erro ao gerar link de assinatura.");
       }
     } catch(e) {
       console.error(e);
-      alert("Erro ao contatar servidor. Assinatura Simulada Ativada (DEV)!");
-      setIsSubscribed(true); // Fallback for dev
-      setShowSubscriptionModal(false);
+      alert("Nao foi possivel gerar a assinatura agora. Nenhum acesso foi liberado sem confirmacao de pagamento.");
     } finally {
       setLoadingSubscription(false);
     }
   };
 
   if (selectedCourse && playCourse) {
-    return <LessonPlayer course={selectedCourse} initialLesson={playLesson} user={user} isSubscribed={isSubscribed} onBack={() => { setPlayCourse(false); setPlayLesson(null) }} />
+    return <LessonPlayer course={selectedCourse} initialLesson={playLesson} user={user} isSubscribed={isSubscribed} onSubscribeClick={() => setShowSubscriptionModal(true)} onBack={() => { setPlayCourse(false); setPlayLesson(null) }} />
   }
 
   if (selectedCourse) {
@@ -840,13 +899,11 @@ function AdminCourseDetails({ course, onBack, tenantId }: { course: CourseData, 
   const handleAddModule = async () => {
     if (!newModuleTitle || !tenantId) return;
     try {
-      await addDoc(collection(db, 'modules'), {
+      await createCourseModule({
         title: newModuleTitle,
         courseId: course.id,
         tenantId,
         order: modules.length,
-        createdAt: serverTimestamp(),
-        updatedAt: serverTimestamp()
       });
       setShowAddModule(false);
       setNewModuleTitle('');
@@ -859,7 +916,7 @@ function AdminCourseDetails({ course, onBack, tenantId }: { course: CourseData, 
     if (!newLessonData.title || !tenantId) return;
     try {
       const moduleLessons = lessons.filter(l => l.moduleId === moduleId);
-      await addDoc(collection(db, 'lessons'), {
+      await createCourseLesson({
         title: newLessonData.title,
         description: newLessonData.description,
         videoUrl: newLessonData.videoUrl,
@@ -869,8 +926,6 @@ function AdminCourseDetails({ course, onBack, tenantId }: { course: CourseData, 
         order: moduleLessons.length,
         isFree: newLessonData.isFree,
         standalonePrice: Number(newLessonData.standalonePrice) || 0,
-        createdAt: serverTimestamp(),
-        updatedAt: serverTimestamp()
       });
       setShowAddLesson(null);
       setNewLessonData({ title: '', videoUrl: '', isFree: false, description: '', standalonePrice: '' });
@@ -886,6 +941,9 @@ function AdminCourseDetails({ course, onBack, tenantId }: { course: CourseData, 
           <ArrowLeft className="w-5 h-5 mr-2" /> Voltar
         </Button>
         <h2 className="text-2xl font-bold text-white flex-1">{course.title}</h2>
+        <Button variant="outline" size="sm" onClick={() => window.open('https://classroom.google.com/', '_blank')} className="bg-[#1967d2] hover:bg-[#1967d2]/80 text-white border-none hidden md:flex">
+          Vincular Google Classroom
+        </Button>
         <Badge className={course.status === 'Publicado' ? 'bg-green-500/20 text-green-400 border-none' : 'bg-zinc-500/20 text-zinc-400 border-none'}>
           {course.status}
         </Badge>
@@ -1102,7 +1160,7 @@ function SchoolAdmin() {
     if (!newCourse.title) return;
     
     try {
-      await addDoc(collection(db, 'courses'), {
+      await createCourse({
         title: newCourse.title,
         status: newCourse.status,
         category: newCourse.category,
@@ -1115,8 +1173,6 @@ function SchoolAdmin() {
         monthlyPrice: Number(newCourse.monthlyPrice) || 0,
         tenantId: tenantId,
         createdBy: auth.currentUser.uid,
-        createdAt: serverTimestamp(),
-        updatedAt: serverTimestamp()
       });
       setShowAddCourse(false);
       setNewCourse({ title: '', category: 'Geral', status: 'Rascunho', isSubscriptionOnly: true, monthlyPrice: '' });
@@ -1128,14 +1184,12 @@ function SchoolAdmin() {
   const handleAddPath = async () => {
     if (!tenantId || !newPath.title) return;
     try {
-      await addDoc(collection(db, 'paths'), {
+      await createLearningPath({
         title: newPath.title,
         description: newPath.description,
         stage: newPath.stage,
         courses: [],
         tenantId,
-        createdAt: serverTimestamp(),
-        updatedAt: serverTimestamp()
       });
       setShowAddPath(false);
       setNewPath({ title: '', description: '', stage: 'Geral' });
@@ -1617,10 +1671,7 @@ function SchoolAdmin() {
                               } else {
                                 newCourses.push(course.id);
                               }
-                              await updateDoc(doc(db, 'paths', path.id), {
-                                courses: newCourses,
-                                updatedAt: serverTimestamp()
-                              });
+                              await updateLearningPathCourses(path.id, newCourses);
                             } catch(e) { console.error('Error updating path course:', e) }
                           }}
                         >
@@ -1788,8 +1839,8 @@ function SchoolAdmin() {
                       <p className="text-sm text-primary font-medium">{cert.course}</p>
                       <p className="text-[10px] text-white/40 font-mono">Código: {cert.code} • Emissão: {cert.date}</p>
                     </div>
-                    <Button variant="outline" size="sm" className="border-white/10 hover:bg-primary hover:text-black font-bold" onClick={() => alert('Download do PDF do certificado simulado.')}>
-                      <FileDown className="w-4 h-4 mr-2" /> PDF
+                    <Button variant="outline" size="sm" className="border-white/10 hover:bg-primary hover:text-black font-bold" onClick={() => downloadCertificateHtml(cert)}>
+                      <FileDown className="w-4 h-4 mr-2" /> HTML
                     </Button>
                   </div>
                 ))}
@@ -1810,9 +1861,11 @@ function SchoolAdmin() {
 function CourseDetails({ course, onBack, onStartLesson, user, isSubscribed, onSubscribeClick }: { course: any, onBack: () => void, onStartLesson: (lesson: any, enrollment?: any) => void, user?: any, isSubscribed?: boolean, onSubscribeClick?: () => void }) {
   const [enrollment, setEnrollment] = React.useState<any>(null)
   const [enrolling, setEnrolling] = React.useState(false)
+  const [purchasingCourse, setPurchasingCourse] = React.useState(false)
   const [modules, setModules] = React.useState<any[]>([]);
   const [lessons, setLessons] = React.useState<any[]>([]);
   const [expandedModule, setExpandedModule] = React.useState<string | null>(null);
+  const [learningAccess, setLearningAccess] = React.useState<any[]>([]);
 
   React.useEffect(() => {
     if (!user?.uid || !course?.id) return;
@@ -1834,27 +1887,65 @@ function CourseDetails({ course, onBack, onStartLesson, user, isSubscribed, onSu
     return () => { unsub(); unsubM(); unsubL(); }
   }, [user?.uid, course?.id])
 
+  React.useEffect(() => {
+    if (!user?.uid) return;
+    const accessQuery = query(collection(db, 'learning_access'), where('userId', '==', user.uid));
+    const unsubAccess = onSnapshot(accessQuery, (snap) => {
+      setLearningAccess(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+    });
+
+    return () => unsubAccess();
+  }, [user?.uid]);
+
+  const hasAccessToLesson = React.useCallback((lesson: any) => {
+    if (!lesson) return false;
+    if (lesson.isFree || isSubscribed) return true;
+    return learningAccess.some(access => (
+      access.status === 'active' &&
+      (
+        (access.targetType === 'lesson' && access.targetId === lesson.id) ||
+        (access.targetType === 'course' && (access.targetId === course.id || access.courseId === course.id))
+      )
+    ));
+  }, [course?.id, isSubscribed, learningAccess]);
+
   const handleEnroll = async () => {
     if (!user?.uid || !course?.id) return;
     setEnrolling(true)
     try {
-      const userDoc = await getDoc(doc(db, "users", user.uid));
-      const tenantId = userDoc.exists() ? userDoc.data().tenantId : "";
-
-      await addDoc(collection(db, "enrollments"), {
-        userId: user.uid,
+      const token = await user.getIdToken();
+      await postJson('/api/school/enrollments', {
         courseId: course.id,
-        tenantId: tenantId || "unknown",
-        progress: 0,
-        status: "in-progress",
-        completedLessons: [],
-        createdAt: serverTimestamp(),
-        updatedAt: serverTimestamp()
-      })
+      }, { token });
     } catch (err) {
       console.error("Error signing up:", err)
     } finally {
       setEnrolling(false)
+    }
+  }
+
+  const handleBuyCourse = async () => {
+    if (!user?.uid || !course?.id) return;
+    setPurchasingCourse(true);
+
+    try {
+      const token = await user.getIdToken();
+      const data = await postJson<{ initPoint: string; orderId: string }>('/api/school/purchases', {
+        targetType: 'course',
+        targetId: course.id,
+      }, { token });
+
+      if (data.initPoint) {
+        window.location.href = data.initPoint;
+        return;
+      }
+
+      alert("Nao foi possivel iniciar o checkout do curso.");
+    } catch (error) {
+      console.error(error);
+      alert("Nao foi possivel iniciar a compra avulsa do curso.");
+    } finally {
+      setPurchasingCourse(false);
     }
   }
 
@@ -1873,10 +1964,13 @@ function CourseDetails({ course, onBack, onStartLesson, user, isSubscribed, onSu
             <h1 className="text-4xl md:text-5xl font-black font-serif italic">{course.title || "Liderança de Célula"}</h1>
             <p className="text-xl text-white/60">{course.description || "Aprenda os fundamentos."}</p>
             
-            <div className="flex flex-wrap gap-6 text-sm text-white/60 pt-4">
+            <div className="flex flex-wrap gap-6 text-sm text-white/60 pt-4 items-center">
               <span className="flex items-center gap-1"><Star className="w-4 h-4 text-yellow-500" /> 4.8 (124 avaliações)</span>
               <span className="flex items-center gap-1"><Users className="w-4 h-4" /> {course.students || 0} alunos</span>
               <span className="flex items-center gap-1"><Clock className="w-4 h-4" /> {course.duration || "12h"} totais</span>
+              <Button onClick={() => window.open('https://chat.google.com/', '_blank')} variant="outline" size="sm" className="bg-zinc-800 text-white border-white/10 md:ml-auto">
+                <MessageSquare className="w-4 h-4 mr-2"/> Networking (Google Chat)
+              </Button>
             </div>
           </div>
 
@@ -1933,7 +2027,7 @@ function CourseDetails({ course, onBack, onStartLesson, user, isSubscribed, onSu
                         <div className="divide-y divide-white/5">
                           {modLessons.map((lesson, lIndex) => {
                             const isCompleted = (enrollment?.completedLessons || []).includes(lesson.id);
-                            const isLocked = !lesson.isFree && !isSubscribed;
+                            const isLocked = !hasAccessToLesson(lesson);
 
                             return (
                               <div key={lesson.id} className="p-4 flex items-center justify-between hover:bg-white/5 transition-colors cursor-pointer group" onClick={() => {
@@ -2073,7 +2167,11 @@ function CourseDetails({ course, onBack, onStartLesson, user, isSubscribed, onSu
                 </div>
               </div>
               <CardContent className="p-6 space-y-6">
-                <div className="text-3xl font-black text-primary">Gratuito</div>
+                <div className="text-3xl font-black text-primary">
+                  {Number(course.standalonePrice || course.monthlyPrice || course.price || 0) > 0
+                    ? `R$ ${Number(course.standalonePrice || course.monthlyPrice || course.price || 0).toFixed(2).replace('.', ',')}`
+                    : 'Gratuito'}
+                </div>
                 <div className="space-y-3">
                   {enrollment ? (
                     <Button className="w-full h-12 bg-primary text-black font-bold text-lg" onClick={() => onStartLesson({ title: "Aula 1: Introdução" })}>
@@ -2086,6 +2184,16 @@ function CourseDetails({ course, onBack, onStartLesson, user, isSubscribed, onSu
                       disabled={enrolling || !user?.uid}
                     >
                       {enrolling ? <Loader2 className="w-5 h-5 animate-spin mx-auto" /> : "Inscrever-se"}
+                    </Button>
+                  )}
+                  {Number(course.standalonePrice || course.monthlyPrice || course.price || 0) > 0 && !isSubscribed && (
+                    <Button
+                      variant="outline"
+                      className="w-full h-12 border-primary/40 text-primary hover:bg-primary/10"
+                      onClick={handleBuyCourse}
+                      disabled={purchasingCourse || !user?.uid}
+                    >
+                      {purchasingCourse ? <Loader2 className="w-5 h-5 animate-spin mx-auto" /> : `Comprar curso por R$ ${Number(course.standalonePrice || course.monthlyPrice || course.price || 0).toFixed(2).replace('.', ',')}`}
                     </Button>
                   )}
                   <Button variant="outline" className="w-full h-12 border-white/10">Adicionar à Lista</Button>
@@ -2106,7 +2214,7 @@ function CourseDetails({ course, onBack, onStartLesson, user, isSubscribed, onSu
 }
 
 // --- SALA DE AULA (PLAYER) ---
-function LessonPlayer({ course, initialLesson, onBack, user, isSubscribed }: { course: any, initialLesson?: any, onBack: () => void, user: any, isSubscribed?: boolean }) {
+function LessonPlayer({ course, initialLesson, onBack, user, isSubscribed, onSubscribeClick }: { course: any, initialLesson?: any, onBack: () => void, user: any, isSubscribed?: boolean, onSubscribeClick?: () => void }) {
   const [modules, setModules] = React.useState<any[]>([]);
   const [lessons, setLessons] = React.useState<any[]>([]);
   const [activeLesson, setActiveLesson] = React.useState<any | null>(initialLesson || null);
@@ -2114,6 +2222,7 @@ function LessonPlayer({ course, initialLesson, onBack, user, isSubscribed }: { c
   const [tenantId, setTenantId] = React.useState<string | null>(null);
   const [showBuyLessonModal, setShowBuyLessonModal] = React.useState(false);
   const [buyingLesson, setBuyingLesson] = React.useState(false);
+  const [learningAccess, setLearningAccess] = React.useState<any[]>([]);
 
   React.useEffect(() => {
     if (!user?.uid || !course?.id) return;
@@ -2129,6 +2238,16 @@ function LessonPlayer({ course, initialLesson, onBack, user, isSubscribed }: { c
     });
     return () => unsubEnr();
   }, [user?.uid, course?.id]);
+
+  React.useEffect(() => {
+    if (!user?.uid) return;
+    const accessQuery = query(collection(db, 'learning_access'), where('userId', '==', user.uid));
+    const unsubAccess = onSnapshot(accessQuery, (snap) => {
+      setLearningAccess(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+    });
+
+    return () => unsubAccess();
+  }, [user?.uid]);
 
   React.useEffect(() => {
     if (!tenantId || !course?.id) return;
@@ -2150,21 +2269,65 @@ function LessonPlayer({ course, initialLesson, onBack, user, isSubscribed }: { c
   const toggleLessonComplete = async (lessonId: string) => {
     if (!enrollment?.id) return;
     const isCompleted = (enrollment.completedLessons || []).includes(lessonId);
-    let newCompleted;
-    if (isCompleted) {
-      newCompleted = (enrollment.completedLessons || []).filter((id: string) => id !== lessonId);
-    } else {
-      newCompleted = [...(enrollment.completedLessons || []), lessonId];
-    }
-    const maxLessons = lessons.length || 1;
-    let newProgress = Math.round((newCompleted.length / maxLessons) * 100);
-    if (newProgress > 100) newProgress = 100;
+    const token = await auth.currentUser?.getIdToken();
 
-    await updateDoc(doc(db, 'enrollments', enrollment.id), {
-      completedLessons: newCompleted,
-      progress: newProgress,
-      updatedAt: serverTimestamp()
-    });
+    if (!token) {
+      alert("Sessao expirada. Entre novamente para atualizar seu progresso.");
+      return;
+    }
+
+    try {
+      await postJson(`/api/school/enrollments/${enrollment.id}/progress`, {
+        lessonId,
+        completed: !isCompleted,
+      }, { token });
+    } catch (error) {
+      console.error(error);
+      alert("Nao foi possivel atualizar o progresso desta aula.");
+    }
+  };
+
+  const hasAccessToLesson = React.useCallback((lesson: any) => {
+    if (!lesson) return false;
+    if (lesson.isFree || isSubscribed) return true;
+    return learningAccess.some(access => (
+      access.status === 'active' &&
+      (
+        (access.targetType === 'lesson' && access.targetId === lesson.id) ||
+        (access.targetType === 'course' && (access.targetId === course.id || access.courseId === course.id))
+      )
+    ));
+  }, [course?.id, isSubscribed, learningAccess]);
+
+  const handleBuyActiveLesson = async () => {
+    if (!activeLesson?.id) return;
+    const token = await auth.currentUser?.getIdToken();
+
+    if (!token) {
+      alert("Sessao expirada. Entre novamente para comprar esta aula.");
+      return;
+    }
+
+    setBuyingLesson(true);
+    try {
+      const data = await postJson<{ initPoint: string; orderId: string }>(
+        '/api/school/purchases',
+        { targetType: 'lesson', targetId: activeLesson.id },
+        { token },
+      );
+
+      if (data.initPoint) {
+        window.location.href = data.initPoint;
+        return;
+      }
+
+      alert("Nao foi possivel iniciar o checkout desta aula.");
+    } catch (error) {
+      console.error(error);
+      alert("Nao foi possivel iniciar a compra avulsa.");
+    } finally {
+      setBuyingLesson(false);
+    }
   };
 
   return (
@@ -2187,7 +2350,7 @@ function LessonPlayer({ course, initialLesson, onBack, user, isSubscribed }: { c
                 {modLessons.map((l, lIndex) => {
                   const completed = (enrollment?.completedLessons || []).includes(l.id);
                   const isCurrent = activeLesson?.id === l.id;
-                  const isLocked = !l.isFree && !isSubscribed;
+                  const isLocked = !hasAccessToLesson(l);
 
                   return (
                     <button 
@@ -2336,27 +2499,20 @@ function LessonPlayer({ course, initialLesson, onBack, user, isSubscribed }: { c
               </div>
 
               {buyingLesson ? (
-                <div className="bg-white p-4 rounded-xl inline-block mx-auto">
-                   <ReactQrCode value="00020101021126580014br.gov.bcb.pix0136coroado@igreja.com.br5204000053039865802BR5915IGREJA COROADO6009SAO PAULO62070503***6304" size={150} />
-                   <p className="text-black text-xs mt-2 font-bold uppercase">Aproxime o app do seu banco</p>
+                <div className="rounded-xl border border-white/10 bg-white/5 p-4 text-sm text-white/70">
+                   <Loader2 className="mx-auto mb-3 h-6 w-6 animate-spin text-primary" />
+                   Preparando checkout seguro...
                 </div>
               ) : (
                 <div className="space-y-3">
                   <Button 
-                    onClick={() => {
-                      setBuyingLesson(true);
-                      setTimeout(() => {
-                        alert("Pagamento simulado aprovado!");
-                        setShowBuyLessonModal(false);
-                        setBuyingLesson(false);
-                      }, 4000);
-                    }} 
+                    onClick={handleBuyActiveLesson}
                     className="w-full bg-primary text-black font-bold h-12"
                   >
-                    Comprar Aula por R$ 9,90
+                    Comprar Aula por R$ {Number(activeLesson?.standalonePrice || activeLesson?.price || 9.9).toFixed(2).replace('.', ',')}
                   </Button>
                   <div className="text-xs text-white/40 uppercase">Ou</div>
-                  <Button variant="outline" className="w-full border-white/10 text-white/80 h-12" onClick={() => window.location.reload()}>
+                  <Button variant="outline" className="w-full border-white/10 text-white/80 h-12" onClick={onSubscribeClick}>
                     Assinar Escola IDE
                   </Button>
                 </div>

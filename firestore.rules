@@ -321,6 +321,106 @@ service cloud.firestore {
              data.updatedAt is timestamp;
     }
 
+    function isValidCampaign(data) {
+      return data.keys().hasAll(['title', 'description', 'target', 'current', 'donors', 'tenantId', 'createdAt', 'updatedAt']) &&
+             data.title is string && data.title.size() <= 200 &&
+             data.description is string && data.description.size() <= 2000 &&
+             data.target is number &&
+             data.current is number &&
+             data.donors is number &&
+             data.tenantId is string && data.tenantId.size() <= 128 &&
+             data.createdAt is timestamp &&
+             data.updatedAt is timestamp;
+    }
+
+    function isValidOrder(data) {
+      return data.keys().hasAll(['userId', 'userName', 'items', 'total', 'status', 'paymentMethod', 'tenantId', 'createdAt', 'updatedAt']) &&
+             data.userId is string && data.userId.size() <= 128 &&
+             data.userName is string && data.userName.size() <= 200 &&
+             data.items is list && data.items.size() > 0 && data.items.size() <= 100 &&
+             data.total is number &&
+             data.status is string && data.status.size() <= 50 &&
+             data.paymentMethod is string && data.paymentMethod.size() <= 50 &&
+             data.tenantId is string && data.tenantId.size() <= 128 &&
+             data.createdAt is timestamp &&
+             data.updatedAt is timestamp;
+    }
+
+    function isValidPastor(data) {
+      return data.keys().hasAll(['name', 'role', 'image', 'tenantId', 'createdAt', 'updatedAt']) &&
+             data.name is string && data.name.size() <= 200 &&
+             data.role is string && data.role.size() <= 200 &&
+             data.image is string && data.image.size() <= 1000 &&
+             data.tenantId is string && data.tenantId.size() <= 128 &&
+             data.createdAt is timestamp &&
+             data.updatedAt is timestamp;
+    }
+
+    function isValidPastoralAppointment(data) {
+      return data.keys().hasAll(['pastorId', 'pastorName', 'userId', 'userName', 'date', 'time', 'status', 'tenantId', 'createdAt', 'updatedAt']) &&
+             data.pastorId is string && data.pastorId.size() <= 128 &&
+             data.pastorName is string && data.pastorName.size() <= 200 &&
+             data.userId is string && data.userId.size() <= 128 &&
+             data.userName is string && data.userName.size() <= 200 &&
+             data.date is string && data.date.size() <= 50 &&
+             data.time is string && data.time.size() <= 50 &&
+             data.status is string && data.status.size() <= 50 &&
+             data.tenantId is string && data.tenantId.size() <= 128 &&
+             data.createdAt is timestamp &&
+             data.updatedAt is timestamp;
+    }
+
+    function isValidSocialProfessional(data) {
+      return data.keys().hasAll(['name', 'specialty', 'email', 'photoUrl', 'isPublic', 'tenantId', 'createdAt', 'updatedAt']) &&
+             data.name is string && data.name.size() <= 200 &&
+             data.specialty is string && data.specialty.size() <= 200 &&
+             data.email is string && data.email.size() <= 200 &&
+             data.photoUrl is string && data.photoUrl.size() <= 1000 &&
+             data.isPublic is bool &&
+             data.tenantId is string && data.tenantId.size() <= 128 &&
+             data.createdAt is timestamp &&
+             data.updatedAt is timestamp;
+    }
+
+    function isValidSocialAppointment(data) {
+      return data.keys().hasAll(['userName', 'userId', 'professionalId', 'professionalName', 'specialty', 'date', 'time', 'status', 'paymentStatus', 'tenantId', 'createdAt', 'updatedAt']) &&
+             data.userName is string && data.userName.size() <= 200 &&
+             data.userId is string && data.userId.size() <= 128 &&
+             data.professionalId is string && data.professionalId.size() <= 128 &&
+             data.professionalName is string && data.professionalName.size() <= 200 &&
+             data.specialty is string && data.specialty.size() <= 200 &&
+             data.date is string && data.date.size() <= 50 &&
+             data.time is string && data.time.size() <= 50 &&
+             data.status is string && data.status.size() <= 50 &&
+             data.paymentStatus is string && data.paymentStatus.size() <= 50 &&
+             data.tenantId is string && data.tenantId.size() <= 128 &&
+             data.createdAt is timestamp &&
+             data.updatedAt is timestamp;
+    }
+
+    function isValidUnit(data) {
+      return data.keys().hasAll(['name', 'address', 'serviceTimes', 'phone', 'mapUrl', 'image', 'order', 'tenantId', 'createdAt', 'updatedAt']) &&
+             data.name is string && data.name.size() <= 200 &&
+             data.address is string && data.address.size() <= 1000 &&
+             data.serviceTimes is string && data.serviceTimes.size() <= 500 &&
+             data.phone is string && data.phone.size() <= 50 &&
+             data.mapUrl is string && data.mapUrl.size() <= 3000 &&
+             data.image is string && data.image.size() <= 1000 &&
+             data.order is number &&
+             data.tenantId is string && data.tenantId.size() <= 128 &&
+             data.createdAt is timestamp &&
+             data.updatedAt is timestamp;
+    }
+
+    function isValidSubscription(data) {
+      return data.keys().hasAll(['userId', 'status', 'tenantId', 'createdAt', 'updatedAt']) &&
+             data.userId is string && data.userId.size() <= 128 &&
+             data.status is string && data.status.size() <= 50 &&
+             data.tenantId is string && data.tenantId.size() <= 128 &&
+             data.createdAt is timestamp &&
+             data.updatedAt is timestamp;
+    }
+
     match /users/{userId} {
       allow get: if isSignedIn() && (
         request.auth.uid == userId ||
@@ -350,7 +450,7 @@ service cloud.firestore {
           incoming().createdAt == existing().createdAt &&
           incoming().roles == existing().roles &&
           incoming().isApproved == existing().isApproved &&
-          incoming().diff(existing()).affectedKeys().hasOnly(['name', 'phone', 'birthdate', 'address', 'lat', 'lng', 'supervisorId', 'cellId', 'maritalStatus', 'profession', 'socialMedia', 'avatarUrl', 'details', 'updatedAt']) &&
+          incoming().diff(existing()).affectedKeys().hasOnly(['name', 'phone', 'birthdate', 'address', 'lat', 'lng', 'supervisorId', 'cellId', 'maritalStatus', 'profession', 'socialMedia', 'avatarUrl', 'details', 'workspaceConnected', 'googleWorkspaceConnected', 'googleWorkspaceConnectedAt', 'updatedAt']) &&
           incoming().updatedAt == request.time
         )
       );
@@ -480,7 +580,7 @@ service cloud.firestore {
     }
 
     match /cells/{cellId} {
-      allow get, list: if isSignedIn() && (isAdmin() || (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && resource.data.tenantId == get(/databases/$(database)/documents/users/$(request.auth.uid)).data.tenantId));
+      allow get, list: if true;
 
       allow create: if isSignedIn() && isValidId(cellId) && isValidCell(incoming()) &&
                        incoming().tenantId == get(/databases/$(database)/documents/users/$(request.auth.uid)).data.tenantId &&
@@ -531,15 +631,22 @@ service cloud.firestore {
                        incoming().createdAt == request.time &&
                        incoming().updatedAt == request.time;
                        
-      // Admins can update to check users in
       allow update: if isSignedIn() && isValidId(enrollmentId) && isValidEventEnrollment(incoming()) &&
-                       isAdmin() &&
                        incoming().userId == existing().userId &&
                        incoming().eventId == existing().eventId &&
                        incoming().tenantId == existing().tenantId &&
                        incoming().createdAt == existing().createdAt &&
-                       incoming().diff(existing()).affectedKeys().hasOnly(['checkedIn', 'updatedAt']) &&
-                       incoming().updatedAt == request.time;
+                       incoming().updatedAt == request.time &&
+                       (
+                         (
+                           existing().userId == request.auth.uid &&
+                           incoming().diff(existing()).affectedKeys().hasOnly(['preferenceId', 'updatedAt'])
+                         ) ||
+                         (
+                           isAdmin() &&
+                           incoming().diff(existing()).affectedKeys().hasOnly(['checkedIn', 'checkedInAt', 'status', 'paymentStatus', 'preferenceId', 'updatedAt'])
+                         )
+                       );
                        
       allow delete: if isAdmin() || (isSignedIn() && existing().userId == request.auth.uid);
     }
@@ -597,7 +704,7 @@ service cloud.firestore {
       allow update: if isSignedIn() && isValidId(briefingId) && isValidBriefing(incoming()) &&
                        incoming().tenantId == existing().tenantId &&
                        incoming().createdAt == existing().createdAt &&
-                       incoming().diff(existing()).affectedKeys().hasOnly(['title', 'tag', 'status', 'description', 'assignedTo', 'assigneeId', 'dueDate', 'startDate', 'completedAt', 'updatedAt']) &&
+                       incoming().diff(existing()).affectedKeys().hasOnly(['title', 'tag', 'status', 'description', 'assignedTo', 'assigneeId', 'dueDate', 'startDate', 'completedAt', 'declineReason', 'updatedAt']) &&
                        incoming().updatedAt == request.time;
 
       allow delete: if isAdmin();
@@ -786,7 +893,14 @@ service cloud.firestore {
 
     match /plans/{planId} {
       allow get, list: if isSignedIn() && (isAdmin() || (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && resource.data.tenantId == get(/databases/$(database)/documents/users/$(request.auth.uid)).data.tenantId));
-      allow create, update, delete: if isSignedIn() && isAdmin() && isValidPlan(incoming());
+      allow create: if isSignedIn() && isAdmin() && isValidId(planId) && isValidPlan(incoming()) &&
+                      incoming().createdAt == request.time &&
+                      incoming().updatedAt == request.time;
+      allow update: if isSignedIn() && isAdmin() && isValidId(planId) && isValidPlan(incoming()) &&
+                      incoming().tenantId == existing().tenantId &&
+                      incoming().createdAt == existing().createdAt &&
+                      incoming().updatedAt == request.time;
+      allow delete: if isAdmin();
     }
 
     match /transactions/{transactionId} {
@@ -794,6 +908,7 @@ service cloud.firestore {
       allow list: if isSignedIn() && (isAdmin() || hasAnyRole(['seniorPastor', 'networkPastor', 'auxPastor']) || (resource.data.userId == request.auth.uid));
       allow create: if isSignedIn() && isValidId(transactionId) && isValidTransaction(incoming()) &&
                        incoming().userId == request.auth.uid &&
+                       incoming().status in ['created', 'pending'] &&
                        incoming().createdAt == request.time &&
                        incoming().updatedAt == request.time;
       allow update: if isSignedIn() && isAdmin() && isValidTransaction(incoming()) &&
@@ -801,6 +916,137 @@ service cloud.firestore {
                        incoming().createdAt == existing().createdAt &&
                        incoming().updatedAt == request.time;
       allow delete: if isAdmin();
+    }
+
+    match /payment_events/{paymentEventId} {
+      allow get, list: if isSignedIn() && (isAdmin() || hasAnyRole(['seniorPastor', 'networkPastor', 'auxPastor']));
+      allow create, update, delete: if false;
+    }
+
+    match /campaigns/{campaignId} {
+      allow get, list: if true;
+      allow create: if isSignedIn() && isValidId(campaignId) && isValidCampaign(incoming()) &&
+                       incoming().tenantId == currentUser().data.tenantId &&
+                       incoming().createdAt == request.time &&
+                       incoming().updatedAt == request.time &&
+                       hasAnyRole(['admin', 'seniorPastor', 'networkPastor', 'auxPastor']);
+      allow update: if isSignedIn() && isValidId(campaignId) && isValidCampaign(incoming()) &&
+                       incoming().tenantId == existing().tenantId &&
+                       incoming().createdAt == existing().createdAt &&
+                       incoming().updatedAt == request.time &&
+                       hasAnyRole(['admin', 'seniorPastor', 'networkPastor', 'auxPastor']);
+      allow delete: if isAdmin();
+    }
+
+    match /orders/{orderId} {
+      allow get, list: if isSignedIn() && (isAdmin() || hasAnyRole(['seniorPastor', 'networkPastor', 'auxPastor']) || resource.data.userId == request.auth.uid);
+      allow create: if isSignedIn() && isValidId(orderId) && isValidOrder(incoming()) &&
+                       incoming().userId == request.auth.uid &&
+                       incoming().tenantId == currentUser().data.tenantId &&
+                       incoming().paymentStatus in ['created', 'pending'] &&
+                       incoming().createdAt == request.time &&
+                       incoming().updatedAt == request.time;
+      allow update: if isSignedIn() && isValidId(orderId) && isValidOrder(incoming()) &&
+                       incoming().userId == existing().userId &&
+                       incoming().tenantId == existing().tenantId &&
+                       incoming().createdAt == existing().createdAt &&
+                       incoming().updatedAt == request.time &&
+                       (
+                         isAdmin() ||
+                         hasAnyRole(['seniorPastor', 'networkPastor', 'auxPastor'])
+                       );
+      allow delete: if isAdmin();
+    }
+
+    match /pastors/{pastorId} {
+      allow get, list: if true;
+      allow create: if isSignedIn() && isValidId(pastorId) && isValidPastor(incoming()) &&
+                       incoming().tenantId == currentUser().data.tenantId &&
+                       incoming().createdAt == request.time &&
+                       incoming().updatedAt == request.time &&
+                       isAdmin();
+      allow update: if isSignedIn() && isValidId(pastorId) && isValidPastor(incoming()) &&
+                       incoming().tenantId == existing().tenantId &&
+                       incoming().createdAt == existing().createdAt &&
+                       incoming().updatedAt == request.time &&
+                       isAdmin();
+      allow delete: if isAdmin();
+    }
+
+    match /pastoral_appointments/{appointmentId} {
+      allow get, list: if isSignedIn() && (isAdmin() || hasAnyRole(['seniorPastor', 'networkPastor', 'auxPastor']) || resource.data.userId == request.auth.uid);
+      allow create: if isSignedIn() && isValidId(appointmentId) && isValidPastoralAppointment(incoming()) &&
+                       incoming().userId == request.auth.uid &&
+                       incoming().tenantId == currentUser().data.tenantId &&
+                       incoming().createdAt == request.time &&
+                       incoming().updatedAt == request.time;
+      allow update: if isSignedIn() && isValidId(appointmentId) && isValidPastoralAppointment(incoming()) &&
+                       incoming().tenantId == existing().tenantId &&
+                       incoming().createdAt == existing().createdAt &&
+                       incoming().updatedAt == request.time &&
+                       (isAdmin() || hasAnyRole(['seniorPastor', 'networkPastor', 'auxPastor']));
+      allow delete: if isAdmin();
+    }
+
+    match /social_professionals/{professionalId} {
+      allow get, list: if resource.data.isPublic == true || isAdmin() || hasAnyRole(['seniorPastor', 'networkPastor', 'auxPastor']);
+      allow create: if isSignedIn() && isValidId(professionalId) && isValidSocialProfessional(incoming()) &&
+                       incoming().tenantId == currentUser().data.tenantId &&
+                       incoming().createdAt == request.time &&
+                       incoming().updatedAt == request.time &&
+                       (isAdmin() || hasAnyRole(['seniorPastor', 'networkPastor', 'auxPastor']));
+      allow update: if isSignedIn() && isValidId(professionalId) && isValidSocialProfessional(incoming()) &&
+                       incoming().tenantId == existing().tenantId &&
+                       incoming().createdAt == existing().createdAt &&
+                       incoming().updatedAt == request.time &&
+                       (isAdmin() || hasAnyRole(['seniorPastor', 'networkPastor', 'auxPastor']));
+      allow delete: if isAdmin();
+    }
+
+    match /social_appointments/{appointmentId} {
+      allow get, list: if isSignedIn() && (isAdmin() || hasAnyRole(['seniorPastor', 'networkPastor', 'auxPastor']) || resource.data.userId == request.auth.uid);
+      allow create: if isSignedIn() && isValidId(appointmentId) && isValidSocialAppointment(incoming()) &&
+                       incoming().userId == request.auth.uid &&
+                       incoming().tenantId == currentUser().data.tenantId &&
+                       incoming().createdAt == request.time &&
+                       incoming().updatedAt == request.time;
+      allow update: if isSignedIn() && isValidId(appointmentId) && isValidSocialAppointment(incoming()) &&
+                       incoming().tenantId == existing().tenantId &&
+                       incoming().createdAt == existing().createdAt &&
+                       incoming().updatedAt == request.time &&
+                       (isAdmin() || hasAnyRole(['seniorPastor', 'networkPastor', 'auxPastor']));
+      allow delete: if isAdmin();
+    }
+
+    match /units/{unitId} {
+      allow get, list: if true;
+      allow create: if isSignedIn() && isValidId(unitId) && isValidUnit(incoming()) &&
+                       incoming().tenantId == currentUser().data.tenantId &&
+                       incoming().createdAt == request.time &&
+                       incoming().updatedAt == request.time &&
+                       isAdmin();
+      allow update: if isSignedIn() && isValidId(unitId) && isValidUnit(incoming()) &&
+                       incoming().tenantId == existing().tenantId &&
+                       incoming().createdAt == existing().createdAt &&
+                       incoming().updatedAt == request.time &&
+                       isAdmin();
+      allow delete: if isAdmin();
+    }
+
+    match /subscriptions/{subscriptionId} {
+      allow get, list: if isSignedIn() && (isAdmin() || resource.data.userId == request.auth.uid);
+      allow create, update: if isAdmin() && isValidSubscription(request.resource.data);
+      allow delete: if isAdmin();
+    }
+
+    match /learning_access/{accessId} {
+      allow get, list: if isSignedIn() && (isAdmin() || resource.data.userId == request.auth.uid);
+      allow create, update, delete: if false;
+    }
+
+    match /members/{memberId} {
+      allow get, list: if isSignedIn() && sameTenant(resource.data.tenantId);
+      allow create, update, delete: if isAdmin();
     }
 
     match /coupons/{couponId} {
