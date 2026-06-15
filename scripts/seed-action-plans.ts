@@ -5,7 +5,7 @@ import * as dotenv from 'dotenv';
 dotenv.config();
 
 const app = initializeApp();
-const firestoreDatabaseId = process.env.FIRESTORE_DATABASE_ID || '(default)';
+const firestoreDatabaseId = process.env.FIRESTORE_DATABASE_ID || 'ai-studio-534c2e7e-8664-4b76-95e3-faf31fc1628b';
 const db = getFirestore(app, firestoreDatabaseId);
 
 const ACTION_PLANS = [

@@ -1,13 +1,21 @@
 import { z } from 'zod';
 import { initTRPC, TRPCError } from '@trpc/server';
-import { ServerAuthContext } from '../context';
-import { getFirestore, FieldValue } from 'firebase-admin/firestore';
+import { getAdminDb, ServerAuthContext } from '../context';
+import { FieldValue } from 'firebase-admin/firestore';
 
 const t = initTRPC.context<ServerAuthContext>().create();
+const PASTOR_ADMIN_ROLES = ['admin', 'seniorPastor', 'networkPastor', 'auxPastor'];
+
+function requirePastorAdmin(ctx: ServerAuthContext) {
+  if (!ctx.auth?.uid || !ctx.auth.tenantId) throw new TRPCError({ code: 'UNAUTHORIZED' });
+  if (!ctx.auth.roles?.some(role => PASTOR_ADMIN_ROLES.includes(role))) {
+    throw new TRPCError({ code: 'FORBIDDEN' });
+  }
+}
 
 export const pastorsRouter = t.router({
   getPastors: t.procedure.query(async ({ ctx }) => {
-    const db = getFirestore();
+    const db = getAdminDb();
     let query = db.collection('pastors') as any;
     if (ctx.auth?.tenantId) {
       query = query.where('tenantId', '==', ctx.auth.tenantId);
@@ -30,8 +38,8 @@ export const pastorsRouter = t.router({
       availableTimes: z.array(z.string())
     }))
     .mutation(async ({ ctx, input }) => {
-      if (!ctx.auth?.uid || !ctx.auth?.tenantId) throw new TRPCError({ code: 'UNAUTHORIZED' });
-      const db = getFirestore();
+      requirePastorAdmin(ctx);
+      const db = getAdminDb();
       const { id, ...data } = input;
       const docData = {
         ...data,
@@ -52,18 +60,21 @@ export const pastorsRouter = t.router({
   deletePastor: t.procedure
     .input(z.object({ id: z.string() }))
     .mutation(async ({ ctx, input }) => {
-      if (!ctx.auth?.uid) throw new TRPCError({ code: 'UNAUTHORIZED' });
+      requirePastorAdmin(ctx);
       if (['rafael', 'fabricio', 'alan'].includes(input.id)) {
         throw new TRPCError({ code: 'FORBIDDEN', message: 'Pastores padrão mockados não podem ser excluídos.' });
       }
-      const db = getFirestore();
-      await db.collection('pastors').doc(input.id).delete();
+      const db = getAdminDb();
+      const ref = db.collection('pastors').doc(input.id);
+      const snap = await ref.get();
+      if (snap.exists && snap.data()?.tenantId !== ctx.auth?.tenantId) throw new TRPCError({ code: 'FORBIDDEN' });
+      await ref.delete();
       return { success: true };
     }),
 
   getAppointments: t.procedure.query(async ({ ctx }) => {
     if (!ctx.auth?.uid || !ctx.auth?.tenantId) throw new TRPCError({ code: 'UNAUTHORIZED' });
-    const db = getFirestore();
+    const db = getAdminDb();
     const snap = await db.collection('pastoral_appointments')
       .where('tenantId', '==', ctx.auth.tenantId)
       .get();
@@ -87,9 +98,13 @@ export const pastorsRouter = t.router({
       status: z.string()
     }))
     .mutation(async ({ ctx, input }) => {
-      if (!ctx.auth?.uid) throw new TRPCError({ code: 'UNAUTHORIZED' });
-      const db = getFirestore();
-      await db.collection('pastoral_appointments').doc(input.id).update({
+      requirePastorAdmin(ctx);
+      const db = getAdminDb();
+      const ref = db.collection('pastoral_appointments').doc(input.id);
+      const snap = await ref.get();
+      if (!snap.exists) throw new TRPCError({ code: 'NOT_FOUND' });
+      if (snap.data()?.tenantId !== ctx.auth?.tenantId) throw new TRPCError({ code: 'FORBIDDEN' });
+      await ref.update({
         status: input.status,
         updatedAt: FieldValue.serverTimestamp()
       });
@@ -98,7 +113,7 @@ export const pastorsRouter = t.router({
 
   getTasks: t.procedure.query(async ({ ctx }) => {
     if (!ctx.auth?.uid || !ctx.auth?.tenantId) throw new TRPCError({ code: 'UNAUTHORIZED' });
-    const db = getFirestore();
+    const db = getAdminDb();
     const snap = await db.collection('tasks')
       .where('tenantId', '==', ctx.auth.tenantId)
       .where('tag', '==', 'Pastoral')
@@ -112,9 +127,13 @@ export const pastorsRouter = t.router({
       status: z.string()
     }))
     .mutation(async ({ ctx, input }) => {
-      if (!ctx.auth?.uid) throw new TRPCError({ code: 'UNAUTHORIZED' });
-      const db = getFirestore();
-      await db.collection('tasks').doc(input.id).update({
+      requirePastorAdmin(ctx);
+      const db = getAdminDb();
+      const ref = db.collection('tasks').doc(input.id);
+      const snap = await ref.get();
+      if (!snap.exists) throw new TRPCError({ code: 'NOT_FOUND' });
+      if (snap.data()?.tenantId !== ctx.auth?.tenantId) throw new TRPCError({ code: 'FORBIDDEN' });
+      await ref.update({
         status: input.status,
         updatedAt: FieldValue.serverTimestamp()
       });

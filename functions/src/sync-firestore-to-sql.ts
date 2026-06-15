@@ -1,5 +1,4 @@
 import * as functions from 'firebase-functions';
-import * as admin from 'firebase-admin';
 import { getFirestore } from 'firebase-admin/firestore';
 // Replace with actual SQL client later. For demonstration, we just simulate the sync.
 

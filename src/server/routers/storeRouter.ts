@@ -1,14 +1,24 @@
 import { z } from 'zod';
 import { initTRPC, TRPCError } from '@trpc/server';
-import { ServerAuthContext } from '../context';
-import { getFirestore, FieldValue } from 'firebase-admin/firestore';
+import { getAdminDb, ServerAuthContext } from '../context';
+import { FieldValue } from 'firebase-admin/firestore';
 import { COLLECTIONS } from '@/src/lib/domain/collections';
 
 const t = initTRPC.context<ServerAuthContext>().create();
+const ADMIN_ROLES = ['admin', 'seniorPastor', 'networkPastor', 'auxPastor'];
+
+function hasRole(ctx: ServerAuthContext, roles: string[]) {
+  return ctx.auth?.roles?.some(role => roles.includes(role)) || false;
+}
+
+function requireAdmin(ctx: ServerAuthContext) {
+  if (!ctx.auth?.uid) throw new TRPCError({ code: 'UNAUTHORIZED' });
+  if (!hasRole(ctx, ADMIN_ROLES)) throw new TRPCError({ code: 'FORBIDDEN' });
+}
 
 export const storeRouter = t.router({
   getProducts: t.procedure.query(async ({ ctx }) => {
-    const db = getFirestore();
+    const db = getAdminDb();
     let query = db.collection('products') as any;
     if (ctx.auth?.tenantId) {
       query = query.where('tenantId', '==', ctx.auth.tenantId);
@@ -28,13 +38,14 @@ export const storeRouter = t.router({
       colors: z.array(z.string()).optional(),
     }))
     .mutation(async ({ ctx, input }) => {
-      if (!ctx.auth?.uid) throw new TRPCError({ code: 'UNAUTHORIZED' });
+      requireAdmin(ctx);
+      if (!ctx.auth?.tenantId) throw new TRPCError({ code: 'BAD_REQUEST', message: 'Tenant ausente.' });
 
-      const db = getFirestore();
+      const db = getAdminDb();
       const newRef = db.collection('products').doc();
       await newRef.set({
         ...input,
-        tenantId: ctx.auth.tenantId || 'tenant-1',
+        tenantId: ctx.auth.tenantId,
         rating: 5.0,
         reviews: 0,
         createdAt: FieldValue.serverTimestamp(),
@@ -46,18 +57,22 @@ export const storeRouter = t.router({
   deleteProduct: t.procedure
     .input(z.object({ id: z.string() }))
     .mutation(async ({ ctx, input }) => {
-      if (!ctx.auth?.uid) throw new TRPCError({ code: 'UNAUTHORIZED' });
-      // should ideally check if user is admin here
+      requireAdmin(ctx);
       
-      const db = getFirestore();
-      await db.collection('products').doc(input.id).delete();
+      const db = getAdminDb();
+      const ref = db.collection('products').doc(input.id);
+      const snap = await ref.get();
+      if (snap.exists && snap.data()?.tenantId !== ctx.auth?.tenantId && !hasRole(ctx, ['admin'])) {
+        throw new TRPCError({ code: 'FORBIDDEN' });
+      }
+      await ref.delete();
       return { success: true };
     }),
 
   getOrders: t.procedure.query(async ({ ctx }) => {
     if (!ctx.auth?.uid) throw new TRPCError({ code: 'UNAUTHORIZED' });
 
-    const db = getFirestore();
+    const db = getAdminDb();
     let query = db.collection('orders') as any;
     if (ctx.auth?.tenantId) {
       query = query.where('tenantId', '==', ctx.auth.tenantId);
@@ -72,10 +87,15 @@ export const storeRouter = t.router({
       status: z.string(),
     }))
     .mutation(async ({ ctx, input }) => {
-      if (!ctx.auth?.uid) throw new TRPCError({ code: 'UNAUTHORIZED' });
+      requireAdmin(ctx);
       
-      const db = getFirestore();
-      await db.collection('orders').doc(input.orderId).update({
+      const db = getAdminDb();
+      const ref = db.collection('orders').doc(input.orderId);
+      const snap = await ref.get();
+      if (snap.exists && snap.data()?.tenantId !== ctx.auth?.tenantId && !hasRole(ctx, ['admin'])) {
+        throw new TRPCError({ code: 'FORBIDDEN' });
+      }
+      await ref.update({
         status: input.status,
         updatedAt: FieldValue.serverTimestamp(),
       });

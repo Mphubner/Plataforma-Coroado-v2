@@ -1,10 +1,21 @@
 import { z } from 'zod';
 import { initTRPC, TRPCError } from '@trpc/server';
-import { ServerAuthContext } from '../context';
-import { getFirestore, FieldValue } from 'firebase-admin/firestore';
+import { getAdminDb, ServerAuthContext } from '../context';
+import { FieldValue } from 'firebase-admin/firestore';
 import { COLLECTIONS } from '@/src/lib/domain/collections';
 
 const t = initTRPC.context<ServerAuthContext>().create();
+const SCHOOL_ADMIN_ROLES = ['admin', 'seniorPastor', 'networkPastor', 'auxPastor', 'teacher'];
+
+function requireSchoolAdmin(ctx: ServerAuthContext) {
+  if (!ctx.auth?.uid) throw new TRPCError({ code: 'UNAUTHORIZED' });
+  if (!ctx.auth.roles?.some(role => SCHOOL_ADMIN_ROLES.includes(role))) {
+    throw new TRPCError({ code: 'FORBIDDEN' });
+  }
+  if (!ctx.auth.tenantId) {
+    throw new TRPCError({ code: 'BAD_REQUEST', message: 'Tenant ausente.' });
+  }
+}
 
 export const escolaRouter = t.router({
   createCourse: t.procedure
@@ -21,16 +32,14 @@ export const escolaRouter = t.router({
       requiresSubscription: z.boolean().default(true), // new field requested
     }))
     .mutation(async ({ ctx, input }) => {
-      // Must be logged in
-      if (!ctx.auth?.uid) throw new TRPCError({ code: 'UNAUTHORIZED' });
-
-      // Check if admin or teacher
-      // Ideally we should check custom claims here
+      requireSchoolAdmin(ctx);
       
-      const db = getFirestore();
+      const db = getAdminDb();
       const newRef = db.collection(COLLECTIONS.courses).doc();
       await newRef.set({
         ...input,
+        tenantId: ctx.auth.tenantId,
+        createdBy: ctx.auth.uid,
         createdAt: FieldValue.serverTimestamp(),
         updatedAt: FieldValue.serverTimestamp(),
       });
@@ -44,12 +53,13 @@ export const escolaRouter = t.router({
       order: z.number(),
     }))
     .mutation(async ({ ctx, input }) => {
-      if (!ctx.auth?.uid) throw new TRPCError({ code: 'UNAUTHORIZED' });
+      requireSchoolAdmin(ctx);
       
-      const db = getFirestore();
+      const db = getAdminDb();
       const newRef = db.collection(COLLECTIONS.modules).doc();
       await newRef.set({
         ...input,
+        tenantId: ctx.auth.tenantId,
         createdAt: FieldValue.serverTimestamp(),
         updatedAt: FieldValue.serverTimestamp(),
       });
@@ -66,12 +76,14 @@ export const escolaRouter = t.router({
       order: z.number(),
     }))
     .mutation(async ({ ctx, input }) => {
-      if (!ctx.auth?.uid) throw new TRPCError({ code: 'UNAUTHORIZED' });
+      requireSchoolAdmin(ctx);
 
-      const db = getFirestore();
+      const db = getAdminDb();
       const newRef = db.collection(COLLECTIONS.lessons).doc();
       await newRef.set({
         ...input,
+        tenantId: ctx.auth.tenantId,
+        isFree: false,
         createdAt: FieldValue.serverTimestamp(),
         updatedAt: FieldValue.serverTimestamp(),
       });
@@ -87,12 +99,13 @@ export const escolaRouter = t.router({
       tenantId: z.string(),
     }))
     .mutation(async ({ ctx, input }) => {
-      if (!ctx.auth?.uid) throw new TRPCError({ code: 'UNAUTHORIZED' });
+      requireSchoolAdmin(ctx);
 
-      const db = getFirestore();
+      const db = getAdminDb();
       const newRef = db.collection(COLLECTIONS.paths).doc();
       await newRef.set({
         ...input,
+        tenantId: ctx.auth.tenantId,
         createdAt: FieldValue.serverTimestamp(),
         updatedAt: FieldValue.serverTimestamp(),
       });
@@ -106,7 +119,7 @@ export const escolaRouter = t.router({
     .mutation(async ({ ctx, input }) => {
       if (!ctx.auth?.uid) throw new TRPCError({ code: 'UNAUTHORIZED' });
       
-      const db = getFirestore();
+      const db = getAdminDb();
 
       // Check course requirements
       const courseDoc = await db.collection(COLLECTIONS.courses).doc(input.courseId).get();
@@ -137,7 +150,9 @@ export const escolaRouter = t.router({
       await newRef.set({
         userId: ctx.auth.uid,
         courseId: input.courseId,
+        tenantId: courseData?.tenantId || ctx.auth.tenantId || 'tenant-1',
         progress: 0,
+        status: 'in-progress',
         completedLessons: [],
         createdAt: FieldValue.serverTimestamp(),
         updatedAt: FieldValue.serverTimestamp(),

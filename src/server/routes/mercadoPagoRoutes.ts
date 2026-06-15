@@ -1,7 +1,8 @@
 import type express from 'express';
+import { createHmac, timingSafeEqual } from 'node:crypto';
 import admin from 'firebase-admin';
 import { COLLECTIONS } from '../../lib/domain';
-import { cleanString, getAdminDb, getMercadoPagoAccessToken } from '../context';
+import { cleanString, getAdminDb, getMercadoPagoAccessToken, getMercadoPagoWebhookSecret } from '../context';
 import { recordPaymentEvent } from '../operations';
 
 function toTransactionStatus(paymentStatus: string) {
@@ -16,6 +17,58 @@ function toEventPaymentStatus(paymentStatus: string) {
   if (paymentStatus === 'approved') return 'approved';
   if (['rejected', 'cancelled', 'refunded'].includes(paymentStatus)) return 'rejected';
   return 'pending';
+}
+
+function readHeader(req: express.Request, name: string) {
+  const value = req.headers[name.toLowerCase()];
+  if (Array.isArray(value)) return value[0] || '';
+  return typeof value === 'string' ? value : '';
+}
+
+function parseSignatureHeader(header: string) {
+  return header.split(',').reduce<Record<string, string>>((acc, part) => {
+    const [key, value] = part.split('=').map(item => item.trim());
+    if (key && value) acc[key] = value;
+    return acc;
+  }, {});
+}
+
+function validateMercadoPagoSignature(req: express.Request, notificationId: string) {
+  const secret = getMercadoPagoWebhookSecret();
+  if (!secret) {
+    return {
+      ok: process.env.NODE_ENV !== 'production',
+      reason: 'missing_webhook_secret',
+    };
+  }
+
+  const signature = parseSignatureHeader(readHeader(req, 'x-signature'));
+  const requestId = readHeader(req, 'x-request-id');
+  const ts = signature.ts;
+  const v1 = signature.v1;
+
+  if (!ts || !v1 || !requestId) {
+    return { ok: false, reason: 'missing_signature_headers' };
+  }
+
+  const parts = [
+    notificationId ? `id:${notificationId.toLowerCase()}` : '',
+    `request-id:${requestId}`,
+    `ts:${ts}`,
+  ].filter(Boolean);
+  const manifest = `${parts.join(';')};`;
+  const expected = createHmac('sha256', secret).update(manifest).digest('hex');
+  const expectedBuffer = Buffer.from(expected, 'hex');
+  const receivedBuffer = Buffer.from(v1, 'hex');
+
+  if (expectedBuffer.length !== receivedBuffer.length) {
+    return { ok: false, reason: 'signature_length_mismatch' };
+  }
+
+  return {
+    ok: timingSafeEqual(expectedBuffer, receivedBuffer),
+    reason: 'signature_checked',
+  };
 }
 
 async function processPreapprovalWebhook(preapprovalId: string) {
@@ -91,6 +144,13 @@ export function registerMercadoPagoRoutes(app: express.Express) {
 
     if (!paymentId || !accessToken) {
       res.status(202).json({ success: true, ignored: true });
+      return;
+    }
+
+    const signatureValidation = validateMercadoPagoSignature(req, paymentId);
+    if (!signatureValidation.ok) {
+      console.warn('Mercado Pago webhook rejected:', signatureValidation.reason);
+      res.status(401).json({ success: false, error: 'invalid_webhook_signature' });
       return;
     }
 
@@ -260,6 +320,13 @@ export function registerMercadoPagoRoutes(app: express.Express) {
 
     if (!preapprovalId || !accessToken) {
       res.status(202).json({ success: true, ignored: true });
+      return;
+    }
+
+    const signatureValidation = validateMercadoPagoSignature(req, preapprovalId);
+    if (!signatureValidation.ok) {
+      console.warn('Mercado Pago subscription webhook rejected:', signatureValidation.reason);
+      res.status(401).json({ success: false, error: 'invalid_webhook_signature' });
       return;
     }
 

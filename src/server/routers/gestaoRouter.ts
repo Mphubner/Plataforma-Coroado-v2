@@ -1,7 +1,6 @@
 import { z } from 'zod';
 import { initTRPC, TRPCError } from '@trpc/server';
-import { ServerAuthContext } from '../context';
-import { getFirestore, FieldValue } from 'firebase-admin/firestore';
+import { getAdminDb, ServerAuthContext } from '../context';
 
 const t = initTRPC.context<ServerAuthContext>().create();
 
@@ -18,7 +17,7 @@ export const gestaoRouter = t.router({
 
   // Action Plans Hierarchy (Tree view)
   getActionPlansTree: t.procedure.query(async ({ ctx }) => {
-    const db = getFirestore();
+    const db = getAdminDb();
     let query = db.collection('action_plans') as any;
     
     if (ctx.auth?.tenantId) {

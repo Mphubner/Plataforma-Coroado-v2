@@ -1,12 +1,13 @@
 import { z } from 'zod';
 import { initTRPC, TRPCError } from '@trpc/server';
-import { ServerAuthContext } from '../context';
-import { getFirestore, FieldValue } from 'firebase-admin/firestore';
+import { getAdminDb, ServerAuthContext } from '../context';
+import { FieldValue } from 'firebase-admin/firestore';
 import { eventCheckInRequestSchema } from '../../lib/domain';
 import { checkInEventEnrollment, OperationError } from '../operations';
 import { getEventsOverview } from '../queries/eventsOverview';
 
 const t = initTRPC.context<ServerAuthContext>().create();
+const EVENT_ADMIN_ROLES = ['admin', 'seniorPastor', 'networkPastor', 'auxPastor', 'ministryLeader'];
 
 export const eventsRouter = t.router({
   overview: t.procedure.query(async ({ ctx }) => {
@@ -40,7 +41,7 @@ export const eventsRouter = t.router({
     }),
 
   getEvents: t.procedure.query(async ({ ctx }) => {
-    const db = getFirestore();
+    const db = getAdminDb();
     let query = db.collection('events').orderBy('event_date', 'asc') as any;
     
     // For multitenancy if applicable
@@ -66,14 +67,15 @@ export const eventsRouter = t.router({
       if (!ctx.auth?.uid) throw new TRPCError({ code: 'UNAUTHORIZED' });
 
       // Require some privileged role (pastor/admin) to create events
-      const hasPrivilege = ctx.auth.roles?.some((r: string) => ['admin', 'pastor', 'supervisor'].includes(r));
+      const hasPrivilege = ctx.auth.roles?.some((r: string) => EVENT_ADMIN_ROLES.includes(r));
       if (!hasPrivilege) throw new TRPCError({ code: 'FORBIDDEN' });
+      if (!ctx.auth.tenantId) throw new TRPCError({ code: 'BAD_REQUEST', message: 'Tenant ausente.' });
 
-      const db = getFirestore();
+      const db = getAdminDb();
       const newRef = db.collection('events').doc();
       await newRef.set({
         ...input,
-        tenantId: ctx.auth.tenantId || 'tenant-1',
+        tenantId: ctx.auth.tenantId,
         createdAt: FieldValue.serverTimestamp(),
         updatedAt: FieldValue.serverTimestamp(),
       });

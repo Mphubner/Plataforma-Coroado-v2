@@ -1,13 +1,13 @@
 import { z } from 'zod';
 import { initTRPC, TRPCError } from '@trpc/server';
 import { ServerAuthContext } from '../context';
-import { getFirestore, FieldValue } from 'firebase-admin/firestore';
+import { getAdminDb } from '../context';
 
 const t = initTRPC.context<ServerAuthContext>().create();
 
 export const cellsRouter = t.router({
   getCells: t.procedure.query(async ({ ctx }) => {
-    const db = getFirestore();
+    const db = getAdminDb();
     let query = db.collection('cells') as any;
     
     // If user is authenticated and part of a tenant, scope to tenant
@@ -22,7 +22,7 @@ export const cellsRouter = t.router({
   getCellById: t.procedure
     .input(z.object({ id: z.string() }))
     .query(async ({ ctx, input }) => {
-      const db = getFirestore();
+      const db = getAdminDb();
       const doc = await db.collection('cells').doc(input.id).get();
       if (!doc.exists) return null;
       return { id: doc.id, ...doc.data() };
