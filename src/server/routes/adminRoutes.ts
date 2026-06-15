@@ -24,6 +24,16 @@ export function registerAdminRoutes(app: express.Express) {
           updatedAt: admin.firestore.FieldValue.serverTimestamp(),
         }, { merge: true });
 
+        const userDoc = await getAdminDb().collection(COLLECTIONS.users).doc(uid).get();
+        if (userDoc.exists) {
+          const userData = userDoc.data()!;
+          await admin.auth().setCustomUserClaims(uid, {
+            isApproved: true,
+            roles: userData.roles || ['member'],
+            tenantId: userData.tenantId,
+          });
+        }
+
         res.json({ success: true });
       } catch (error) {
         console.error('Approve user failed:', error);
@@ -51,6 +61,16 @@ export function registerAdminRoutes(app: express.Express) {
           rolesUpdatedAt: admin.firestore.FieldValue.serverTimestamp(),
           rolesUpdatedBy: req.authUser?.uid,
         }, { merge: true });
+
+        const userDoc = await getAdminDb().collection(COLLECTIONS.users).doc(uid).get();
+        if (userDoc.exists) {
+          const userData = userDoc.data()!;
+          await admin.auth().setCustomUserClaims(uid, {
+            isApproved: userData.isApproved,
+            roles,
+            tenantId: userData.tenantId,
+          });
+        }
 
         res.json({ success: true, roles });
       } catch (error) {

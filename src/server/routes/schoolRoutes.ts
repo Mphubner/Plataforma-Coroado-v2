@@ -17,6 +17,7 @@ import {
   type AuthedRequest,
 } from '../context';
 import { OperationError, updateSchoolProgress } from '../operations';
+import { getSchoolOverview } from '../queries/schoolOverview';
 
 async function resolveSchoolPurchase(input: { targetType: 'course' | 'lesson'; targetId: string }, tenantId: string) {
   const db = getAdminDb();
@@ -49,6 +50,21 @@ async function resolveSchoolPurchase(input: { targetType: 'course' | 'lesson'; t
 }
 
 export function registerSchoolRoutes(app: express.Express, port: number) {
+  app.get('/api/school/overview', authenticateFirebase, async (req: AuthedRequest, res) => {
+    try {
+      const overview = await getSchoolOverview(req);
+      res.json({ success: true, overview });
+    } catch (error) {
+      if (error instanceof OperationError) {
+        res.status(error.status).json({ success: false, error: error.message });
+        return;
+      }
+
+      console.error('School overview failed:', error);
+      res.status(500).json({ success: false, error: 'Nao foi possivel carregar a Escola IDE' });
+    }
+  });
+
   app.post('/api/school/subscriptions', authenticateFirebase, async (req: AuthedRequest, res) => {
     const parsed = schoolSubscriptionRequestSchema.safeParse(req.body);
 

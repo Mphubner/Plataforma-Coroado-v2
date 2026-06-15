@@ -479,6 +479,7 @@ export type ScaleAssignmentPayloadInput = {
 
 export type ScalePayloadInput = {
   ministryId: string;
+  eventId?: string;
   eventName?: string;
   date?: string;
   time?: string;
@@ -491,6 +492,7 @@ export type ScalePayloadInput = {
 export function toScalePayload(input: ScalePayloadInput) {
   return {
     ministryId: cleanText(input.ministryId, 128),
+    eventId: cleanText(input.eventId, 128),
     eventName: cleanText(input.eventName, 200),
     date: cleanText(input.date, 50),
     time: cleanText(input.time, 50),

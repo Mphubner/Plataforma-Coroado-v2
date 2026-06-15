@@ -951,14 +951,14 @@ export function EventsView({ isLoggedIn = false, userData, onLoginClick }: { isL
 
                     <div className="flex items-center gap-2">
                       <input type="checkbox" checked={newEvent.isPaid} onChange={(e) => setNewEvent({...newEvent, isPaid: e.target.checked})} />
-                      <label className="text-sm font-bold">Evento Pago (Geração de Pix Mercado Pago)?</label>
+                      <label className="text-sm font-bold">Evento Pago (Mercado Pago - Pix/Cartão)?</label>
                     </div>
                     
                     {newEvent.isPaid && (
                       <div className="space-y-2 pl-6 border-l-2 border-primary/30">
                         <label className="text-[10px] text-white/40 uppercase font-bold tracking-widest">Valor da Inscrição (R$)</label>
                         <input type="number" step="0.01" className="w-32 bg-black border border-white/10 rounded-lg px-3 py-2 text-sm text-white focus:border-primary focus:outline-none" placeholder="0.00" value={newEvent.price || ''} onChange={(e) => setNewEvent({...newEvent, price: parseFloat(e.target.value) || 0})} />
-                        <p className="text-xs text-white/40">Nota: O ingresso só será liberado após o Webhook do Mercado Pago aprovar.</p>
+                        <p className="text-xs text-white/40">Nota: O ingresso só será liberado após confirmação do Mercado Pago.</p>
                       </div>
                     )}
 

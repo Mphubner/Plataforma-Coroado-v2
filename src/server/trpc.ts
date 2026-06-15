@@ -15,6 +15,7 @@ import {
   updateSchoolProgress,
 } from './operations';
 import { getFinanceOverview } from './queries/financeOverview';
+import { getEventsOverview } from './queries/eventsOverview';
 
 export async function createTrpcContext({ req }: CreateExpressContextOptions): Promise<ServerAuthContext> {
   try {
@@ -52,6 +53,13 @@ function toTrpcError(error: unknown): never {
 export const appRouter = t.router({
   health: t.procedure.query(() => ({ status: 'ok' })),
   events: t.router({
+    overview: t.procedure.query(async ({ ctx }) => {
+      try {
+        return await getEventsOverview(ctx);
+      } catch (error) {
+        toTrpcError(error);
+      }
+    }),
     checkIn: t.procedure
       .input(eventCheckInRequestSchema)
       .mutation(async ({ ctx, input }) => {

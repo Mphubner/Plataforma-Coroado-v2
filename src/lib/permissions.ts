@@ -110,6 +110,7 @@ const roleAliases: Record<string, ChurchRole[]> = {
   voluntario: ["member"],
   membro: ["member"],
   member: ["member"],
+  servo: ["member"],
   visitor: ["visitor"],
   visitante: ["visitor"]
 };

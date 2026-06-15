@@ -82,7 +82,53 @@ export function registerFinanceRoutes(app: express.Express) {
         updatedAt: admin.firestore.FieldValue.serverTimestamp(),
       });
 
-      res.json({ success: true, transactionId: transactionRef.id });
+      // Integrate Mercado Pago Preference
+      const accessToken = process.env.MERCADO_PAGO_ACCESS_TOKEN;
+      if (!accessToken) {
+        // Fallback to manual approval flow if MP is not configured
+        res.json({ success: true, transactionId: transactionRef.id });
+        return;
+      }
+
+      const { MercadoPagoConfig, Preference } = await import('mercadopago');
+      const client = new MercadoPagoConfig({ accessToken, options: { timeout: 5000 } });
+      const preference = new Preference(client);
+      const origin = String(req.headers.origin || `http://localhost:${process.env.PORT || 3000}`);
+
+      const title = contribution.contributionType === 'dizimo' ? 'Dízimo' : contribution.contributionType === 'oferta' ? 'Oferta' : 'Contribuição';
+
+      const response = await preference.create({
+        body: {
+          items: [{
+            id: contribution.itemId || 'contrib',
+            title: title,
+            quantity: 1,
+            unit_price: contribution.amount,
+            currency_id: 'BRL',
+          }],
+          external_reference: transactionRef.id,
+          metadata: {
+            transactionId: transactionRef.id,
+            userId: req.authUser?.uid,
+            tenantId,
+          },
+          back_urls: {
+            success: `${origin}/financeiro?payment=success`,
+            failure: `${origin}/financeiro?payment=failure`,
+            pending: `${origin}/financeiro?payment=pending`,
+          },
+          auto_return: 'approved',
+        },
+      });
+
+      const initPoint = response.init_point || response.sandbox_init_point;
+
+      await transactionRef.set({
+        paymentPreferenceId: response.id || '',
+        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      }, { merge: true });
+
+      res.json({ success: true, transactionId: transactionRef.id, init_point: initPoint });
     } catch (error) {
       console.error('Create contribution failed:', error);
       res.status(500).json({ success: false, error: 'Nao foi possivel registrar a contribuicao' });

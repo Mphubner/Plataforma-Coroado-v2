@@ -1,4 +1,4 @@
-import * as React from "react"
+﻿import * as React from "react"
 import { motion, AnimatePresence } from "motion/react"
 import { 
   Play, BookOpen, Award, Clock, Star, ChevronRight, ChevronLeft, 
@@ -1073,7 +1073,7 @@ function SchoolAdmin() {
   const [tenantId, setTenantId] = React.useState<string | null>(null);
   const [showAddCourse, setShowAddCourse] = React.useState(false);
   const [showAddPath, setShowAddPath] = React.useState(false);
-  const [newCourse, setNewCourse] = React.useState({ title: '', category: 'Geral', status: 'Rascunho', isSubscriptionOnly: true, monthlyPrice: '' });
+  const [newCourse, setNewCourse] = React.useState({ title: '', category: 'Geral', status: 'Rascunho', isSubscriptionOnly: true, monthlyPrice: '', description: '', level: 'Básico' });
   const [newPath, setNewPath] = React.useState({ title: '', description: '', stage: 'Geral' });
   const [selectedCourseId, setSelectedCourseId] = React.useState<string | null>(null);
   const [selectedPathForCourses, setSelectedPathForCourses] = React.useState<string | null>(null);
@@ -1164,9 +1164,9 @@ function SchoolAdmin() {
         title: newCourse.title,
         status: newCourse.status,
         category: newCourse.category,
-        description: '',
-        level: 'Básico',
-        duration: '0h',
+        description: newCourse.description || '',
+          level: newCourse.level || 'Básico',
+          duration: '0h',
         img: '',
         students: 0,
         isSubscriptionOnly: newCourse.isSubscriptionOnly,
@@ -1515,9 +1515,32 @@ function SchoolAdmin() {
                       placeholder="Ex: Treinamento de Líderes" 
                       value={newCourse.title}
                       onChange={e => setNewCourse({...newCourse, title: e.target.value})}
-                    />
-                  </div>
-                  <div className="grid grid-cols-2 gap-4">
+                      />
+                    </div>
+
+                    <div className="space-y-2">
+                      <label className="text-xs font-bold text-white/40 uppercase">Descrição (Visível para Alunos)</label>
+                      <textarea 
+                        className="w-full bg-zinc-900 border border-white/10 rounded-md p-3 text-sm text-white resize-none h-20 outline-none focus:ring-1 focus:ring-primary"
+                        placeholder="Descreva o que será ensinado neste curso..."
+                        value={newCourse.description}
+                        onChange={e => setNewCourse({...newCourse, description: e.target.value})}
+                      />
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-4">
+                      <div className="space-y-2">
+                        <label className="text-xs font-bold text-white/40 uppercase">Nível</label>
+                        <select 
+                          className="w-full h-10 bg-zinc-900 border border-white/10 rounded-md px-3 text-white"
+                          value={newCourse.level}
+                          onChange={e => setNewCourse({...newCourse, level: e.target.value})}
+                        >
+                          <option value="Básico">Básico</option>
+                          <option value="Intermediário">Intermediário</option>
+                          <option value="Avançado">Avançado</option>
+                        </select>
+                      </div>
                     <div className="space-y-2">
                       <label className="text-xs font-bold text-white/40 uppercase">Categoria</label>
                       <select 
@@ -1551,13 +1574,13 @@ function SchoolAdmin() {
                         onChange={e => setNewCourse({...newCourse, isSubscriptionOnly: e.target.value === 'true'})}
                       >
                         <option value="true">Assinatura Mensal (Escola IDE)</option>
-                        <option value="false">Gratuito ou Pagamento Único</option>
+                        <option value="false">Curso à Parte / Pagamento Único</option>
                       </select>
                     </div>
-                    {newCourse.isSubscriptionOnly && (
+                    {!newCourse.isSubscriptionOnly && (
                       <div className="space-y-2">
-                        <label className="text-xs font-bold text-white/40 uppercase">Preço da Assinatura (R$/mês)</label>
-                        <Input type="number" placeholder="49.90" value={newCourse.monthlyPrice} onChange={e => setNewCourse({...newCourse, monthlyPrice: e.target.value})} className="bg-zinc-900 border-white/10" />
+                        <label className="text-xs font-bold text-white/40 uppercase">Preço de Venda Avulsa (R$)</label>
+                        <Input type="number" placeholder="0.00 (Deixe 0 para Gratuito)" value={newCourse.monthlyPrice} onChange={e => setNewCourse({...newCourse, monthlyPrice: e.target.value})} className="bg-zinc-900 border-white/10" />
                       </div>
                     )}
                   </div>
@@ -2181,19 +2204,28 @@ function CourseDetails({ course, onBack, onStartLesson, user, isSubscribed, onSu
                     <Button 
                       className="w-full h-12 bg-primary text-black font-bold text-lg" 
                       onClick={handleEnroll} 
-                      disabled={enrolling || !user?.uid}
+                      disabled={enrolling || !user?.uid || (course.isSubscriptionOnly !== false && !isSubscribed)}
                     >
                       {enrolling ? <Loader2 className="w-5 h-5 animate-spin mx-auto" /> : "Inscrever-se"}
                     </Button>
                   )}
-                  {Number(course.standalonePrice || course.monthlyPrice || course.price || 0) > 0 && !isSubscribed && (
+                  {course.isSubscriptionOnly === false && Number(course.standalonePrice || course.monthlyPrice || course.price || 0) > 0 && !learningAccess.some(a => a.targetId === course.id && a.status === 'active') && (
                     <Button
                       variant="outline"
                       className="w-full h-12 border-primary/40 text-primary hover:bg-primary/10"
                       onClick={handleBuyCourse}
                       disabled={purchasingCourse || !user?.uid}
                     >
-                      {purchasingCourse ? <Loader2 className="w-5 h-5 animate-spin mx-auto" /> : `Comprar curso por R$ ${Number(course.standalonePrice || course.monthlyPrice || course.price || 0).toFixed(2).replace('.', ',')}`}
+                      {purchasingCourse ? <Loader2 className="w-5 h-5 animate-spin mx-auto" /> : `Comprar curso à parte (R$ ${Number(course.standalonePrice || course.monthlyPrice || course.price || 0).toFixed(2).replace('.', ',')})`}
+                    </Button>
+                  )}
+                  {course.isSubscriptionOnly !== false && !isSubscribed && (
+                    <Button
+                      variant="outline"
+                      className="w-full h-12 border-yellow-500/40 text-yellow-500 hover:bg-yellow-500/10"
+                      onClick={() => { if (onSubscribeClick) onSubscribeClick() }}
+                    >
+                      Assinar Escola IDE para Liberar
                     </Button>
                   )}
                   <Button variant="outline" className="w-full h-12 border-white/10">Adicionar à Lista</Button>
@@ -2547,3 +2579,4 @@ function SparklesIcon(props: any) {
     </svg>
   )
 }
+

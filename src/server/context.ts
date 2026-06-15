@@ -54,6 +54,21 @@ export async function resolveFirebaseAuth(req: express.Request): Promise<ServerA
   return resolveFirebaseAuthToken(token);
 }
 
+export async function resolveOptionalFirebaseAuth(req: express.Request): Promise<ServerAuthContext> {
+  const header = req.headers.authorization || '';
+  const token = header.startsWith('Bearer ') ? header.slice(7) : '';
+
+  if (!token) {
+    return {};
+  }
+
+  try {
+    return await resolveFirebaseAuthToken(token);
+  } catch {
+    return {};
+  }
+}
+
 export async function resolveFirebaseAuthToken(token: string): Promise<ServerAuthContext> {
   if (!token) {
     throw new Error('Autenticacao obrigatoria');
