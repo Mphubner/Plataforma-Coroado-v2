@@ -1,13 +1,17 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { HeartHandshake, DollarSign, Target, MapPin, Globe, CreditCard, Send, History, CheckCircle2, QrCode, Copy, ChevronRight, TrendingUp } from 'lucide-react';
+import { HeartHandshake, DollarSign, Target, MapPin, Globe, CreditCard, Send, History, CheckCircle2, QrCode, Copy, ChevronRight, TrendingUp, Users, Calendar, Heart, Edit3, Trash2, Plus } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
-import { db } from '@/lib/firebase';
+import { auth, db } from '@/lib/firebase';
 import { collection, query, where, onSnapshot, addDoc, updateDoc, deleteDoc, doc, serverTimestamp } from 'firebase/firestore';
 import ReactQrCode from 'react-qr-code';
+import { can } from '@/src/lib/permissions';
+import { COLLECTIONS } from '@/src/lib/domain/collections';
+import { postJson } from '@/src/lib/api/http';
+import { pageMotion } from '@/src/lib/motion/presets';
 
 const EMPTY_CAMPAIGN = {
   title: '',
@@ -36,12 +40,12 @@ export function FinanceView({ userData }: FinanceViewProps) {
   const [editingCampaign, setEditingCampaign] = useState<any>(null);
 
   const tenantId = userData?.tenantId || 'tenant-1';
-  const isAdmin = userData?.profileType === 'admin' || userData?.role?.includes('Pastor da Sede') || userData?.role?.includes('admin');
+  const isAdmin = can(userData, 'manage:finance');
 
   useEffect(() => {
     if (!userData?.id) return;
     const q = query(
-      collection(db, 'transactions'),
+      collection(db, COLLECTIONS.transactions),
       where('userId', '==', userData.id),
       where('tenantId', '==', tenantId)
     );
@@ -66,29 +70,35 @@ export function FinanceView({ userData }: FinanceViewProps) {
     return () => { unsub(); unsubCamps(); };
   }, [userData?.id, tenantId]);
 
-  const handleSimulatePayment = () => {
+  const handlePixIntent = () => {
     setShowPix(true);
   };
 
-  const confirmPayment = async () => {
+  const registerPendingPayment = async () => {
     if (!userData?.id) {
       alert("Você precisa estar logado!");
       return;
     }
+    const amount = Number(donateAmount);
+    if (!Number.isFinite(amount) || amount <= 0) {
+      alert("Informe um valor valido para a contribuicao.");
+      return;
+    }
+
     try {
-      await addDoc(collection(db, 'transactions'), {
-        userId: userData.id,
-        amount: Number(donateAmount),
-        type: donateType === 'dizimo' ? 'Dízimo' : (donateType === 'oferta' ? 'Oferta' : `Campanha: ${donateType}`),
+      const token = await auth.currentUser?.getIdToken();
+      if (!token) {
+        alert("Sua sessão expirou. Entre novamente para registrar a contribuição.");
+        return;
+      }
+
+      await postJson('/api/contributions', {
+        amount,
+        contributionType: donateType === 'dizimo' ? 'Dízimo' : (donateType === 'oferta' ? 'Oferta' : `Campanha: ${donateType}`),
         itemId: selectedCampaignId || donateType,
-        status: 'completed',
-        date: new Date().toISOString().split('T')[0],
-        method: 'pix',
-        tenantId,
-        createdAt: serverTimestamp(),
-        updatedAt: serverTimestamp()
-      });
-      alert("Contribuição confirmada e registrada com sucesso!");
+        method: 'pix_manual',
+      }, { token });
+      alert("Contribuicao registrada como pendente. A confirmacao final deve ser feita pelo financeiro apos conciliacao.");
     } catch(e) {
       console.error(e);
       alert("Erro ao salvar contribuição: " + (e as Error).message);
@@ -128,7 +138,7 @@ export function FinanceView({ userData }: FinanceViewProps) {
   };
 
   return (
-    <div className="space-y-8 pb-20">
+    <motion.div {...pageMotion} className="space-y-8 pb-20">
       <div className="space-y-2">
         <h1 className="text-4xl font-bold tracking-tight">Financeiro & Missões</h1>
         <p className="text-white/60">Gestão de dízimos, ofertas e envolvimento nos campos missionários.</p>
@@ -208,7 +218,7 @@ export function FinanceView({ userData }: FinanceViewProps) {
                   </div>
 
                   <div className="pt-2">
-                    <Button onClick={handleSimulatePayment} className="w-full h-14 bg-primary text-black font-bold text-lg hover:bg-primary/90">
+                    <Button onClick={handlePixIntent} className="w-full h-14 bg-primary text-black font-bold text-lg hover:bg-primary/90">
                       Gerar PIX
                     </Button>
                   </div>
@@ -409,7 +419,9 @@ export function FinanceView({ userData }: FinanceViewProps) {
                       </div>
                       <div className="text-right">
                         <p className="font-bold font-mono">R$ {item.amount.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</p>
-                        <p className="text-[10px] text-green-400 uppercase tracking-widest">Confirmado</p>
+                        <p className={`text-[10px] uppercase tracking-widest ${item.status === 'completed' ? 'text-green-400' : 'text-yellow-400'}`}>
+                          {item.status === 'completed' ? 'Confirmado' : 'Pendente'}
+                        </p>
                       </div>
                     </div>
                   ))}
@@ -465,12 +477,12 @@ export function FinanceView({ userData }: FinanceViewProps) {
               </div>
 
               <div className="rounded-xl border border-primary/20 bg-primary/5 p-4 text-xs text-white/60">
-                Escaneie o QR Code acima no aplicativo do seu banco. Para fins de simulação, clique no botão abaixo para confirmar e registrar seu pagamento.
+                Escaneie o QR Code acima no aplicativo do seu banco. Depois registre a intencao para que o financeiro concilie o pagamento real.
               </div>
 
               <div className="space-y-3 pt-4">
-                <Button onClick={confirmPayment} className="w-full bg-primary text-black font-bold h-12">
-                  Confirmar Pagamento Simulado
+                <Button onClick={registerPendingPayment} className="w-full bg-primary text-black font-bold h-12">
+                  Registrar Como Pendente
                 </Button>
                 <Button variant="ghost" onClick={() => setShowPix(false)} className="w-full text-white/40 hover:text-white">
                   Cancelar
@@ -529,9 +541,7 @@ export function FinanceView({ userData }: FinanceViewProps) {
           </div>
         )}
       </AnimatePresence>
-    </div>
+    </motion.div>
   );
 }
 
-// Importing a few missing icons for this component
-import { Users, Calendar, Heart, Edit3, Trash2, Plus } from 'lucide-react';

@@ -44,7 +44,7 @@ export function JornadaView({ isLoggedIn = true, userData }: { isLoggedIn?: bool
 
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const wrapRef = useRef<HTMLDivElement>(null);
-  const rafRef = useRef<number>();
+  const rafRef = useRef<number | null>(null);
 
   // Initialize game state
   useEffect(() => {

@@ -1,14 +1,20 @@
 import React, { useState, useEffect } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion, AnimatePresence } from 'motion/react';
 import { Facebook, Instagram, Youtube, Mail, ChevronRight, Calendar, X, AlertCircle, Edit3, Trash2, Plus, Clock, CheckCircle, ListTodo, Users, Search } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { db } from '@/lib/firebase';
+import { auth, db } from '@/lib/firebase';
 import { collection, query, where, onSnapshot, addDoc, updateDoc, deleteDoc, doc, serverTimestamp } from 'firebase/firestore';
 import { PastoralCareView } from './PastoralCareView';
+import {
+  createPastoralAppointment,
+  createPastoralTask,
+  updatePastoralAppointmentStatus,
+  updateTaskStatus,
+} from '@/src/lib/services/pastoralService';
 
 const PASTORS = [
   {
@@ -57,6 +63,7 @@ export function PastorsView({ isAdmin, userData, isLoggedIn, onLoginClick }: { i
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [activeTab, setActiveTab] = useState('list');
   const [appointments, setAppointments] = useState<any[]>([]);
+  const [pastoralTasks, setPastoralTasks] = useState<any[]>([]);
   const [showPastorForm, setShowPastorForm] = useState(false);
   const [editingPastor, setEditingPastor] = useState<any>(null);
   const [showSuccess, setShowSuccess] = useState(false);
@@ -118,34 +125,7 @@ export function PastorsView({ isAdmin, userData, isLoggedIn, onLoginClick }: { i
   };
 
   const updateAppointmentStatus = async (app: any, status: string) => {
-    await updateDoc(doc(db, 'pastoral_appointments', app.id), { status });
-    if (status === 'approved' && userData?.googleAccessToken) {
-      try {
-        const startDate = new Date(`${app.date}T${app.time}:00-03:00`);
-        const endDate = new Date(startDate.getTime() + 60 * 60 * 1000);
-        const res = await fetch("https://www.googleapis.com/calendar/v3/calendars/primary/events", {
-          method: "POST",
-          headers: {
-            "Authorization": `Bearer ${userData.googleAccessToken}`,
-            "Content-Type": "application/json"
-          },
-          body: JSON.stringify({
-            summary: `Aconselhamento Pastoral com ${app.userName}`,
-            description: "Agendamento confirmado via Plataforma Coroado.",
-            start: { dateTime: startDate.toISOString() },
-            end: { dateTime: endDate.toISOString() }
-          })
-        });
-        if (res.ok) {
-          alert("Aconselhamento aprovado e salvo no seu Google Calendar!");
-        } else {
-          console.error(await res.json());
-          alert("Erro ao salvar no Google Calendar. Token pode ter expirado, reconecte no menu superior.");
-        }
-      } catch (e) {
-        console.error(e);
-      }
-    }
+    await updatePastoralAppointmentStatus(app.id, status as any);
   };
 
   const handleBook = async () => {
@@ -156,18 +136,16 @@ export function PastorsView({ isAdmin, userData, isLoggedIn, onLoginClick }: { i
     if (!selectedDate || !selectedTime) return alert("Selecione data e hora.");
     setIsSubmitting(true);
     try {
-      const appRef = await addDoc(collection(db, 'pastoral_appointments'), {
+      const appointment = await createPastoralAppointment({
         pastorId: selectedPastor?.id || 'plantonista',
         pastorName: selectedPastor?.name || 'Pastor Plantonista',
         userId: userData?.id || '',
         userName: userData?.name || 'Membro',
-        tenantId: userData?.tenantId || 'default',
+        tenantId: userData?.tenantId || 'tenant-1',
         date: selectedDate,
         time: selectedTime,
-        status: 'scheduled',
-        createdAt: serverTimestamp()
       });
-      setLastAppointment({ id: appRef.id, date: selectedDate, time: selectedTime, pastor: selectedPastor?.name || 'Pastor Plantonista' });
+      setLastAppointment({ id: appointment.id, date: selectedDate, time: selectedTime, pastor: appointment.pastorName });
       setShowSuccess(true);
       setSelectedPastor(null);
       setSelectedDate('');
@@ -180,9 +158,33 @@ export function PastorsView({ isAdmin, userData, isLoggedIn, onLoginClick }: { i
     }
   };
 
+  const handleCreatePastoralTask = async () => {
+    if (!auth.currentUser || !userData?.tenantId) {
+      alert('Entre com sua conta para criar tarefas pastorais.');
+      return;
+    }
+
+    const title = window.prompt('Titulo da tarefa pastoral');
+    if (!title?.trim()) return;
+
+    await createPastoralTask({
+      title: title.trim(),
+      description: 'Tarefa criada pelo painel pastoral.',
+      assigneeId: userData?.id || auth.currentUser.uid,
+      tenantId: userData.tenantId,
+      createdBy: auth.currentUser.uid,
+      startDate: new Date().toISOString().split('T')[0],
+    });
+  };
+
+  const updatePastoralTaskStatus = async (task: any, status: string) => {
+    await updateTaskStatus(task.id, status);
+  };
+
   useEffect(() => {
     let unsubPastors = () => {};
     let unsubApps = () => {};
+    let unsubTasks = () => {};
 
     if (userData?.tenantId) {
       const q = query(collection(db, 'pastors'), where('tenantId', '==', userData.tenantId));
@@ -204,12 +206,19 @@ export function PastorsView({ isAdmin, userData, isLoggedIn, onLoginClick }: { i
           setAppointments(apps);
         });
       }
+
+      if (isLeader) {
+        const qT = query(collection(db, 'tasks'), where('tenantId', '==', userData.tenantId), where('tag', '==', 'Pastoral'));
+        unsubTasks = onSnapshot(qT, (snap) => {
+          setPastoralTasks(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+        });
+      }
     } else {
       setPastorsList(PASTORS);
     }
 
-    return () => { unsubPastors(); unsubApps(); };
-  }, [userData?.tenantId, userData?.id, isAdmin, userData?.profileType]);
+    return () => { unsubPastors(); unsubApps(); unsubTasks(); };
+  }, [userData?.tenantId, userData?.id, isAdmin, userData?.profileType, isLeader]);
 
   return (
     <div className="space-y-20 pb-20">
@@ -270,15 +279,20 @@ export function PastorsView({ isAdmin, userData, isLoggedIn, onLoginClick }: { i
                   Cuidado Pastoral
                 </TabsTrigger>
               </TabsList>
-              
-              {isAdmin && activeTab === 'list' && (
-                 <Button variant="outline" className="border-white/10" onClick={() => {
-                    setEditingPastor({ name: '', role: '', image: '', social: { facebook: '', instagram: '', youtube: '' }, availableTimes: '14:00, 15:00, 16:00' });
-                    setShowPastorForm(true);
-                 }}>
-                    <Plus className="w-4 h-4 mr-2" /> Adicionar Pastor
-                 </Button>
-              )}
+              <div className="flex items-center gap-2">
+                <Button variant="outline" className="bg-yellow-500/10 text-yellow-500 border-none hover:bg-yellow-500/20" onClick={() => window.open('https://keep.google.com/', '_blank')}>
+                  <Edit3 className="w-4 h-4 mr-2" />
+                  Anotações (Keep)
+                </Button>
+                {isAdmin && activeTab === 'list' && (
+                   <Button variant="outline" className="border-white/10" onClick={() => {
+                      setEditingPastor({ name: '', role: '', image: '', social: { facebook: '', instagram: '', youtube: '' }, availableTimes: '14:00, 15:00, 16:00' });
+                      setShowPastorForm(true);
+                   }}>
+                      <Plus className="w-4 h-4 mr-2" /> Adicionar Pastor
+                   </Button>
+                )}
+              </div>
             </div>
 
             <TabsContent value="list" className="mt-0">
@@ -379,11 +393,11 @@ export function PastorsView({ isAdmin, userData, isLoggedIn, onLoginClick }: { i
               <div className="space-y-4">
                 <div className="flex items-center justify-between bg-zinc-900 p-4 border border-white/10 rounded-2xl mb-6">
                   <div>
-                    <h3 className="font-bold text-lg">Sincronização com Google Calendar</h3>
-                    <p className="text-white/60 text-sm">Seus agendamentos marcados aparecerão aqui e no seu app do Google Agenda.</p>
+                    <h3 className="font-bold text-lg">Agenda pastoral</h3>
+                    <p className="text-white/60 text-sm">Acompanhe solicitações aqui e adicione compromissos ao Google Agenda quando necessário.</p>
                   </div>
-                  <Button variant="outline" className="border-blue-500/30 text-blue-400 bg-blue-500/10 hover:bg-blue-500 hover:text-white">
-                    <Calendar className="w-4 h-4 mr-2" /> Conectar Google
+                  <Button onClick={() => window.open('https://calendar.google.com/', '_blank')} variant="outline" className="border-blue-500/30 text-blue-400 bg-blue-500/10 hover:bg-blue-500 hover:text-white">
+                    <Calendar className="w-4 h-4 mr-2" /> Abrir Agenda
                   </Button>
                 </div>
                 {appointments.length === 0 ? (
@@ -424,18 +438,46 @@ export function PastorsView({ isAdmin, userData, isLoggedIn, onLoginClick }: { i
               <div className="bg-zinc-900 border border-white/10 rounded-[2.5rem] p-8 space-y-6">
                 <div className="flex items-center justify-between pb-6 border-b border-white/10">
                   <div>
-                    <h3 className="text-2xl font-black font-serif italic text-white">Google Tasks</h3>
-                    <p className="text-white/60 text-sm">Gerencie suas tarefas pastorais diretamente da plataforma.</p>
+                    <h3 className="text-2xl font-black font-serif italic text-white">Tarefas Pastorais</h3>
+                    <p className="text-white/60 text-sm">Gerencie acompanhamentos, ligações e retornos dentro da própria plataforma.</p>
                   </div>
-                  <Button className="bg-white text-black hover:bg-white/90 font-bold">
+                  <Button onClick={handleCreatePastoralTask} className="bg-white text-black hover:bg-white/90 font-bold">
                     <Plus className="w-4 h-4 mr-2" /> Nova Tarefa
                   </Button>
                 </div>
-                <div className="text-center p-12 bg-black/40 border border-white/5 border-dashed rounded-3xl">
-                  <ListTodo className="w-12 h-12 text-white/20 mx-auto mb-4" />
-                  <p className="text-white/60 mb-4">Você precisa conectar sua conta do Google Workspace para ver suas tarefas aqui.</p>
-                  <Button variant="outline" className="border-white/10">Conectar Google Tasks</Button>
-                </div>
+                {pastoralTasks.length === 0 ? (
+                  <div className="text-center p-12 bg-black/40 border border-white/5 border-dashed rounded-3xl">
+                    <ListTodo className="w-12 h-12 text-white/20 mx-auto mb-4" />
+                    <p className="text-white/60 mb-4">Nenhuma tarefa pastoral cadastrada.</p>
+                    <Button onClick={handleCreatePastoralTask} variant="outline" className="border-white/10">Criar Primeira Tarefa</Button>
+                  </div>
+                ) : (
+                  <div className="space-y-3">
+                    {pastoralTasks.map(task => (
+                      <div key={task.id} className="p-4 rounded-2xl bg-black/40 border border-white/10 flex flex-col md:flex-row md:items-center justify-between gap-4">
+                        <div>
+                          <div className="flex items-center gap-2 mb-1">
+                            <Badge variant="outline" className="border-primary/30 text-primary">{task.status === 'done' ? 'Concluida' : 'Pendente'}</Badge>
+                            <span className="text-xs text-white/40">{task.startDate || 'Sem data'}</span>
+                          </div>
+                          <h4 className="font-bold text-white">{task.title}</h4>
+                          <p className="text-xs text-white/50">{task.description || 'Sem descricao adicional.'}</p>
+                        </div>
+                        <div className="flex gap-2">
+                          {task.status !== 'done' ? (
+                            <Button size="sm" onClick={() => updatePastoralTaskStatus(task, 'done')} className="bg-green-500 text-black hover:bg-green-400 font-bold">
+                              <CheckCircle className="w-4 h-4 mr-2" /> Concluir
+                            </Button>
+                          ) : (
+                            <Button size="sm" variant="outline" onClick={() => updatePastoralTaskStatus(task, 'todo')} className="border-white/10">
+                              Reabrir
+                            </Button>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
             </TabsContent>
 

@@ -1,0 +1,292 @@
+# 🔍 Auditoria Técnica — Plataforma Ecossistema Coroado
+
+> **Data:** 14/06/2026  
+> **Escopo:** Frontend (24 componentes), Backend (Cloud Functions), Firebase config, Permissões, Dados, Segurança, UX/Fluxos  
+> **Método:** Leitura linha a linha de cada arquivo + análise cruzada de dependências
+
+---
+
+## 📋 Índice
+
+1. [Erros Críticos e Inconsistências Técnicas](#1-erros-críticos-e-inconsistências-técnicas)
+2. [Botões Mortos e Funcionalidades Sem Implementação](#2-botões-mortos-e-funcionalidades-sem-implementação)
+3. [Dados Hardcoded vs. Dados Dinâmicos](#3-dados-hardcoded-vs-dados-dinâmicos)
+4. [Intercomunicação entre Páginas (Dados Entrelaçados)](#4-intercomunicação-entre-páginas-dados-entrelaçados)
+5. [Segurança e Backend](#5-segurança-e-backend)
+6. [Dados Recorrentes para Indicadores e Tabelas](#6-dados-recorrentes-para-indicadores-e-tabelas)
+7. [Evoluções e Novas Funcionalidades Propostas](#7-evoluções-e-novas-funcionalidades-propostas)
+
+---
+
+## 1. Erros Críticos e Inconsistências Técnicas
+
+### 1.1 Importações de Animação Inconsistentes
+
+| Arquivo | Importação usada | Correto |
+|---|---|---|
+| [SocialView.tsx](file:///d:/Projetos/Coroado/Plataforma-Coroado/src/components/SocialView.tsx#L2) | `framer-motion` | ❌ |
+| [PastorsView.tsx](file:///d:/Projetos/Coroado/Plataforma-Coroado/src/components/PastorsView.tsx#L2) | `framer-motion` | ❌ |
+| [SocialMediaView.tsx](file:///d:/Projetos/Coroado/Plataforma-Coroado/src/components/SocialMediaView.tsx#L2) | `framer-motion` | ❌ |
+| [CellsView.tsx](file:///d:/Projetos/Coroado/Plataforma-Coroado/src/components/CellsView.tsx#L2) | `motion/react` | ✅ |
+| [CellManagementDashboard.tsx](file:///d:/Projetos/Coroado/Plataforma-Coroado/src/components/CellManagementDashboard.tsx#L2) | `motion/react` | ✅ |
+| [FinanceView.tsx](file:///d:/Projetos/Coroado/Plataforma-Coroado/src/components/FinanceView.tsx#L2) | `motion/react` | ✅ |
+
+> [!WARNING]
+> Três arquivos usam `framer-motion` enquanto o restante usa `motion/react`. Isso pode causar **dois bundles de animação** no build final, duplicando ~40KB+ gzipped. Padronizar para `motion/react` em todos os arquivos.
+
+### 1.2 Importação na posição errada
+
+- [FinanceView.tsx L537](file:///d:/Projetos/Coroado/Plataforma-Coroado/src/components/FinanceView.tsx#L537): Imports de lucide-react (`Users, Calendar, Heart, Edit3, Trash2, Plus`) estão **no final do arquivo** ao invés do topo. Funciona pelo hoisting do ES module, mas é um anti-pattern que confunde linters e desenvolvedores.
+
+### 1.3 Roles inconsistentes entre `HomeDashboard.tsx` e `permissions.ts`
+
+- [HomeDashboard.tsx L248-252](file:///d:/Projetos/Coroado/Plataforma-Coroado/src/components/HomeDashboard.tsx#L248-L252): Usa nomes de role **com underscores** (`senior_pastor`, `network_pastor`, `ministry_leader`, `leader`) que **NÃO existem** em `permissions.ts`, que usa camelCase (`seniorPastor`, `networkPastor`, `ministryLeader`, `cellLeader`).
+
+> [!CAUTION]
+> **Consequência:** O HomeDashboard **NUNCA** renderiza as tabs corretas (MacroDashboard, SupervisorDashboard, etc.) para líderes. Todo líder vê apenas "Visão Pessoal". Isso anula 100% da lógica de dashboard por cargo.
+
+### 1.4 `isAdmin` inconsistente entre módulos
+
+| Componente | Como verifica `isAdmin` | Usa `can()` do permissions? |
+|---|---|---|
+| [AdminView.tsx](file:///d:/Projetos/Coroado/Plataforma-Coroado/src/components/AdminView.tsx#L17) | `can(userData, "manage:seed")` | ✅ |
+| [FinanceView.tsx L39](file:///d:/Projetos/Coroado/Plataforma-Coroado/src/components/FinanceView.tsx#L39) | `userData?.profileType === 'admin' \|\| role?.includes(...)` | ❌ Hardcoded, `profileType` não existe no schema |
+| [AdminDashboardMetrics.tsx](file:///d:/Projetos/Coroado/Plataforma-Coroado/src/components/AdminDashboardMetrics.tsx#L34) | `can(userData, 'manage:finance')` | ✅ |
+| [PastorsView.tsx](file:///d:/Projetos/Coroado/Plataforma-Coroado/src/components/PastorsView.tsx) | mix de `isAdmin` prop + `userData.profileType` | ❌ Inconsistente |
+
+> [!IMPORTANT]
+> O campo `profileType` **não existe** no type `UserProfile` de `permissions.ts`. Qualquer componente que dependa dele está sempre `false`. Padronizar para usar exclusivamente `can()`.
+
+### 1.5 SchoolContext sem persistência
+
+- [SchoolContext.tsx](file:///d:/Projetos/Coroado/Plataforma-Coroado/src/contexts/SchoolContext.tsx): Toda a lógica de cursos, tracks e fórum usa `useState` local (memória). Significa que:
+  - Ao recarregar a página, **todos os cursos e perguntas do fórum somem**.
+  - O `AdminSupport.tsx` (central de suporte) consome `useSchool().forumQuestions`, que sempre estará **vazio** se não houver persistência.
+
+---
+
+## 2. Botões Mortos e Funcionalidades Sem Implementação
+
+### CellManagementDashboard.tsx (Células)
+
+| Botão | Linha | Status |
+|---|---|---|
+| "Lançar Encontro Semanal" | [L116-118](file:///d:/Projetos/Coroado/Plataforma-Coroado/src/components/CellManagementDashboard.tsx#L116) | 🔴 **Morto** — nenhum `onClick`, nenhum modal abre |
+| "Adicionar Novo Membro" | [L119-121](file:///d:/Projetos/Coroado/Plataforma-Coroado/src/components/CellManagementDashboard.tsx#L119) | 🔴 **Morto** — nenhum `onClick` |
+| "Registrar Novo Visitante" | [L122-124](file:///d:/Projetos/Coroado/Plataforma-Coroado/src/components/CellManagementDashboard.tsx#L122) | 🔴 **Morto** — nenhum `onClick` |
+| "WhatsApp" (alertas de cuidado) | [L141](file:///d:/Projetos/Coroado/Plataforma-Coroado/src/components/CellManagementDashboard.tsx#L141) | 🔴 **Morto** — nenhum `onClick` |
+| "Ligar" (alertas de cuidado) | [L148](file:///d:/Projetos/Coroado/Plataforma-Coroado/src/components/CellManagementDashboard.tsx#L148) | 🔴 **Morto** — nenhum `onClick` |
+| "Copiar Link Compartilhável" | [L205-207](file:///d:/Projetos/Coroado/Plataforma-Coroado/src/components/CellManagementDashboard.tsx#L205) | 🔴 **Morto** — nenhum `onClick` |
+| "Mostrar QR Code" | [L208-210](file:///d:/Projetos/Coroado/Plataforma-Coroado/src/components/CellManagementDashboard.tsx#L208) | 🔴 **Morto** — nenhum `onClick` |
+| "Nosso Instagram" | [L211-213](file:///d:/Projetos/Coroado/Plataforma-Coroado/src/components/CellManagementDashboard.tsx#L211) | 🔴 **Morto** — nenhum `onClick` |
+| "Adicionar" (membros tab) | [L226](file:///d:/Projetos/Coroado/Plataforma-Coroado/src/components/CellManagementDashboard.tsx#L226) | 🔴 **Morto** — nenhum `onClick` |
+| "Registrar" (visitantes tab) | [L264](file:///d:/Projetos/Coroado/Plataforma-Coroado/src/components/CellManagementDashboard.tsx#L264) | 🔴 **Morto** — nenhum `onClick` |
+| "Enviar Mensagem" (visitante) | [L282](file:///d:/Projetos/Coroado/Plataforma-Coroado/src/components/CellManagementDashboard.tsx#L282) | 🔴 **Morto** — nenhum `onClick` |
+| "Tornar Membro" (visitante) | [L283](file:///d:/Projetos/Coroado/Plataforma-Coroado/src/components/CellManagementDashboard.tsx#L283) | 🔴 **Morto** — nenhum `onClick` |
+| "Consolidar" (visitante) | [L284](file:///d:/Projetos/Coroado/Plataforma-Coroado/src/components/CellManagementDashboard.tsx#L284) | 🔴 **Morto** — nenhum `onClick` |
+| "Eu Quero" (escala) | [L349](file:///d:/Projetos/Coroado/Plataforma-Coroado/src/components/CellManagementDashboard.tsx#L349) | 🔴 **Morto** — nenhum `onClick` |
+| "Nova Escala" | [L331](file:///d:/Projetos/Coroado/Plataforma-Coroado/src/components/CellManagementDashboard.tsx#L331) | 🔴 **Morto** — nenhum `onClick` |
+| "Ver Detalhes" (relatório) | [L425](file:///d:/Projetos/Coroado/Plataforma-Coroado/src/components/CellManagementDashboard.tsx#L425) | 🔴 **Morto** — nenhum `onClick` |
+| Tabs "Gráficos Base" e "Gestão da Rede" | [L594-595](file:///d:/Projetos/Coroado/Plataforma-Coroado/src/components/CellManagementDashboard.tsx#L594) | 🔴 **Tab sem conteúdo** — `TabsContent` não existe para `charts` e `network` |
+
+> **Total em Células: 17 botões/ações mortos**
+
+### HomeDashboard.tsx
+
+| Botão | Linha | Status |
+|---|---|---|
+| "Ler agora" (devocional) | [L35](file:///d:/Projetos/Coroado/Plataforma-Coroado/src/components/HomeDashboard.tsx#L35) | 🔴 **Morto** — `variant="link"` sem destino |
+| "Árvore de Supervisão" | [L237-239](file:///d:/Projetos/Coroado/Plataforma-Coroado/src/components/HomeDashboard.tsx#L237) | 🟡 Placeholder "Em desenvolvimento" — sem prazo |
+
+### FinanceView.tsx
+
+| Botão | Linha | Status |
+|---|---|---|
+| "Falar com a Equipe" (missões) | [L379](file:///d:/Projetos/Coroado/Plataforma-Coroado/src/components/FinanceView.tsx#L379) | 🔴 **Morto** — nenhum `onClick` |
+
+### SocialMediaView.tsx
+
+| Item | Linha | Status |
+|---|---|---|
+| Link Spotify | [L32](file:///d:/Projetos/Coroado/Plataforma-Coroado/src/components/SocialMediaView.tsx#L32) | 🔴 URL é `#` — link morto |
+
+---
+
+## 3. Dados Hardcoded vs. Dados Dinâmicos
+
+### 3.1 Dados que deveriam vir do Firestore mas estão fixos no código
+
+| Componente | Dado Hardcoded | Onde |
+|---|---|---|
+| [CellManagementDashboard.tsx](file:///d:/Projetos/Coroado/Plataforma-Coroado/src/components/CellManagementDashboard.tsx) | "Média Mensal de Visitantes: 2" | L25 |
+| [CellManagementDashboard.tsx](file:///d:/Projetos/Coroado/Plataforma-Coroado/src/components/CellManagementDashboard.tsx) | "Relatórios Lançados: 0" (ignora `reports.length`) | L31 |
+| [CellManagementDashboard.tsx](file:///d:/Projetos/Coroado/Plataforma-Coroado/src/components/CellManagementDashboard.tsx) | Engajamento 0%, Assiduidade 65%, Escola IDE 85% | L47-96 |
+| [CellManagementDashboard.tsx](file:///d:/Projetos/Coroado/Plataforma-Coroado/src/components/CellManagementDashboard.tsx) | Alertas "Lucas Ferreira" e "Mariana Costa" | L138-149 |
+| [CellManagementDashboard.tsx](file:///d:/Projetos/Coroado/Plataforma-Coroado/src/components/CellManagementDashboard.tsx) | Escalas "Gabriel Henrique", "Priscila Mendes", etc. | L296-301 |
+| [CellManagementDashboard.tsx](file:///d:/Projetos/Coroado/Plataforma-Coroado/src/components/CellManagementDashboard.tsx) | Frequência "100%" no ResumoMembroTab | L170 |
+| [CellManagementDashboard.tsx](file:///d:/Projetos/Coroado/Plataforma-Coroado/src/components/CellManagementDashboard.tsx) | "IDE 100%" badge em todos os membros | L243 |
+| [CellManagementDashboard.tsx](file:///d:/Projetos/Coroado/Plataforma-Coroado/src/components/CellManagementDashboard.tsx) | Dropdown "Gerir Rede" com opções fixas | L577-581 |
+| [HomeDashboard.tsx](file:///d:/Projetos/Coroado/Plataforma-Coroado/src/components/HomeDashboard.tsx) | "Próxima Célula: Quinta, 20h" | L16-17 |
+| [HomeDashboard.tsx](file:///d:/Projetos/Coroado/Plataforma-Coroado/src/components/HomeDashboard.tsx) | "2 Cursos / Há 5 dias sem acesso" | L25-26 |
+| [HomeDashboard.tsx](file:///d:/Projetos/Coroado/Plataforma-Coroado/src/components/HomeDashboard.tsx) | Saúde da Célula "85%", Membros "12 +3" | L94-113 |
+| [HomeDashboard.tsx](file:///d:/Projetos/Coroado/Plataforma-Coroado/src/components/HomeDashboard.tsx) | MacroDashboard "1.204 membros", "84 células" | L201-219 |
+| [SocialView.tsx](file:///d:/Projetos/Coroado/Plataforma-Coroado/src/components/SocialView.tsx) | "+500 Famílias", "+10t Alimentos", "120 Servos" | L135-137 |
+| [AdminDashboardMetrics.tsx](file:///d:/Projetos/Coroado/Plataforma-Coroado/src/components/AdminDashboardMetrics.tsx) | "Supervisores Engajados 85%", etc. | L346-348 |
+| [StoreView.tsx](file:///d:/Projetos/Coroado/Plataforma-Coroado/src/components/StoreView.tsx) | Todos os 10 produtos do array PRODUCTS | L46-154 |
+| [PastorsView.tsx](file:///d:/Projetos/Coroado/Plataforma-Coroado/src/components/PastorsView.tsx) | Array PASTORS (fallback quando não tem Firestore) | L13-35 |
+| [CellsView.tsx](file:///d:/Projetos/Coroado/Plataforma-Coroado/src/components/CellsView.tsx) | Regiões "Centro, Norte, Sul" no dropdown | L98-102 |
+
+> [!IMPORTANT]
+> Os dados hardcoded criam uma **falsa sensação de funcionamento** para o usuário. O dashboard mostra "85% de saúde" e "1.204 membros" quando na realidade pode ter 3 membros no Firestore. Isso é enganoso e precisa ser substituído por dados reais calculados.
+
+---
+
+## 4. Intercomunicação entre Páginas (Dados Entrelaçados)
+
+### 4.1 Fluxos que DEVERIAM existir mas NÃO existem
+
+| De → Para | O que deveria acontecer | Status |
+|---|---|---|
+| **Célula → Escola** | Progresso dos membros na IDE deveria alimentar o "Monitor de Saúde da Célula" | 🔴 Não existe — percentuais são hardcoded |
+| **Célula → Membros** | Botão "Tornar Membro" no visitante deveria criar/atualizar doc em `users` | 🔴 Não existe — botão morto |
+| **Célula → Cuidado Pastoral** | Alertas de "Quebra de Engajamento" deveriam gerar solicitação pastoral | 🔴 Não existe — alertas são estáticos |
+| **Eventos → Financeiro** | Pagamento do ingresso (MP) deveria aparecer no histórico financeiro | 🔴 Parcial — `event_enrollments` e `transactions` são coleções separadas sem vínculo |
+| **Loja → Financeiro** | Vendas da loja deveriam alimentar o MRR no AdminFinance | 🔴 Parcial — `orders` vs `transactions` sem vínculo cruzado |
+| **Social → Pastores** | Agendamentos sociais e pastorais usam coleções diferentes sem dashboard unificado | 🟡 Separado |
+| **Escola → Membros** | Progresso na Escola IDE deveria ser visível na ficha do membro | 🔴 Não existe |
+| **Home Dashboard → Todos** | Dashboard pessoal deveria consumir dados reais de célula, escola, escalas | 🔴 100% hardcoded |
+
+### 4.2 Coleções Firestore mapeadas (usadas nos componentes)
+
+| Coleção | Usado em | Observação |
+|---|---|---|
+| `users` | MembersView, CellManagement, AuthView, App | ✅ Principal |
+| `cells` | CellsView, CellManagement, MembersView | ✅ Funcional |
+| `ministries` | MinistriesView, MembersView, AuthView | ✅ Funcional |
+| `cell_reports` | CellManagement (RelatoriosTab) | ✅ Funcional |
+| `events` | EventsView | ✅ Funcional |
+| `event_enrollments` | EventsView, mpWebhook | ✅ Funcional |
+| `social_professionals` | SocialView | ✅ Funcional |
+| `social_appointments` | SocialView | ✅ Funcional |
+| `pastoral_appointments` | PastorsView | ✅ Funcional |
+| `transactions` | FinanceView, AdminFinance | ✅ Funcional |
+| `campaigns` | FinanceView | ✅ Funcional |
+| `orders` | StoreView | ✅ Funcional |
+| `products` | StoreView (parcial, fallback local) | 🟡 Híbrido |
+| `plans` | AdminFinance | ✅ Funcional |
+| `kpi_targets` | AdminDashboardMetrics | ✅ Funcional |
+| `service_reports` | AdminDashboardMetrics | ✅ Funcional |
+| `financial_reports` | AdminDashboardMetrics | ✅ Funcional |
+| `courses` (SchoolContext) | SchoolView, AdminSupport | 🔴 **Só memória local, não Firestore** |
+| `subscriptions` | mpWebhook (backend) | ✅ Backend only |
+
+---
+
+## 5. Segurança e Backend
+
+### 5.1 Cloud Function `updateUserAccess` sem proteção
+
+- [functions/src/index.ts L173-209](file:///d:/Projetos/Coroado/Plataforma-Coroado/functions/src/index.ts#L173): A função `updateUserAccess` aceita qualquer usuário autenticado. **Qualquer membro pode promover a si mesmo para `admin`** enviando `{ targetUid: "meuId", roles: ["admin"] }`. O comentário no código reconhece isso mas não implementa a proteção.
+
+> [!CAUTION]
+> **CRÍTICO**: Sem validação de role no backend, a segurança de permissões inteira da plataforma é ilusória. Qualquer usuário com acesso ao DevTools do browser pode escalar privilégios.
+
+### 5.2 Token do Mercado Pago exposto
+
+- [functions/src/index.ts L10](file:///d:/Projetos/Coroado/Plataforma-Coroado/functions/src/index.ts#L10): O fallback do token é `TEST-000...` (seguro por ser teste), mas o padrão `process.env.MP_ACCESS_TOKEN || 'fallback'` significa que se a env var não estiver setada, a função **roda com token de teste em produção silenciosamente**.
+
+### 5.3 `tenantId` hardcoded como "tenant-1"
+
+- Múltiplos componentes usam `userData?.tenantId || 'tenant-1'` como fallback. Isso significa que dados sem tenant vão para um "bucket padrão" compartilhado, quebrando o isolamento multi-tenant.
+
+### 5.4 `server.ts` exposto na raiz
+
+- O arquivo [server.ts](file:///d:/Projetos/Coroado/Plataforma-Coroado/server.ts) na raiz do projeto contém lógica de servidor Express. Ele deveria estar numa pasta separada (`/server` ou dentro de `/functions`).
+
+---
+
+## 6. Dados Recorrentes para Indicadores e Tabelas
+
+### Dados que já existem e podem virar KPIs/indicadores
+
+| Dado | Coleção | KPI Potencial |
+|---|---|---|
+| `cell_reports.present` | `cell_reports` | **Taxa de Presença por Célula** (média por semana) |
+| `cell_reports.visitors` | `cell_reports` | **Taxa de Conversão de Visitantes** (visitantes → membros) |
+| `cell_reports.date` | `cell_reports` | **Frequência de Lançamento** (líderes que lançam vs não) |
+| `transactions.amount` + `type` | `transactions` | **Ticket Médio**, **MRR Real**, **Distribuição Dízimo vs Oferta** |
+| `orders.status` | `orders` | **Taxa de Conversão da Loja**, **Pedidos Pendentes** |
+| `event_enrollments.paymentStatus` | `event_enrollments` | **Taxa de Pagamento de Eventos** |
+| `social_appointments.status` | `social_appointments` | **Taxa de No-Show**, **Profissionais mais procurados** |
+| `pastoral_appointments.status` | `pastoral_appointments` | **Demanda Pastoral**, **Tempo médio de resposta** |
+| `users.createdAt` | `users` | **Crescimento de Membros/mês**, **Funil de Conversão** |
+| `users.isApproved` | `users` | **Taxa de Aprovação**, **Tempo médio de aprovação** |
+
+### Tabelas para criar no Firestore (agregações)
+
+| Tabela Sugerida | Propósito |
+|---|---|
+| `kpi_snapshots` | Snapshot semanal/mensal de todos os KPIs para gráficos históricos |
+| `member_engagement` | Score de engajamento por membro (célula + escola + eventos) |
+| `cell_health` | Saúde calculada da célula (presença, visitantes, lançamento de relatórios) |
+| `financial_summary` | Consolidação mensal de receitas por tipo |
+
+---
+
+## 7. Evoluções e Novas Funcionalidades Propostas
+
+### 7.1 Prioridade ALTA (Impacto direto na usabilidade)
+
+| # | Evolução | Módulo | Justificativa |
+|---|---|---|---|
+| 1 | **Implementar todos os botões mortos das Células** | CellManagement | 17 botões sem ação = módulo de Células praticamente não funcional para o líder |
+| 2 | **Corrigir roles do HomeDashboard** | HomeDashboard | Dashboard nunca mostra as tabs de liderança por nomenclatura incorreta |
+| 3 | **Persistir SchoolContext no Firestore** | SchoolView, SchoolContext | Cursos somem ao recarregar; AdminSupport fica vazio |
+| 4 | **Proteger `updateUserAccess` no backend** | Cloud Functions | Vulnerabilidade de escalação de privilégios |
+| 5 | **Padronizar `can()` como única fonte de permissão** | Todos os componentes | Eliminar `profileType`, `role?.includes()` e checks manuais |
+| 6 | **Calcular dados reais nos dashboards** | CellManagement, HomeDashboard | Substituir todos os hardcodes por queries ao Firestore |
+| 7 | **Unificar `framer-motion` → `motion/react`** | SocialView, PastorsView, SocialMediaView | Evitar bundle duplicado |
+
+### 7.2 Prioridade MÉDIA (Autonomia e Fluxos)
+
+| # | Evolução | Módulo | Descrição |
+|---|---|---|---|
+| 8 | **Chat interno com Firebase Realtime ou Firestore** | Todos | Criar coleção `chat_messages` com subcoleções por espaço (célula, ministério, escola). Renderizar um componente `<ChatPanel>` reutilizável. Usar `onSnapshot` para mensagens em tempo real. |
+| 9 | **Notificações in-app** | Layout | Badge de notificação no header + drawer com avisos (aprovação pendente, novo agendamento, nova escala, etc.) |
+| 10 | **Fluxo de Consolidação de Visitantes completo** | CellManagement | Visitante → Acompanhamento → Membro. Botão "Tornar Membro" cria doc em `users` com `cellId` preenchido |
+| 11 | **Escalas persistentes no Firestore** | CellManagement | Coleção `cell_scales` com data, tarefa, responsável, status (pendente/confirmado/recusado) |
+| 12 | **Relatório de impacto da Célula** | CellManagement | "Ver Detalhes" de um relatório abre um breakdown com nomes dos presentes, visitante, observações |
+| 13 | **Vínculo Escola ↔ Membro** | MembersView, SchoolView | Na ficha do membro, mostrar cursos matriculados e progresso. No painel de célula, mostrar quais membros estão ou não na IDE |
+| 14 | **Produtos dinâmicos do Firestore** | StoreView | Migrar o array `PRODUCTS` fixo para Firestore com CRUD de admin |
+| 15 | **PWA com Service Worker real** | AdminAutomations, Layout | O botão de "instalar PWA" existe mas não há `service-worker.js` configurado |
+
+### 7.3 Prioridade BAIXA (Refinamento e Escala)
+
+| # | Evolução | Módulo | Descrição |
+|---|---|---|---|
+| 16 | **Auditoria trail (log de ações)** | Todos | Coleção `audit_log` registrando quem fez o quê, quando (aprovações, mudanças de role, exclusões) |
+| 17 | **Exportar dados com Google Sheets API real** | AdminFinance, MembersView | Em vez de abrir `docs.google.com/spreadsheets` em nova aba, gerar planilha via API e preencher com dados |
+| 18 | **Gamificação na Escola IDE** | SchoolView | Rankings, streaks de estudo, badges desbloqueáveis vinculados ao perfil do membro |
+| 19 | **Dashboard unificado de agendamentos** | PastorsView, SocialView | Calendário visual com todos os agendamentos (pastorais + sociais) em um único local |
+| 20 | **Regiões dinâmicas para Células** | CellsView | Ao invés de "Centro, Norte, Sul" hardcoded, calcular regiões a partir dos endereços cadastrados |
+| 21 | **Multi-tenant real** | App, Firebase | Validar tenantId em todas as queries, adicionar seletor de igreja para admins que gerenciam múltiplas unidades |
+| 22 | **Webhook de confirmação de Pix real** | FinanceView, Functions | Integrar com gateway de pagamento Pix (Mercado Pago, Asaas, Gerencianet) ao invés de "confirmar simulado" |
+
+---
+
+## Resumo Quantitativo
+
+| Categoria | Quantidade |
+|---|---|
+| 🔴 Erros críticos de código | **5** |
+| 🔴 Botões sem funcionalidade | **21+** |
+| 🟡 Dados hardcoded mascarando realidade | **17+ ocorrências** |
+| 🔴 Fluxos de dados desconectados | **8 fluxos** |
+| 🔴 Vulnerabilidades de segurança | **3** |
+| 📊 Dados para indicadores (prontos para uso) | **10 métricas** |
+| 💡 Evoluções propostas | **22** |
+
+---
+
+> [!NOTE]
+> Esta auditoria foi feita com base na leitura completa do código-fonte. Os itens estão priorizados por impacto. Recomendo atacar primeiro os **itens 1-7 da Prioridade ALTA** antes de avançar para novas features, pois corrigem fundamentos que afetam toda a plataforma.

@@ -1,15 +1,30 @@
 import * as functions from 'firebase-functions';
 import * as admin from 'firebase-admin';
+import { getFirestore } from 'firebase-admin/firestore';
 import { MercadoPagoConfig, Preference, PreApproval } from 'mercadopago';
 
 admin.initializeApp();
 
-// You need to set the access token in Firebase Functions configuration
-// firebase functions:secrets:set MP_ACCESS_TOKEN
-const client = new MercadoPagoConfig({
-  accessToken: process.env.MP_ACCESS_TOKEN || 'TEST-0000000000000000-000000-00000000000000000000000000000000-000000000',
-  options: { timeout: 5000 }
-});
+const firestoreDatabaseId = process.env.FIRESTORE_DATABASE_ID || 'ai-studio-534c2e7e-8664-4b76-95e3-faf31fc1628b';
+
+function db() {
+  return getFirestore(admin.app(), firestoreDatabaseId);
+}
+
+function getMpAccessToken() {
+  const token = process.env.MP_ACCESS_TOKEN;
+  if (!token) {
+    throw new functions.https.HttpsError('failed-precondition', 'Mercado Pago is not configured.');
+  }
+  return token;
+}
+
+function getMpClient() {
+  return new MercadoPagoConfig({
+    accessToken: getMpAccessToken(),
+    options: { timeout: 5000 }
+  });
+}
 
 export const createPreference = functions.https.onCall(async (data: any, context: any) => {
   if (!context.auth) {
@@ -23,7 +38,7 @@ export const createPreference = functions.https.onCall(async (data: any, context
   }
 
   try {
-    const preference = new Preference(client);
+    const preference = new Preference(getMpClient());
 
     const response = await preference.create({
       body: {
@@ -51,7 +66,7 @@ export const createPreference = functions.https.onCall(async (data: any, context
 
     return {
       preferenceId: response.id,
-      initPoint: response.init_point
+      initPoint: response.init_point || response.sandbox_init_point
     };
   } catch (error) {
     console.error('Error creating preference:', error);
@@ -71,7 +86,7 @@ export const createSubscription = functions.https.onCall(async (data: any, conte
   }
 
   try {
-    const preApproval = new PreApproval(client);
+    const preApproval = new PreApproval(getMpClient());
 
     const response = await preApproval.create({
       body: {
@@ -109,7 +124,7 @@ export const mpWebhook = functions.https.onRequest(async (req: any, res: any) =>
       const paymentId = data.id;
       const response = await fetch(`https://api.mercadopago.com/v1/payments/${paymentId}`, {
         headers: {
-          Authorization: `Bearer ${process.env.MP_ACCESS_TOKEN || 'TEST-0000000000000000-000000-00000000000000000000000000000000-000000000'}`
+          Authorization: `Bearer ${getMpAccessToken()}`
         }
       });
       const paymentData = await response.json();
@@ -117,7 +132,7 @@ export const mpWebhook = functions.https.onRequest(async (req: any, res: any) =>
       if (paymentData.status === 'approved' && paymentData.external_reference) {
         const enrollmentId = paymentData.external_reference;
         
-        await admin.firestore().collection('event_enrollments').doc(enrollmentId).update({
+        await db().collection('event_enrollments').doc(enrollmentId).update({
           paymentStatus: 'approved',
           updatedAt: admin.firestore.FieldValue.serverTimestamp()
         });
@@ -135,7 +150,7 @@ export const mpWebhook = functions.https.onRequest(async (req: any, res: any) =>
       const subId = data.id;
       const response = await fetch(`https://api.mercadopago.com/preapproval/${subId}`, {
         headers: {
-          Authorization: `Bearer ${process.env.MP_ACCESS_TOKEN || 'TEST-0000000000000000-000000-00000000000000000000000000000000-000000000'}`
+          Authorization: `Bearer ${getMpAccessToken()}`
         }
       });
       const subData = await response.json();
@@ -144,14 +159,14 @@ export const mpWebhook = functions.https.onRequest(async (req: any, res: any) =>
         const referenceId = subData.external_reference; // This is mapped to userId
         
         // Update user document to grant premium access
-        await admin.firestore().collection('users').doc(referenceId).update({
+        await db().collection('users').doc(referenceId).update({
           subscriptionStatus: 'active',
           mpSubscriptionId: subId,
           subscriptionUpdatedAt: admin.firestore.FieldValue.serverTimestamp()
         });
         
         // Also save to subscriptions collection for history/logs
-        await admin.firestore().collection('subscriptions').doc(referenceId).set({
+        await db().collection('subscriptions').doc(referenceId).set({
           mpSubscriptionId: subId,
           status: 'authorized',
           updatedAt: admin.firestore.FieldValue.serverTimestamp()
@@ -175,9 +190,16 @@ export const updateUserAccess = functions.https.onCall(async (data: any, context
     throw new functions.https.HttpsError('unauthenticated', 'User must be authenticated.');
   }
 
-  // To secure this properly, we ensure only users with appropriate roles or specific emails can do this.
-  // In this project context, if the caller is logged in, we are trusting the client UI to hide the button.
-  // Ideally: if (!context.auth.token.roles?.includes('admin') && context.auth.token.email !== 'admin@coroado.org') throw ...
+  // Validate that the caller has an elevated role before allowing modifications
+  const callerDoc = await db().collection('users').doc(context.auth.uid).get();
+  const callerData = callerDoc.data();
+  const callerRoles: string[] = callerData?.roles || [];
+  const allowedRoles = ['admin', 'seniorPastor', 'networkPastor', 'auxPastor', 'supervisor'];
+  const hasPermission = callerRoles.some(r => allowedRoles.includes(r));
+
+  if (!hasPermission) {
+    throw new functions.https.HttpsError('permission-denied', 'You do not have permission to modify user access.');
+  }
 
   const { targetUid, roles, isApproved } = data;
 
@@ -185,11 +207,23 @@ export const updateUserAccess = functions.https.onCall(async (data: any, context
     throw new functions.https.HttpsError('invalid-argument', 'Missing targetUid.');
   }
 
+  // Prevent non-admins from granting admin role
+  if (roles && roles.includes('admin') && !callerRoles.includes('admin')) {
+    throw new functions.https.HttpsError('permission-denied', 'Only admins can grant admin role.');
+  }
+
   try {
     const updates: any = {};
+    const [targetUser, targetDoc] = await Promise.all([
+      admin.auth().getUser(targetUid),
+      db().collection('users').doc(targetUid).get(),
+    ]);
+    const existingClaims = targetUser.customClaims || {};
+    const targetData = targetDoc.data() || {};
+    const nextRoles = roles !== undefined ? roles : (targetData.roles || existingClaims.roles || []);
+    const nextIsApproved = isApproved !== undefined ? isApproved : (targetData.isApproved ?? existingClaims.isApproved ?? false);
     
     if (roles !== undefined) {
-      await admin.auth().setCustomUserClaims(targetUid, { roles });
       updates.roles = roles;
     }
     
@@ -197,8 +231,14 @@ export const updateUserAccess = functions.https.onCall(async (data: any, context
       updates.isApproved = isApproved;
     }
 
+    await admin.auth().setCustomUserClaims(targetUid, {
+      ...existingClaims,
+      roles: nextRoles,
+      isApproved: nextIsApproved,
+    });
+
     if (Object.keys(updates).length > 0) {
-      await admin.firestore().collection('users').doc(targetUid).set(updates, { merge: true });
+      await db().collection('users').doc(targetUid).set(updates, { merge: true });
     }
 
     return { success: true };
@@ -207,4 +247,3 @@ export const updateUserAccess = functions.https.onCall(async (data: any, context
     throw new functions.https.HttpsError('internal', 'Unable to update user access.');
   }
 });
-

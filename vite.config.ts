@@ -24,6 +24,17 @@ export default defineConfig(({mode}) => {
     },
     build: {
       chunkSizeWarningLimit: 1500,
+      rollupOptions: {
+        output: {
+          manualChunks(id) {
+            if (!id.includes('node_modules')) return undefined;
+            if (id.includes('firebase')) return 'vendor-firebase';
+            if (id.includes('recharts')) return 'vendor-charts';
+            if (id.includes('html5-qrcode') || id.includes('react-qr-code') || id.includes('leaflet') || id.includes('@react-google-maps')) return 'vendor-maps-checkin';
+            return 'vendor-core';
+          },
+        },
+      },
     },
   };
 });

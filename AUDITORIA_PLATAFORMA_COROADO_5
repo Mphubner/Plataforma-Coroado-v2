@@ -1,0 +1,83 @@
+# Auditoria Integral da Plataforma Coroado - Diagnóstico & Plano de Ação (14/06/2026)
+
+Esta auditoria profunda consolida a varredura completa de **todos os arquivos do projeto** (`src/components`, `server.ts`, `functions/src`, `lib/`), visando expor as inconsistências que a transição de stack (do Firebase Client-only para um Monolito Vite+Express com Microserviços Cloud Run) gerou ou mascarou.
+
+## User Review Required
+> [!WARNING]
+> Muitas funcionalidades parecem prontas na interface, mas estão completamente desconectadas de qualquer backend ou operando na memória do navegador. A aprovação deste documento guiará a próxima fase: **Destruir o código falso e plugar integrações reais.**
+
+## 1. Visão Arquitetural & Vulnerabilidades da Transição
+A aplicação encontra-se num estado **híbrido** de arquitetura:
+1. **Frontend:** React + Vite, com roteamento Lazy-loaded.
+2. **Backend Express (`server.ts`):** Roteador híbrido misturando APIs REST, inicializações de Webhooks e rotas estáticas.
+3. **Backend Firebase (`functions/src`):** Cloud Functions.
+4. **tRPC:** Preparado no server, mas subutilizado nos componentes.
+
+**Vulnerabilidades Encontradas:**
+* **Dupla Fonte da Verdade (Autorização):** A UI utiliza `lib/permissions.ts` (`can()`) que valida corretamente claims (roles), mas as regras do Firestore (`firestore.rules`) não refletem o mesmo rigor granular.
+* **Webhook do Mercado Pago:** O `server.ts` expõe a rota do webhook, porém no `functions/src/index.ts`, a função de callback carece de validação criptográfica (HMAC signature do Mercado Pago). **Risco:** Qualquer um pode enviar requisições de sucesso forjadas.
+* **Escalação de Privilégio (Mitigada mas frágil):** A função `updateUserAccess` foi ajustada para checar permissão via DB, contudo, é lenta e sujeita a race-conditions. A aprovação de membros na `MembersView.tsx` exibe alerta de falha de claims se o server estiver indisponível.
+
+## 2. Dívida Técnica Crítica: "Fake Implementations" & Botões Mortos
+Ao invés de funcionalidades reais, a interface possui **mais de 48 chamadas explícitas de simulação (`alert()` e `prompt()`)**. 
+
+### Dados Hardcoded Mascarando Estado
+* **Métricas da Home (`HomeDashboard.tsx`):** Os números como "85% Saúde da Célula", "12 Membros", "40% Engajamento" são textos fixos. O líder vê dados que não correspondem aos relatórios reais da sua célula.
+* **Painel Administrativo (`AdminStrategicGoals.tsx`):** O usuário preenche metas via `prompt("Qual o novo valor atual atingido?")` sem persistir no banco.
+* **Módulo de Pastores (`PastorsView.tsx`):** "Pastores mockados (rafael, fabricio, alan) não podem ser excluídos".
+* **Escola IDE (`SchoolView.tsx`):** Os acessos a cursos e progressos estão restritos a validações client-side com `useState`.
+* **Escalas (`CellManagementDashboard.tsx` & `MinistriesView.tsx`):** A função de "Sortear Pendentes" mistura randomização em memória. Recusar escalas abre um `prompt("Qual o motivo da recusa?")` inócuo.
+
+### Botões Inoperantes ("Dead Buttons")
+* `StoreView.tsx`: Compras de produtos estouram `alert('Erro ao atualizar pedido')` por falta de infraestrutura de carrinho atrelada a DB.
+* `SocialView.tsx`: Ações como "Agendar Aconselhamento", que deveriam integrar com Google Calendar (Fase 2 de nossa proposta), atualmente exibem `alert('Erro ao agendar')`. Salvar profissionais aciona `alert("Erro ao salvar profissional")`.
+* `UnitsView.tsx`, `EventsView.tsx`, `PastoralCareView.tsx`: Quase todas as interações de delegação de tarefas, criação de sub-recursos e comunicação caem em `alerts`.
+
+## 3. Integração Intercomunicação e Chats (Multi-Espaços)
+A plataforma possui entidades distintas (Células, Ministérios, Escolas, Gestão), mas falha ao atuar como um ecossistema. Conforme sua solicitação de "espaços para conversas", **a solução arquitetônica ideal é**:
+* **Criação de Canais Baseados em Contexto (`Spaces`):** 
+    - *CellSpace:* Cada documento de Célula no banco gera um espaço automático.
+    - *MinistrySpace:* Grupos por ministério.
+    - *ClassSpace (Escola IDE):* Fórum por aula.
+* **Arquitetura de Dados:** Tabela `chats` no Firestore com `contextId` (ex: `cell_123`) e subcoleção `messages`. Isso permitirá uso de listeners em tempo real (`onSnapshot`) e fluidez real entre páginas, descontinuando o chat simulado da `SocialView`.
+
+## 4. Auditoria de Dados para BI, Tabelas e Indicadores
+A plataforma já gera e interage com dados de alto valor estratégico. Mapeamos os seguintes pontos de extração contínua (arquitetura proposta):
+1. **Engajamento & Consolidação (Growth BI):** 
+    - Base de cruzamento: `cell_reports` x `visitor_leads`.
+    - Indicador: Taxa de conversão de visitante (1ª visita) a Membro Assíduo (>3 visitas).
+2. **Saúde Ministerial (Ministry BI):** 
+    - Base de cruzamento: `ministries` (escalas requeridas) x `escalas confirmadas`.
+    - Indicador: "Gaps de Turno" (Escalas sem voluntário atribuído faltando 48h).
+3. **Absenteísmo de Aprendizado (Learning BI):**
+    - Base de cruzamento: `school_progress` x `user_login_logs`.
+    - Indicador: Drop-off rate dos cursos (Qual trilha de curso perde alunos mais rápido?).
+4. **Fluxo de Atendimento Pastoral (Care BI):**
+    - Base: `briefings` de cuidado pastoral x `event_agendas`.
+    - Indicador: SLA de atendimento (Tempo entre pedido de aconselhamento e agendamento confirmado no Google Calendar).
+
+## 5. Proposta de Evolução e Refatoração (O Caminho Adiante)
+
+A transição deve agora sair do estágio visual e ir para o "encanamento" real:
+
+### Evoluções Propostas (Prioridade Altíssima)
+1. **Desmockar a Aplicação:**
+   - **Plano:** Substituir todos os `alerts` e dados estáticos de `HomeDashboard.tsx` e `CellManagementDashboard.tsx` por hooks reativos. Onde não há API, criar os enpoints Express ou Triggers Firestore.
+2. **Chat Multi-Espaços (Global Comms):**
+   - **Plano:** Implementar um componente de `<GlobalChatSpace contextId={...} />` que injeta o chat real do Firestore dentro do contexto de uma Célula, Ministério ou Escola IDE.
+3. **Integração Google APIs (Tasks e Calendar):**
+   - **Plano:** Construir um microserviço Node.js que realiza OAuth2 delegation. Botões de "Aconselhamento" criarão enventos no Calendar da congregação/líder; botões de "Delegar" enviarão tarefas para o Google Tasks do pastor.
+4. **Validação Rigorosa Mercado Pago:**
+   - **Plano:** Escrever middleware de validação do signature `x-signature` nos webhooks do Node.js.
+
+## Open Questions
+
+> [!CAUTION]
+> Para iniciarmos a resolução, como prefere fatiar as entregas?
+> 1. Iniciar **pela construção da Integração do Chat Multi-Espaços** (Células, Ministérios, Escola IDE).
+> 2. Iniciar **pela remoção de Dados Falsos e ligação das APIs** dos dashboards (Home e Células).
+> 3. Iniciar **pelas integrações do Google (Calendar/Tasks)**.
+> Por favor, indique por onde prefere que eu dispare o código.
+
+## Proposta de Execução
+Não alteraremos arquivos até que uma das frentes seja decidida. A aprovação deste plano marca a transição da Fase de Auditoria Visual para a Fase de Ligação Real de Dados.

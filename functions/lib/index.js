@@ -1,16 +1,28 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.mpWebhook = exports.createSubscription = exports.createPreference = void 0;
+exports.updateUserAccess = exports.mpWebhook = exports.createSubscription = exports.createPreference = void 0;
 const functions = require("firebase-functions");
 const admin = require("firebase-admin");
+const firestore_1 = require("firebase-admin/firestore");
 const mercadopago_1 = require("mercadopago");
 admin.initializeApp();
-// You need to set the access token in Firebase Functions configuration
-// firebase functions:secrets:set MP_ACCESS_TOKEN
-const client = new mercadopago_1.MercadoPagoConfig({
-    accessToken: process.env.MP_ACCESS_TOKEN || 'TEST-0000000000000000-000000-00000000000000000000000000000000-000000000',
-    options: { timeout: 5000 }
-});
+const firestoreDatabaseId = process.env.FIRESTORE_DATABASE_ID || 'ai-studio-534c2e7e-8664-4b76-95e3-faf31fc1628b';
+function db() {
+    return (0, firestore_1.getFirestore)(admin.app(), firestoreDatabaseId);
+}
+function getMpAccessToken() {
+    const token = process.env.MP_ACCESS_TOKEN;
+    if (!token) {
+        throw new functions.https.HttpsError('failed-precondition', 'Mercado Pago is not configured.');
+    }
+    return token;
+}
+function getMpClient() {
+    return new mercadopago_1.MercadoPagoConfig({
+        accessToken: getMpAccessToken(),
+        options: { timeout: 5000 }
+    });
+}
 exports.createPreference = functions.https.onCall(async (data, context) => {
     if (!context.auth) {
         throw new functions.https.HttpsError('unauthenticated', 'User must be authenticated.');
@@ -20,7 +32,7 @@ exports.createPreference = functions.https.onCall(async (data, context) => {
         throw new functions.https.HttpsError('invalid-argument', 'Missing required parameters.');
     }
     try {
-        const preference = new mercadopago_1.Preference(client);
+        const preference = new mercadopago_1.Preference(getMpClient());
         const response = await preference.create({
             body: {
                 items: [
@@ -46,7 +58,7 @@ exports.createPreference = functions.https.onCall(async (data, context) => {
         });
         return {
             preferenceId: response.id,
-            initPoint: response.init_point
+            initPoint: response.init_point || response.sandbox_init_point
         };
     }
     catch (error) {
@@ -63,7 +75,7 @@ exports.createSubscription = functions.https.onCall(async (data, context) => {
         throw new functions.https.HttpsError('invalid-argument', 'Missing required parameters.');
     }
     try {
-        const preApproval = new mercadopago_1.PreApproval(client);
+        const preApproval = new mercadopago_1.PreApproval(getMpClient());
         const response = await preApproval.create({
             body: {
                 reason: planTitle || 'Assinatura',
@@ -97,13 +109,13 @@ exports.mpWebhook = functions.https.onRequest(async (req, res) => {
             const paymentId = data.id;
             const response = await fetch(`https://api.mercadopago.com/v1/payments/${paymentId}`, {
                 headers: {
-                    Authorization: `Bearer ${process.env.MP_ACCESS_TOKEN || 'TEST-0000000000000000-000000-00000000000000000000000000000000-000000000'}`
+                    Authorization: `Bearer ${getMpAccessToken()}`
                 }
             });
             const paymentData = await response.json();
             if (paymentData.status === 'approved' && paymentData.external_reference) {
                 const enrollmentId = paymentData.external_reference;
-                await admin.firestore().collection('event_enrollments').doc(enrollmentId).update({
+                await db().collection('event_enrollments').doc(enrollmentId).update({
                     paymentStatus: 'approved',
                     updatedAt: admin.firestore.FieldValue.serverTimestamp()
                 });
@@ -121,13 +133,20 @@ exports.mpWebhook = functions.https.onRequest(async (req, res) => {
             const subId = data.id;
             const response = await fetch(`https://api.mercadopago.com/preapproval/${subId}`, {
                 headers: {
-                    Authorization: `Bearer ${process.env.MP_ACCESS_TOKEN || 'TEST-0000000000000000-000000-00000000000000000000000000000000-000000000'}`
+                    Authorization: `Bearer ${getMpAccessToken()}`
                 }
             });
             const subData = await response.json();
             if (subData.status === 'authorized' && subData.external_reference) {
-                const referenceId = subData.external_reference;
-                await admin.firestore().collection('subscriptions').doc(referenceId).set({
+                const referenceId = subData.external_reference; // This is mapped to userId
+                // Update user document to grant premium access
+                await db().collection('users').doc(referenceId).update({
+                    subscriptionStatus: 'active',
+                    mpSubscriptionId: subId,
+                    subscriptionUpdatedAt: admin.firestore.FieldValue.serverTimestamp()
+                });
+                // Also save to subscriptions collection for history/logs
+                await db().collection('subscriptions').doc(referenceId).set({
                     mpSubscriptionId: subId,
                     status: 'authorized',
                     updatedAt: admin.firestore.FieldValue.serverTimestamp()
@@ -143,6 +162,58 @@ exports.mpWebhook = functions.https.onRequest(async (req, res) => {
     }
     else {
         res.status(200).send('Ignored event');
+    }
+});
+exports.updateUserAccess = functions.https.onCall(async (data, context) => {
+    if (!context.auth) {
+        throw new functions.https.HttpsError('unauthenticated', 'User must be authenticated.');
+    }
+    // Validate that the caller has an elevated role before allowing modifications
+    const callerDoc = await db().collection('users').doc(context.auth.uid).get();
+    const callerData = callerDoc.data();
+    const callerRoles = callerData?.roles || [];
+    const allowedRoles = ['admin', 'seniorPastor', 'networkPastor', 'auxPastor', 'supervisor'];
+    const hasPermission = callerRoles.some(r => allowedRoles.includes(r));
+    if (!hasPermission) {
+        throw new functions.https.HttpsError('permission-denied', 'You do not have permission to modify user access.');
+    }
+    const { targetUid, roles, isApproved } = data;
+    if (!targetUid) {
+        throw new functions.https.HttpsError('invalid-argument', 'Missing targetUid.');
+    }
+    // Prevent non-admins from granting admin role
+    if (roles && roles.includes('admin') && !callerRoles.includes('admin')) {
+        throw new functions.https.HttpsError('permission-denied', 'Only admins can grant admin role.');
+    }
+    try {
+        const updates = {};
+        const [targetUser, targetDoc] = await Promise.all([
+            admin.auth().getUser(targetUid),
+            db().collection('users').doc(targetUid).get(),
+        ]);
+        const existingClaims = targetUser.customClaims || {};
+        const targetData = targetDoc.data() || {};
+        const nextRoles = roles !== undefined ? roles : (targetData.roles || existingClaims.roles || []);
+        const nextIsApproved = isApproved !== undefined ? isApproved : (targetData.isApproved ?? existingClaims.isApproved ?? false);
+        if (roles !== undefined) {
+            updates.roles = roles;
+        }
+        if (isApproved !== undefined) {
+            updates.isApproved = isApproved;
+        }
+        await admin.auth().setCustomUserClaims(targetUid, {
+            ...existingClaims,
+            roles: nextRoles,
+            isApproved: nextIsApproved,
+        });
+        if (Object.keys(updates).length > 0) {
+            await db().collection('users').doc(targetUid).set(updates, { merge: true });
+        }
+        return { success: true };
+    }
+    catch (error) {
+        console.error('Error updating user access:', error);
+        throw new functions.https.HttpsError('internal', 'Unable to update user access.');
     }
 });
 //# sourceMappingURL=index.js.map

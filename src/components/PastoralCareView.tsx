@@ -5,7 +5,8 @@ import { Button } from '@/components/ui/button';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { db } from '@/lib/firebase';
-import { collection, query, where, onSnapshot, doc, updateDoc, serverTimestamp } from 'firebase/firestore';
+import { collection, query, where, onSnapshot } from 'firebase/firestore';
+import { updatePrayerRequestStatus, updateVisitorLeadStatus } from '@/src/lib/services/pastoralService';
 
 // Types
 export type VisitorLead = {
@@ -77,12 +78,20 @@ export function PastoralCareView({ isLoggedIn = true, userData }: { isLoggedIn?:
 
   const handleUpdateLeadStatus = async (id: string, newStatus: VisitorLead['status']) => {
     try {
-      const docRef = doc(db, 'visitor_leads', id);
-      await updateDoc(docRef, { status: newStatus, updatedAt: serverTimestamp() });
+      await updateVisitorLeadStatus(id, newStatus);
       setSelectedLead(null);
     } catch (e) {
       console.error(e);
       alert("Nao foi possivel atualizar o visitante.");
+    }
+  };
+
+  const handleUpdatePrayerStatus = async (id: string, status: PrayerRequest['status']) => {
+    try {
+      await updatePrayerRequestStatus(id, status);
+    } catch (e) {
+      console.error(e);
+      alert("Erro");
     }
   };
 
@@ -229,19 +238,9 @@ export function PastoralCareView({ isLoggedIn = true, userData }: { isLoggedIn?:
                         className="w-full border-white/10 hover:bg-white/5 transition-all text-xs h-8"
                         onClick={async () => {
                             if (prayer.status === 'open') {
-                                try {
-                                    await updateDoc(doc(db, 'prayer_requests', prayer.id), { status: 'praying', updatedAt: serverTimestamp() });
-                                } catch (e) {
-                                    console.error(e);
-                                    alert("Erro");
-                                }
+                                await handleUpdatePrayerStatus(prayer.id, 'praying');
                             } else if (prayer.status === 'praying') {
-                                try {
-                                    await updateDoc(doc(db, 'prayer_requests', prayer.id), { status: 'answered', updatedAt: serverTimestamp() });
-                                } catch (e) {
-                                    console.error(e);
-                                    alert("Erro");
-                                }
+                                await handleUpdatePrayerStatus(prayer.id, 'answered');
                             }
                         }}
                     >

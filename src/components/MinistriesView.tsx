@@ -1,12 +1,19 @@
 import * as React from "react"
 import { motion } from "motion/react"
-import { Users, Calendar, CheckCircle2, AlertCircle, Plus, Search, ChevronRight, Music, Heart, Camera, Coffee, Shield, Clock, XCircle, BookOpen, Home, CalendarCheck, GraduationCap } from "lucide-react"
+import { Users, Calendar, CheckCircle2, AlertCircle, Plus, Search, ChevronRight, Music, Heart, Camera, Coffee, Shield, Clock, XCircle, BookOpen, Home, CalendarCheck, GraduationCap, MessageSquare } from "lucide-react"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { db } from "@/lib/firebase";
-import { collection, query, where, onSnapshot, getDoc, doc, addDoc, updateDoc, deleteDoc, serverTimestamp } from "firebase/firestore";
+import { collection, query, where, onSnapshot } from "firebase/firestore";
 import { can } from "@/src/lib/permissions";
+import {
+  createBriefing,
+  createMinistry,
+  createScale,
+  updateBriefingStatus,
+  updateScaleAssignments,
+} from "@/src/lib/services/ministriesService";
 
 // Types
 export type BriefingStatus = 'todo' | 'in-progress' | 'done' | 'pending' | 'accepted' | 'declined' | 'completed';
@@ -149,12 +156,10 @@ export function MinistriesView({ isLoggedIn = true, userData, onLoginClick }: { 
   const handleCreateMinistry = async () => {
     if (!newMinistry.name) return;
     try {
-      await addDoc(collection(db, 'ministries'), {
+      await createMinistry({
         ...newMinistry,
         leaderId: userData?.id || '',
         tenantId: userData?.tenantId,
-        createdAt: serverTimestamp(),
-        updatedAt: serverTimestamp()
       });
       setShowNewMinistryForm(false);
       setNewMinistry({ name: '', description: '', leaderName: '', icon: 'users', members: [], requiredTracks: [] });
@@ -259,16 +264,12 @@ export function MinistriesView({ isLoggedIn = true, userData, onLoginClick }: { 
 
   const handleStatusChange = async (scaleId: string, memberId: string, newStatus: ScaleStatus) => {
     try {
-      const scaleRef = doc(db, 'scales', scaleId);
       const scale = scales.find(s => s.id === scaleId);
       if (!scale) return;
       const updatedAssignments = scale.assignments.map(a => 
         a.memberId === memberId ? { ...a, status: newStatus } : a
       );
-      await updateDoc(scaleRef, {
-        assignments: updatedAssignments,
-        updatedAt: serverTimestamp()
-      });
+      await updateScaleAssignments(scaleId, updatedAssignments);
     } catch (e) {
       console.error(e);
       alert("Erro ao atualizar status: " + (e as Error).message);
@@ -315,7 +316,7 @@ export function MinistriesView({ isLoggedIn = true, userData, onLoginClick }: { 
               {briefing.status === 'accepted' || briefing.status === 'todo' || briefing.status === 'in-progress' ? (
                 <Button size="sm" variant="ghost" className="h-6 px-2 text-[10px] text-white/40 hover:text-white" onClick={async () => {
                   try {
-                    await updateDoc(doc(db, 'briefings', briefing.id), { status: 'completed' });
+                    await updateBriefingStatus(briefing.id, 'completed');
                   } catch (e) { console.error(e); }
                 }}>Concluir ✓</Button>
               ) : null}
@@ -325,14 +326,14 @@ export function MinistriesView({ isLoggedIn = true, userData, onLoginClick }: { 
               <div className="flex gap-2 w-full mt-2">
                 <Button size="sm" className="flex-1 h-7 text-[10px] bg-green-500/20 text-green-400 hover:bg-green-500/30" onClick={async () => {
                   try {
-                    await updateDoc(doc(db, 'briefings', briefing.id), { status: 'accepted' });
+                    await updateBriefingStatus(briefing.id, 'accepted');
                   } catch (e) { console.error(e); }
                 }}>Aceitar</Button>
                 <Button size="sm" className="flex-1 h-7 text-[10px] bg-red-500/20 text-red-400 hover:bg-red-500/30" onClick={async () => {
                   const reason = prompt("Qual o motivo da recusa?");
                   if (reason) {
                     try {
-                      await updateDoc(doc(db, 'briefings', briefing.id), { status: 'declined', declineReason: reason });
+                      await updateBriefingStatus(briefing.id, 'declined', reason);
                     } catch (e) { console.error(e); }
                   }
                 }}>Declinar</Button>
@@ -366,6 +367,14 @@ export function MinistriesView({ isLoggedIn = true, userData, onLoginClick }: { 
               <p className="text-white/60">Líder: {selectedMinistry.leaderName}</p>
             </div>
           </div>
+          <Button 
+            variant="outline" 
+            className="ml-auto bg-zinc-800/50 border-white/10 hover:bg-white/10 rounded-full text-white"
+            onClick={() => window.open('https://chat.google.com/', '_blank')}
+          >
+            <MessageSquare className="w-4 h-4 mr-2" />
+            Espaço no Chat
+          </Button>
         </div>
 
         <div className="w-full space-y-6">
@@ -595,7 +604,7 @@ export function MinistriesView({ isLoggedIn = true, userData, onLoginClick }: { 
                                       const targetIdx = newAssignments.findIndex(x => x === a);
                                       if(targetIdx > -1) {
                                          newAssignments[targetIdx] = { ...a, memberId: currentUserId!, status: 'accepted' };
-                                         updateDoc(doc(db, 'scales', scale.id), { assignments: newAssignments });
+                                         updateScaleAssignments(scale.id, newAssignments);
                                       }
                                   }}>Eu Quero</Button>
                                </div>
@@ -938,12 +947,10 @@ export function MinistriesView({ isLoggedIn = true, userData, onLoginClick }: { 
                   <Button className="flex-1 bg-primary text-black font-bold" onClick={async () => {
                     if (newBriefing.title && newBriefing.deadline) {
                       try {
-                        await addDoc(collection(db, 'briefings'), {
+                        await createBriefing({
                           ...newBriefing,
                           ministryId: selectedMinistry.id,
                           tenantId: tenantId,
-                          createdAt: serverTimestamp(),
-                          updatedAt: serverTimestamp()
                         });
                         setShowBriefingForm(false);
                         setNewBriefing({ title: '', description: '', requesterMinistry: '', deadline: '', status: 'todo' });
@@ -1037,12 +1044,10 @@ export function MinistriesView({ isLoggedIn = true, userData, onLoginClick }: { 
                   <Button className="flex-1 bg-primary text-black font-bold" onClick={async () => {
                     if (newScale.eventName && newScale.date && newScale.time) {
                       try {
-                        await addDoc(collection(db, 'scales'), {
+                        await createScale({
                           ...newScale,
                           ministryId: selectedMinistry.id,
                           tenantId: tenantId,
-                          createdAt: serverTimestamp(),
-                          updatedAt: serverTimestamp()
                         });
                         setShowScaleForm(false);
                         setNewScale({ eventName: '', date: '', time: '', setlist: [], assignments: [] });

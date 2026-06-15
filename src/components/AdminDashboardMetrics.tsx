@@ -3,7 +3,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { AlertTriangle, TrendingUp, Users, DollarSign, Target, Settings, X, Plus } from 'lucide-react';
+import { AlertTriangle, TrendingUp, Users, DollarSign, Target, Settings, X, Plus, Database } from 'lucide-react';
 import { XAxis, YAxis, CartesianGrid, ResponsiveContainer, Tooltip as RechartsTooltip, AreaChart, Area } from 'recharts';
 import { auth, db } from "@/lib/firebase";
 import { collection, query, where, onSnapshot, addDoc, updateDoc, doc, serverTimestamp, getDocs } from "firebase/firestore";
@@ -125,6 +125,20 @@ export function AdminDashboardMetrics({ userData }: { userData?: any }) {
   const totalVisitors = services.reduce((acc, curr) => acc + curr.visitorsActual, 0);
   const maxAttendance = services.length > 0 ? Math.max(...services.map(s => s.attendanceActual)) : 0;
   const activeCells = cellCount;
+  const formatPercent = (value: number) => `${Math.round(Math.max(0, Math.min(value, 100)))}%`;
+  const attendanceTargetRate = services.length > 0
+    ? services.reduce((acc, curr) => {
+        const target = Number(curr.attendanceTarget || 0);
+        return acc + (target > 0 ? (Number(curr.attendanceActual || 0) / target) * 100 : 0);
+      }, 0) / services.length
+    : 0;
+  const multiplicationRate = targets.activeCells ? (activeCells / targets.activeCells) * 100 : 0;
+  const visitorGoalRate = targets.visitorsTarget ? (totalVisitors / targets.visitorsTarget) * 100 : 0;
+  const healthMetrics = [
+    { label: "Frequencia vs Meta", value: formatPercent(attendanceTargetRate), color: attendanceTargetRate >= 80 ? "bg-green-500" : "bg-yellow-500" },
+    { label: "Meta de Multiplicacao", value: formatPercent(multiplicationRate), color: multiplicationRate >= 70 ? "bg-green-500" : "bg-red-500" },
+    { label: "Visitantes vs Meta", value: formatPercent(visitorGoalRate), color: visitorGoalRate >= 70 ? "bg-green-500" : "bg-yellow-500" },
+  ];
 
   // Compute Chart Data based on actual entries
   const chartDataMap: Record<string, any> = {
@@ -160,6 +174,8 @@ export function AdminDashboardMetrics({ userData }: { userData?: any }) {
     const m = getMonthStr(s.date);
     if (chartDataMap[m]) chartDataMap[m].visitors += s.visitorsActual;
   });
+
+  chartDataMap[getMonthStr(new Date().toISOString().split('T')[0])].cellules = activeCells;
 
   // Convert to array and slice up to current month or show everything
   const computedAnalyticsData = Object.values(chartDataMap);
@@ -342,11 +358,7 @@ export function AdminDashboardMetrics({ userData }: { userData?: any }) {
               <CardTitle className="text-lg">Saúde da Liderança</CardTitle>
             </CardHeader>
             <CardContent className="flex-1 space-y-6">
-              {[
-                { label: "Supervisores Engajados", value: "85%", color: "bg-green-500" },
-                { label: "Meta de Multiplicação", value: "40%", color: "bg-red-500" },
-                { label: "Retenção de Visitantes", value: "65%", color: "bg-yellow-500" },
-              ].map((metric, i) => (
+              {healthMetrics.map((metric, i) => (
                 <div key={i} className="space-y-2">
                   <div className="flex justify-between text-sm">
                     <span className="text-white/80 font-medium">{metric.label}</span>
@@ -368,6 +380,17 @@ export function AdminDashboardMetrics({ userData }: { userData?: any }) {
                     Setor B teve queda de 15% na frequência dos cultos neste mês. Sugere-se visita pastoral.
                   </p>
                   <Button size="sm" variant="outline" className="w-full mt-2 border-red-500/30 text-red-400 hover:bg-red-500/20">Agendar Reunião</Button>
+                </div>
+
+                <div className="p-4 bg-blue-500/10 border border-blue-500/20 rounded-xl space-y-2 mt-4">
+                  <div className="flex items-center gap-2 text-blue-500">
+                    <Database className="h-4 w-4" />
+                    <span className="text-sm font-bold">Camada SQL / BI</span>
+                    <Badge variant="outline" className="border-blue-500/50 text-blue-400 ml-auto text-[10px]">Planejado</Badge>
+                  </div>
+                  <p className="text-xs text-white/60">
+                    Ainda não há replicação SQL ativa. A base operacional segue no Firebase; a camada SQL deve entrar como evolução para BI, relatórios e auditoria financeira.
+                  </p>
                 </div>
               </div>
             </CardContent>

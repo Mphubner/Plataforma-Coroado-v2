@@ -8,12 +8,13 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { auth, db } from "@/lib/firebase";
-import { collection, query, where, onSnapshot, doc, updateDoc, getDocs } from "firebase/firestore";
+import { collection, query, where, onSnapshot, getDocs } from "firebase/firestore";
 import { httpsCallable } from "firebase/functions";
 import { functions } from "@/lib/firebase";
 import { GoogleMap, useJsApiLoader, Marker } from '@react-google-maps/api';
 import { motion, AnimatePresence } from 'motion/react';
 import { can } from "@/src/lib/permissions";
+import { updateMemberProfile, syncMinistryLeader } from "@/src/lib/services/membersService";
 
 // Remove Leaflet fix
 
@@ -49,7 +50,7 @@ export function MembersView({ userData }: { userData?: any }) {
 
   const { isLoaded } = useJsApiLoader({
     id: 'google-map-script',
-    googleMapsApiKey: process.env.VITE_GOOGLE_MAPS_API_KEY || "AIzaSy_placeholder_key"
+    googleMapsApiKey: import.meta.env.VITE_GOOGLE_MAPS_API_KEY || ""
   });
 
   useEffect(() => {
@@ -125,7 +126,7 @@ export function MembersView({ userData }: { userData?: any }) {
       const rolesChanged = JSON.stringify(originalMember?.roles || []) !== JSON.stringify(editingMember.roles || []);
 
       // 1. Atualiza dados de texto no Firestore (independente de falha de Admin API)
-      await updateDoc(doc(db, 'users', editingMember.id), {
+      await updateMemberProfile(editingMember.id, {
         cellId: editingMember.cellId || "",
         ministryId: editingMember.ministryId || "",
         supervisorId: editingMember.supervisorId || "",
@@ -137,17 +138,14 @@ export function MembersView({ userData }: { userData?: any }) {
         maritalStatus: editingMember.maritalStatus || "",
         profession: editingMember.profession || "",
         socialMedia: editingMember.socialMedia || "",
-        avatarUrl: editingMember.avatarUrl || ""
+        avatarUrl: editingMember.avatarUrl || "",
       });
 
       // Se virou líder de ministério, atualiza o líder no doc do ministério correspondente
       const addedMinistryLeader = !originalMember?.roles?.includes('ministryLeader') && editingMember.roles?.includes('ministryLeader');
       if (addedMinistryLeader && editingMember.ministryId) {
         try {
-          await updateDoc(doc(db, 'ministries', editingMember.ministryId), {
-            leaderId: editingMember.id,
-            leaderName: editingMember.name
-          });
+          await syncMinistryLeader(editingMember.ministryId, { id: editingMember.id, name: editingMember.name });
         } catch (e) {
           console.error("Falha ao atualizar líder no ministério", e);
         }
@@ -263,9 +261,19 @@ export function MembersView({ userData }: { userData?: any }) {
 
   return (
     <div className="space-y-8 pb-20">
-      <div>
-        <h1 className="text-4xl font-black tracking-tight uppercase">Membros</h1>
-        <p className="text-white/60">Gestão global de membros, hierarquia e mapa demográfico.</p>
+      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+        <div>
+          <h1 className="text-4xl font-black tracking-tight uppercase">Membros</h1>
+          <p className="text-white/60">Gestão global de membros, hierarquia e mapa demográfico.</p>
+        </div>
+        <div className="flex items-center gap-2">
+          <Button variant="outline" className="bg-[#1a73e8]/10 text-[#1a73e8] border-none hover:bg-[#1a73e8]/20" onClick={() => window.open('https://contacts.google.com/', '_blank')}>
+            Google Contacts
+          </Button>
+          <Button variant="outline" className="bg-[#ea4335]/10 text-[#ea4335] border-none hover:bg-[#ea4335]/20" onClick={() => window.open('https://mail.google.com/', '_blank')}>
+            Gmail
+          </Button>
+        </div>
       </div>
 
       <div className="grid md:grid-cols-3 gap-4">

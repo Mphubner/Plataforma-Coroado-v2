@@ -6,11 +6,13 @@ import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Carousel, CarouselContent, CarouselItem, CarouselNext, CarouselPrevious } from '@/components/ui/carousel';
 import { db } from "@/lib/firebase";
-import { collection, query, onSnapshot, orderBy, limit, updateDoc, doc, addDoc, serverTimestamp } from "firebase/firestore";
+import { collection, query, onSnapshot, limit, updateDoc, doc, serverTimestamp } from "firebase/firestore";
 import { handleFirestoreError, OperationType } from '@/lib/firestoreUtils';
 import { CalendarCheck, Music } from 'lucide-react';
 import { getHomeSections, routeById, type RouteId } from '@/src/lib/permissions';
 import { HomeDashboard } from './HomeDashboard';
+import { postJson } from '@/src/lib/api/http';
+import { pageMotion } from '@/src/lib/motion/presets';
 
 export function HomeView({ onTabChange, userData }: { onTabChange: (tab: string) => void, userData?: any }) {
   const [selectedEvent, setSelectedEvent] = React.useState<any>(null);
@@ -32,13 +34,12 @@ export function HomeView({ onTabChange, userData }: { onTabChange: (tab: string)
     }
     setIsVisitorSubmitting(true);
     try {
-      await addDoc(collection(db, 'visitor_leads'), {
+      await postJson('/api/visitor-leads', {
         name: visitorName,
         phone: visitorPhone,
         neighborhood: visitorNeighborhood,
         tenantId: userData?.tenantId || 'tenant-1',
-        createdAt: serverTimestamp(),
-        status: 'pending'
+        source: 'home_novo_aqui',
       });
       alert("Obrigado! Nossos líderes entrarão em contato com você em breve!");
       setVisitorName('');
@@ -95,7 +96,10 @@ export function HomeView({ onTabChange, userData }: { onTabChange: (tab: string)
       const newAssignments = oldAssignments.map((a: any) =>
         a.memberId === userData.id ? { ...a, status } : a
       );
-      await updateDoc(doc(db, 'scales', scaleId), { assignments: newAssignments });
+      await updateDoc(doc(db, 'scales', scaleId), {
+        assignments: newAssignments,
+        updatedAt: serverTimestamp(),
+      });
     } catch (e) {
       console.error(e);
       alert("Erro ao responder escala.");
@@ -119,7 +123,7 @@ export function HomeView({ onTabChange, userData }: { onTabChange: (tab: string)
   }
 
   return (
-    <div className="space-y-20 pb-20">
+    <motion.div {...pageMotion} className="space-y-20 pb-20">
       <AnimatePresence>
         {selectedEvent && (
           <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
@@ -530,6 +534,6 @@ export function HomeView({ onTabChange, userData }: { onTabChange: (tab: string)
           </div>
         </div>
       </div>
-    </div>
+    </motion.div>
   )
 }

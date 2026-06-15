@@ -143,7 +143,7 @@ export type Transaction = {
   amount: number;
   type: 'course' | 'subscription';
   itemId: string;
-  status: 'completed' | 'pending';
+  status: 'completed' | 'pending' | 'failed' | 'cancelled' | 'refunded';
   date: string;
   method: 'pix' | 'card';
 };

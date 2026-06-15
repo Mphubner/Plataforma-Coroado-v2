@@ -5,17 +5,13 @@ import { Button } from '@/components/ui/button';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import ReactQrCode from 'react-qr-code';
-import { db } from "@/lib/firebase";
-import { collection, query, onSnapshot, doc, setDoc, updateDoc, getDoc, serverTimestamp, where } from "firebase/firestore";
-import { httpsCallable } from "firebase/functions";
-import { initMercadoPago, Payment } from '@mercadopago/sdk-react';
+import { auth, db } from "@/lib/firebase";
+import { collection, query, onSnapshot, doc, setDoc, getDoc, serverTimestamp, where } from "firebase/firestore";
 import { Html5QrcodeScanner, Html5QrcodeScanType, Html5QrcodeSupportedFormats } from 'html5-qrcode';
 import { handleFirestoreError, OperationType } from '@/lib/firestoreUtils';
 import { can } from '@/src/lib/permissions';
-import { functions } from '@/lib/firebase';
-
-initMercadoPago('TEST-00000000-0000-0000-0000-000000000000'); // Mude para o seu Public Key do MP depois
-
+import { postJson } from '@/src/lib/api/http';
+import { pageMotion } from '@/src/lib/motion/presets';
 
 type EventInfo = {
   id: string;
@@ -49,6 +45,7 @@ type EventEnrollment = {
   paymentStatus?: 'pending' | 'approved' | 'rejected';
   pixCopiaECola?: string;
   preferenceId?: string;
+  paymentInitPoint?: string;
 };
 
 export function EventsView({ isLoggedIn = false, userData, onLoginClick }: { isLoggedIn?: boolean; userData?: any; onLoginClick?: () => void }) {
@@ -239,41 +236,31 @@ export function EventsView({ isLoggedIn = false, userData, onLoginClick }: { isL
       return;
     }
     try {
-      const enrollmentId = `${event.id}_${userData.id}`;
-      const enrollmentData: any = {
-        eventId: event.id,
-        userId: userData.id,
-        tenantId: userData.tenantId,
-        checkedIn: false,
-        kids: enrollKids.map(k => ({...k, checkedIn: false, id: crypto.randomUUID()})),
-        createdAt: serverTimestamp(),
-        updatedAt: serverTimestamp()
-      };
+      const token = await auth.currentUser?.getIdToken();
+      if (!token) {
+        alert("Sua sessão expirou. Entre novamente para realizar a inscrição.");
+        return;
+      }
 
-      if (event.isPaid) {
-        enrollmentData.paymentStatus = 'pending';
-        // Salva preliminarmente para garantir a vaga
-        await setDoc(doc(db, 'event_enrollments', enrollmentId), enrollmentData);
+      const enrollment = await postJson<{
+        enrollmentId: string;
+        alreadyEnrolled?: boolean;
+        paymentRequired?: boolean;
+        initPoint?: string;
+      }>(`/api/events/${event.id}/enroll`, {
+        kids: enrollKids,
+      }, { token });
 
-        try {
-          const createPreferenceCall = httpsCallable(functions, 'createPreference');
-          const result = await createPreferenceCall({
-            eventId: event.id,
-            amount: event.price,
-            title: event.title,
-            enrollmentId: enrollmentId
-          });
-          const { preferenceId } = (result.data as any);
-          
-          await updateDoc(doc(db, 'event_enrollments', enrollmentId), { preferenceId });
-          alert('Inscrição iniciada! Finalize o pagamento para gerar seu ingresso.');
-        } catch (e) {
-          console.error("Erro ao gerar pagamento MP:", e);
-          alert('Houve um erro ao iniciar o pagamento. Tente novamente em Meus Ingressos.');
-        }
+      if (enrollment.initPoint) {
+        window.location.href = enrollment.initPoint;
+        return;
+      }
+
+      if (enrollment.paymentRequired) {
+        alert('Inscrição iniciada! Finalize o pagamento em Meus Ingressos.');
+      } else if (enrollment.alreadyEnrolled) {
+        alert('Você já tem ingresso para este evento.');
       } else {
-        enrollmentData.paymentStatus = 'approved';
-        await setDoc(doc(db, 'event_enrollments', enrollmentId), enrollmentData);
         alert(`Inscrição confirmada com sucesso!`);
       }
       setSelectedEvent(null);
@@ -338,10 +325,13 @@ export function EventsView({ isLoggedIn = false, userData, onLoginClick }: { isL
   const handleConfirmCheckin = async () => {
     if (!scanResult) return;
     try {
-      await updateDoc(doc(db, 'event_enrollments', scanResult.id), {
-         checkedIn: true,
-         updatedAt: serverTimestamp()
-      });
+      const token = await auth.currentUser?.getIdToken();
+      if (!token) {
+        alert("Sessao expirada. Entre novamente para confirmar o check-in.");
+        return;
+      }
+
+      await postJson(`/api/event-enrollments/${scanResult.id}/check-in`, {}, { token });
       alert(`Check-in confirmado para ${scannedUser?.name || 'Membro'}!`);
       setScanResult(null);
       setScannedUser(null);
@@ -365,13 +355,15 @@ export function EventsView({ isLoggedIn = false, userData, onLoginClick }: { isL
     }
     
     let successCount = 0;
+    const token = await auth.currentUser?.getIdToken();
+    if (!token) {
+       alert("Sessao expirada. Entre novamente para sincronizar os check-ins.");
+       return;
+    }
+
     for (const enrollmentId of offlineQueue) {
        try {
-         const enrollmentRef = doc(db, 'event_enrollments', enrollmentId);
-         await updateDoc(enrollmentRef, {
-            checkedIn: true,
-            updatedAt: serverTimestamp()
-         });
+         await postJson(`/api/event-enrollments/${enrollmentId}/check-in`, {}, { token });
          successCount++;
        } catch (error) {
          console.error(`Erro ao sincronizar ${enrollmentId}`, error);
@@ -386,7 +378,7 @@ export function EventsView({ isLoggedIn = false, userData, onLoginClick }: { isL
   const isAdmin = can(userData, 'manage:events');
 
   return (
-    <div className="space-y-8 pb-20">
+    <motion.div {...pageMotion} className="space-y-8 pb-20">
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
           <h1 className="text-4xl font-bold tracking-tight">Eventos & Agenda</h1>
@@ -579,43 +571,24 @@ export function EventsView({ isLoggedIn = false, userData, onLoginClick }: { isL
                        <div className="absolute -top-4 -right-4 w-8 h-8 rounded-full bg-black md:block hidden"></div>
                        <div className="absolute -bottom-4 -right-4 w-8 h-8 rounded-full bg-black md:block hidden"></div>
 
-                       <div className={`p-4 rounded-xl ${enrollment.checkedIn ? 'bg-zinc-800' : 'bg-white'}`}>
+                       <div className={`p-4 rounded-xl ${enrollment.paymentStatus === 'pending' ? 'bg-zinc-950' : enrollment.checkedIn ? 'bg-zinc-800' : 'bg-white'}`}>
                          {enrollment.paymentStatus === 'pending' ? (
-                           <div className="flex flex-col items-center justify-center text-center w-full max-w-[400px]">
-                             {enrollment.preferenceId ? (
-                               <div className="w-full">
-                                 <Payment 
-                                   initialization={{ amount: event.price || 0, preferenceId: enrollment.preferenceId }}
-                                   customization={{
-                                     paymentMethods: {
-                                       ticket: "all",
-                                       bankTransfer: "all",
-                                       creditCard: "all",
-                                       debitCard: "all",
-                                       mercadoPago: "all",
-                                     },
-                                   }}
-                                   onSubmit={async (param) => {
-                                      // Brick will handle the submission, we can wait for webhook
-                                      alert("Processando... O ingresso será liberado assim que o pagamento for aprovado!");
-                                   }}
-                                 />
-                                 <Button 
-                                   size="sm" 
-                                   className="text-[10px] h-7 bg-primary/20 hover:bg-primary/30 text-primary mt-4 w-full"
-                                   onClick={async () => {
-                                      // Simulador para desenvolvimento local
-                                      try {
-                                        await updateDoc(doc(db, 'event_enrollments', enrollment.id), { paymentStatus: 'approved' });
-                                        alert('Pagamento simulado com sucesso! (Teste Local)');
-                                      } catch (e) { console.error(e); }
-                                   }}
-                                 >
-                                   (Teste) Simular Aprovação de Webhook
-                                 </Button>
-                               </div>
+                           <div className="flex w-full max-w-[240px] flex-col items-center justify-center gap-3 text-center text-white">
+                             <Ticket className="h-8 w-8 text-primary" />
+                             <div>
+                               <p className="text-sm font-black uppercase tracking-widest">Pagamento pendente</p>
+                               <p className="mt-1 text-xs text-white/50">Finalize no checkout seguro para liberar o ingresso.</p>
+                             </div>
+                             {enrollment.paymentInitPoint ? (
+                               <Button
+                                 size="sm"
+                                 className="rounded-full bg-primary px-5 text-xs font-black text-black hover:bg-primary/90"
+                                 onClick={() => { window.location.href = enrollment.paymentInitPoint || ''; }}
+                               >
+                                 Continuar pagamento
+                               </Button>
                              ) : (
-                               <p className="text-xs text-white/50">Carregando módulo de pagamento...</p>
+                               <p className="text-[10px] font-bold uppercase tracking-widest text-white/30">Aguardando link de pagamento</p>
                              )}
                            </div>
                          ) : (
@@ -1033,6 +1006,6 @@ export function EventsView({ isLoggedIn = false, userData, onLoginClick }: { isL
           </div>
         )}
       </AnimatePresence>
-    </div>
+    </motion.div>
   )
 }

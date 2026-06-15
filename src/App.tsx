@@ -1,22 +1,7 @@
 import * as React from "react";
 import { Shield } from "lucide-react";
 import { Layout } from "./components/Layout";
-import { HomeView } from "./components/HomeView";
-import { AdminView } from "./components/AdminView";
-import { JornadaView } from "./components/JornadaView";
-import { PastorsView } from "./components/PastorsView";
-import { SocialView } from "./components/SocialView";
-import { UnitsView } from "./components/UnitsView";
-import { SocialMediaView } from "./components/SocialMediaView";
-import { CellView, CellProvider } from "./components/CellsView";
-import { StoreView } from "./components/StoreView";
-import { MinistriesView } from "./components/MinistriesView";
-import { PastoralCareView } from "./components/PastoralCareView";
-import { FinanceView } from "./components/FinanceView";
-import { EventsView } from "./components/EventsView";
 import { AuthView } from "./components/AuthView";
-import { SchoolView } from "./components/SchoolView";
-import { MembersView } from "./components/MembersView";
 import { SchoolProvider } from "./contexts/SchoolContext";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -36,6 +21,22 @@ import {
   type RouteId,
   type UserProfile,
 } from '@/src/lib/permissions';
+
+const HomeView = React.lazy(() => import('./components/HomeView').then(module => ({ default: module.HomeView })));
+const AdminView = React.lazy(() => import('./components/AdminView').then(module => ({ default: module.AdminView })));
+const JornadaView = React.lazy(() => import('./components/JornadaView').then(module => ({ default: module.JornadaView })));
+const PastorsView = React.lazy(() => import('./components/PastorsView').then(module => ({ default: module.PastorsView })));
+const SocialView = React.lazy(() => import('./components/SocialView').then(module => ({ default: module.SocialView })));
+const UnitsView = React.lazy(() => import('./components/UnitsView').then(module => ({ default: module.UnitsView })));
+const SocialMediaView = React.lazy(() => import('./components/SocialMediaView').then(module => ({ default: module.SocialMediaView })));
+const CellView = React.lazy(() => import('./components/CellsView').then(module => ({ default: module.CellView })));
+const StoreView = React.lazy(() => import('./components/StoreView').then(module => ({ default: module.StoreView })));
+const MinistriesView = React.lazy(() => import('./components/MinistriesView').then(module => ({ default: module.MinistriesView })));
+const PastoralCareView = React.lazy(() => import('./components/PastoralCareView').then(module => ({ default: module.PastoralCareView })));
+const FinanceView = React.lazy(() => import('./components/FinanceView').then(module => ({ default: module.FinanceView })));
+const EventsView = React.lazy(() => import('./components/EventsView').then(module => ({ default: module.EventsView })));
+const SchoolView = React.lazy(() => import('./components/SchoolView').then(module => ({ default: module.SchoolView })));
+const MembersView = React.lazy(() => import('./components/MembersView').then(module => ({ default: module.MembersView })));
 
 // =====================================================
 // Re-export types and context hooks for backward compat
@@ -145,17 +146,15 @@ export default function App() {
   return (
     <BrowserRouter>
       <SchoolProvider>
-        <CellProvider>
-          {isAuthLocked ? (
-            <AuthView
-              currentUserData={userData}
-              initialState={authState === 'onboarding' ? 'onboarding' : 'pending'}
-              onLoginComplete={refreshProfile}
-            />
-          ) : (
-            <AppShell userData={userData} authState={authState} onLogout={() => signOut(auth)} refreshProfile={refreshProfile} />
-          )}
-        </CellProvider>
+        {isAuthLocked ? (
+          <AuthView
+            currentUserData={userData}
+            initialState={authState === 'onboarding' ? 'onboarding' : 'pending'}
+            onLoginComplete={refreshProfile}
+          />
+        ) : (
+          <AppShell userData={userData} authState={authState} onLogout={() => signOut(auth)} refreshProfile={refreshProfile} />
+        )}
       </SchoolProvider>
     </BrowserRouter>
   );
@@ -198,36 +197,38 @@ function AppShell({ userData, authState, onLogout, refreshProfile }: { userData:
         navigate('/');
       }}
     >
-      <Routes>
-        <Route path="/" element={<HomeView onTabChange={navigateToTab} userData={userData} />} />
-        <Route path="/gestao" element={<ProtectedPage user={userData} capability="view:admin"><AdminView userData={userData} /></ProtectedPage>} />
-        <Route path="/jornada" element={<ProtectedPage user={userData} capability="view:jornada"><JornadaView /></ProtectedPage>} />
-        <Route path="/pastores" element={<ProtectedPage user={userData} capability="view:public"><PastorsView isAdmin={can(userData, 'view:admin')} userData={userData} isLoggedIn={authState === 'approved'} onLoginClick={() => navigate('/login')} /></ProtectedPage>} />
-        <Route path="/social" element={<ProtectedPage user={userData} capability="view:public"><SocialView isAdmin={can(userData, 'view:admin')} userData={userData} isLoggedIn={authState === 'approved'} onLoginClick={() => navigate('/login')} /></ProtectedPage>} />
-        <Route path="/unidades" element={<ProtectedPage user={userData} capability="view:public"><UnitsView isAdmin={can(userData, 'view:admin')} userData={userData} /></ProtectedPage>} />
-        <Route path="/midia" element={<ProtectedPage user={userData} capability="view:public"><SocialMediaView /></ProtectedPage>} />
-        <Route path="/loja" element={<ProtectedPage user={userData} capability="view:public"><StoreView isAdmin={can(userData, 'manage:finance')} userData={userData} /></ProtectedPage>} />
-        <Route path="/ministerios" element={<ProtectedPage user={userData} capability="view:public"><MinistriesView isLoggedIn={authState === 'approved'} userData={userData} onLoginClick={() => navigate('/login')} /></ProtectedPage>} />
-        <Route path="/cuidado-pastoral" element={<ProtectedPage user={userData} capability="view:pastoral"><PastoralCareView isLoggedIn userData={userData} /></ProtectedPage>} />
-        <Route path="/financeiro" element={<ProtectedPage user={userData} capability="view:finance"><FinanceView userData={userData} /></ProtectedPage>} />
-        <Route path="/eventos" element={<ProtectedPage user={userData} capability="view:public"><EventsView isLoggedIn={authState === 'approved'} userData={userData} onLoginClick={() => navigate('/login')} /></ProtectedPage>} />
-        <Route path="/escola" element={<ProtectedPage user={userData} capability="view:school"><SchoolView userRole={normalizeRoles(userData?.roles)} /></ProtectedPage>} />
-        <Route path="/membros" element={<ProtectedPage user={userData} capability="view:members"><MembersView userData={userData} /></ProtectedPage>} />
-        <Route
-          path="/celulas"
-          element={
-            <ProtectedPage user={userData} capability="view:public">
-              <CellView
-                isLoggedIn={authState === 'approved'}
-                isLeader={can(userData, 'manage:cell')}
-                onTabChange={navigateToTab}
-                userData={userData}
-              />
-            </ProtectedPage>
-          }
-        />
-        <Route path="*" element={<Navigate to={pathForRoute(routeById.home.id)} replace />} />
-      </Routes>
+      <React.Suspense fallback={<RouteLoading />}>
+        <Routes>
+          <Route path="/" element={<HomeView onTabChange={navigateToTab} userData={userData} />} />
+          <Route path="/gestao" element={<ProtectedPage user={userData} capability="view:admin"><AdminView userData={userData} /></ProtectedPage>} />
+          <Route path="/jornada" element={<ProtectedPage user={userData} capability="view:jornada"><JornadaView /></ProtectedPage>} />
+          <Route path="/pastores" element={<ProtectedPage user={userData} capability="view:public"><PastorsView isAdmin={can(userData, 'view:admin')} userData={userData} isLoggedIn={authState === 'approved'} onLoginClick={() => navigate('/login')} /></ProtectedPage>} />
+          <Route path="/social" element={<ProtectedPage user={userData} capability="view:public"><SocialView isAdmin={can(userData, 'view:admin')} userData={userData} isLoggedIn={authState === 'approved'} onLoginClick={() => navigate('/login')} /></ProtectedPage>} />
+          <Route path="/unidades" element={<ProtectedPage user={userData} capability="view:public"><UnitsView isAdmin={can(userData, 'view:admin')} userData={userData} /></ProtectedPage>} />
+          <Route path="/midia" element={<ProtectedPage user={userData} capability="view:public"><SocialMediaView /></ProtectedPage>} />
+          <Route path="/loja" element={<ProtectedPage user={userData} capability="view:public"><StoreView isAdmin={can(userData, 'manage:finance')} userData={userData} /></ProtectedPage>} />
+          <Route path="/ministerios" element={<ProtectedPage user={userData} capability="view:public"><MinistriesView isLoggedIn={authState === 'approved'} userData={userData} onLoginClick={() => navigate('/login')} /></ProtectedPage>} />
+          <Route path="/cuidado-pastoral" element={<ProtectedPage user={userData} capability="view:pastoral"><PastoralCareView isLoggedIn userData={userData} /></ProtectedPage>} />
+          <Route path="/financeiro" element={<ProtectedPage user={userData} capability="view:finance"><FinanceView userData={userData} /></ProtectedPage>} />
+          <Route path="/eventos" element={<ProtectedPage user={userData} capability="view:public"><EventsView isLoggedIn={authState === 'approved'} userData={userData} onLoginClick={() => navigate('/login')} /></ProtectedPage>} />
+          <Route path="/escola" element={<ProtectedPage user={userData} capability="view:school"><SchoolView userRole={normalizeRoles(userData?.roles)} /></ProtectedPage>} />
+          <Route path="/membros" element={<ProtectedPage user={userData} capability="view:members"><MembersView userData={userData} /></ProtectedPage>} />
+          <Route
+            path="/celulas"
+            element={
+              <ProtectedPage user={userData} capability="view:public">
+                <CellView
+                  isLoggedIn={authState === 'approved'}
+                  isLeader={can(userData, 'manage:cell')}
+                  onTabChange={navigateToTab}
+                  userData={userData}
+                />
+              </ProtectedPage>
+            }
+          />
+          <Route path="*" element={<Navigate to={pathForRoute(routeById.home.id)} replace />} />
+        </Routes>
+      </React.Suspense>
     </Layout>
   );
 }
@@ -259,8 +260,8 @@ function ProtectedPage({
             </CardDescription>
           </CardHeader>
           <CardContent>
-            <Button asChild>
-              <a href="/">Voltar ao inicio</a>
+            <Button onClick={() => window.location.assign('/')}>
+              Voltar ao inicio
             </Button>
           </CardContent>
         </Card>
@@ -269,4 +270,15 @@ function ProtectedPage({
   }
 
   return <>{children}</>;
+}
+
+function RouteLoading() {
+  return (
+    <div className="flex min-h-[50vh] items-center justify-center p-6">
+      <div className="flex items-center gap-3 rounded-full border border-white/10 bg-white/[0.03] px-5 py-3 text-sm font-semibold text-white/70">
+        <span className="h-2.5 w-2.5 animate-pulse rounded-full bg-primary" />
+        Carregando area...
+      </div>
+    </div>
+  );
 }
