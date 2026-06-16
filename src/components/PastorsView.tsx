@@ -40,9 +40,16 @@ export function PastorsView({ isAdmin, userData, isLoggedIn, onLoginClick }: { i
      return d;
   }).filter(d => d.getDay() !== 0 && d.getDay() !== 6);
 
-  const availableTimes = (selectedPastor?.availableTimes && selectedPastor.availableTimes.length > 0)
+  const baseAvailableTimes = (selectedPastor?.availableTimes && selectedPastor.availableTimes.length > 0)
     ? selectedPastor.availableTimes
     : ['14:00', '15:00', '16:00', '17:00', '18:00'];
+
+  // Filter out times that are already booked internally on the selected date
+  const bookedTimes = appointments
+    .filter(app => app.pastorId === selectedPastor?.id && app.date === selectedDate && app.status !== 'cancelled')
+    .map(app => app.time);
+
+  const availableTimes = baseAvailableTimes.filter((time: string) => !bookedTimes.includes(time));
 
   const generateGoogleCalendarUrl = (app: any) => {
     if (!app) return '#';
@@ -166,36 +173,29 @@ export function PastorsView({ isAdmin, userData, isLoggedIn, onLoginClick }: { i
     let unsubApps = () => {};
     let unsubTasks = () => {};
 
-    if (userData?.tenantId) {
-      const q = query(collection(db, 'pastors'), where('tenantId', '==', userData.tenantId));
-      unsubPastors = onSnapshot(q, (snap) => {
-        setPastorsList(snap.docs.map(doc => ({ id: doc.id, ...doc.data() })));
-        setPastorsError('');
-      }, (error) => {
-        console.error(error);
-        setPastorsList([]);
-        setPastorsError('Nao foi possivel carregar os pastores agora.');
+    const currentTenantId = userData?.tenantId || 'tenant-1';
+    
+    // Always fetch pastors, even if not logged in
+    const qPastors = query(collection(db, 'pastors'), where('tenantId', '==', currentTenantId));
+    unsubPastors = onSnapshot(qPastors, (snap) => {
+      setPastorsList(snap.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+      setPastorsError('');
+    }, (error) => {
+      console.error(error);
+      setPastorsList([]);
+      setPastorsError('Não foi possível carregar o corpo pastoral.');
+    });
+
+    if (userData?.tenantId && auth.currentUser) {
+      const qApps = query(collection(db, 'pastoral_appointments'), where('tenantId', '==', userData.tenantId));
+      unsubApps = onSnapshot(qApps, (snap) => {
+        setAppointments(snap.docs.map(doc => ({ id: doc.id, ...doc.data() })));
       });
 
-      if (isAdmin || userData?.profileType === 'pastor') {
-        const qA = query(collection(db, 'pastoral_appointments'), where('tenantId', '==', userData.tenantId));
-        unsubApps = onSnapshot(qA, (snap) => {
-          let apps = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-          if (!isAdmin) {
-             apps = apps.filter((a: any) => a.pastorId === userData.id || a.pastorName === userData.name);
-          }
-          setAppointments(apps);
-        });
-      }
-
-      if (isLeader) {
-        const qT = query(collection(db, 'tasks'), where('tenantId', '==', userData.tenantId), where('tag', '==', 'Pastoral'));
-        unsubTasks = onSnapshot(qT, (snap) => {
-          setPastoralTasks(snap.docs.map(d => ({ id: d.id, ...d.data() })));
-        });
-      }
-    } else {
-      setPastorsList([]);
+      const qTasks = query(collection(db, 'tasks'), where('tenantId', '==', userData.tenantId));
+      unsubTasks = onSnapshot(qTasks, (snap) => {
+        setPastoralTasks(snap.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+      });
     }
 
     return () => { unsubPastors(); unsubApps(); unsubTasks(); };
