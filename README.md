@@ -4,7 +4,7 @@
 
 This contains everything you need to run your app locally.
 
-View your app in AI Studio: https://ai.studio/apps/5a4ec1a9-2f79-4900-af29-cf7de9f18d21
+View app in Coroado.org
 
 ## Run Locally
 
