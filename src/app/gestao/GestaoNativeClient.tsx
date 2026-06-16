@@ -71,7 +71,7 @@ export function GestaoNativeClient() {
         <TabsList className="bg-zinc-900 border border-white/10 p-1.5 rounded-full overflow-x-auto whitespace-nowrap flex w-fit gap-1 custom-scrollbar">
           <TabsTrigger value="analytics" className="rounded-full px-6 py-2.5 data-[state=active]:bg-primary data-[state=active]:text-black text-white/60 hover:text-white transition-all">Analytics (Visão 360)</TabsTrigger>
           <TabsTrigger value="goals" className="rounded-full px-6 py-2.5 data-[state=active]:bg-primary data-[state=active]:text-black text-white/60 hover:text-white transition-all">Metas 2026</TabsTrigger>
-          <TabsTrigger value="planning" className="rounded-full px-6 py-2.5 data-[state=active]:bg-primary data-[state=active]:text-black text-white/60 hover:text-white transition-all">Planejamento (Kanban)</TabsTrigger>
+          <TabsTrigger value="planning" className="rounded-full px-6 py-2.5 data-[state=active]:bg-primary data-[state=active]:text-black text-white/60 hover:text-white transition-all">Planejamento</TabsTrigger>
           <TabsTrigger value="automations" className="rounded-full px-6 py-2.5 data-[state=active]:bg-primary data-[state=active]:text-black text-white/60 hover:text-white transition-all">Notificações & PWA</TabsTrigger>
           {isAdmin && <TabsTrigger value="seeder" className="rounded-full px-6 py-2.5 data-[state=active]:bg-primary data-[state=active]:text-black text-white/60 hover:text-white transition-all">Massa de Dados</TabsTrigger>}
         </TabsList>
