@@ -22,12 +22,11 @@ export function AdminDashboardMetrics({ userData }: { userData?: any }) {
   });
 
   // KPI Entries (Service, Finance)
-  const [services, setServices] = useState<any[]>([]);
+  const [kpiEntries, setKpiEntries] = useState<any[]>([]);
   const [financials, setFinancials] = useState<any[]>([]);
   const [cellCount, setCellCount] = useState(0);
 
   // Form states
-  const [serviceForm, setServiceForm] = useState({ name: '', date: '', actual: 0, target: 0, visActual: 0, visTarget: 0 });
   const [financeForm, setFinanceForm] = useState({ title: '', date: '', amount: '', target: '', unit: '', category: '', project: '', receipt: '' });
   const [targetForm, setTargetForm] = useState({ activeCells: 0, attendanceAvg: 0, visitorsTarget: 0, revenueTarget: 0 });
 
@@ -51,8 +50,8 @@ export function AdminDashboardMetrics({ userData }: { userData?: any }) {
        setTargetForm(userTargets);
     });
 
-    const unS = onSnapshot(query(collection(db, 'service_reports'), where('tenantId', '==', userData.tenantId)), (snap) => {
-       setServices(snap.docs.map(d => ({id: d.id, ...d.data()})));
+    const unKpis = onSnapshot(query(collection(db, 'kpi_entries'), where('tenantId', '==', userData.tenantId)), (snap) => {
+       setKpiEntries(snap.docs.map(d => ({id: d.id, ...d.data()})));
     });
 
     const unC = onSnapshot(query(collection(db, 'cells'), where('tenantId', '==', userData.tenantId)), (snap) => {
@@ -67,10 +66,10 @@ export function AdminDashboardMetrics({ userData }: { userData?: any }) {
       const unF = onSnapshot(query(collection(db, 'financial_reports'), where('tenantId', '==', userData.tenantId)), (snap) => {
          setFinancials(snap.docs.map(d => ({id: d.id, ...d.data()})));
       });
-      return () => { unT(); unS(); unC(); unUnits(); unF(); };
+      return () => { unT(); unKpis(); unC(); unUnits(); unF(); };
     }
 
-    return () => { unT(); unS(); unC(); unUnits(); };
+    return () => { unT(); unKpis(); unC(); unUnits(); };
   }, [userData, isHighLevel]);
 
   const handleSaveTarget = async (name: string, value: number) => {
@@ -94,23 +93,6 @@ export function AdminDashboardMetrics({ userData }: { userData?: any }) {
     setActiveModal(null);
   };
 
-  const handleAddService = async () => {
-    if (!userData?.tenantId) return;
-    await addDoc(collection(db, 'service_reports'), {
-       serviceName: serviceForm.name || 'Culto Geral',
-       date: serviceForm.date || new Date().toISOString().split('T')[0],
-       attendanceActual: Number(serviceForm.actual),
-       attendanceTarget: Number(serviceForm.target),
-       visitorsActual: Number(serviceForm.visActual),
-       visitorsTarget: Number(serviceForm.visTarget),
-       tenantId: userData.tenantId,
-       createdAt: serverTimestamp(),
-       updatedAt: serverTimestamp()
-    });
-    setServiceForm({ name: '', date: '', actual: 0, target: 0, visActual: 0, visTarget: 0 });
-    setActiveModal(null);
-  };
-
   const handleAddFinance = async () => {
     if (!userData?.tenantId) return;
     await addDoc(collection(db, 'financial_reports'), {
@@ -130,40 +112,37 @@ export function AdminDashboardMetrics({ userData }: { userData?: any }) {
     setActiveModal(null);
   };
 
-  // Real data calculations
-  const totalFinancial = financials.reduce((acc, curr) => acc + curr.amount, 0);
-  const totalVisitors = services.reduce((acc, curr) => acc + curr.visitorsActual, 0);
-  const maxAttendance = services.length > 0 ? Math.max(...services.map(s => s.attendanceActual)) : 0;
+  const totalRevenue = financials.reduce((acc, f) => acc + f.amount, 0);
+  const freqs = kpiEntries.filter(e => e.kpiName === 'kpi_frequencia_celebracoes');
+  const totalAttendance = freqs.reduce((acc, curr) => acc + Number(curr.actualValue || 0), 0);
+  const totalVisitors = freqs.reduce((acc, curr) => acc + Number(curr.visitors || 0), 0);
+  const maxAttendance = freqs.length > 0 ? Math.max(...freqs.map(s => Number(s.actualValue || 0))) : 0;
+  
   const activeCells = cellCount;
   const formatPercent = (value: number) => `${Math.round(Math.max(0, Math.min(value, 100)))}%`;
-  const attendanceTargetRate = services.length > 0
-    ? services.reduce((acc, curr) => {
-        const target = Number(curr.attendanceTarget || 0);
-        return acc + (target > 0 ? (Number(curr.attendanceActual || 0) / target) * 100 : 0);
-      }, 0) / services.length
-    : 0;
+  const attendanceTargetRate = targets.attendanceAvg > 0 ? (totalAttendance / (freqs.length || 1) / targets.attendanceAvg) * 100 : 0;
   const multiplicationRate = targets.activeCells ? (activeCells / targets.activeCells) * 100 : 0;
   const visitorGoalRate = targets.visitorsTarget ? (totalVisitors / targets.visitorsTarget) * 100 : 0;
+  
   const healthMetrics = [
     { label: "Frequencia vs Meta", value: formatPercent(attendanceTargetRate), color: attendanceTargetRate >= 80 ? "bg-green-500" : "bg-yellow-500" },
     { label: "Meta de Multiplicacao", value: formatPercent(multiplicationRate), color: multiplicationRate >= 70 ? "bg-green-500" : "bg-red-500" },
     { label: "Visitantes vs Meta", value: formatPercent(visitorGoalRate), color: visitorGoalRate >= 70 ? "bg-green-500" : "bg-yellow-500" },
   ];
 
-  // Compute Chart Data based on actual entries
   const chartDataMap: Record<string, any> = {
-    'Jan': { month: 'Jan', cellules: 0, revenue: 0, visitors: 0 },
-    'Fev': { month: 'Fev', cellules: 0, revenue: 0, visitors: 0 },
-    'Mar': { month: 'Mar', cellules: 0, revenue: 0, visitors: 0 },
-    'Abr': { month: 'Abr', cellules: 0, revenue: 0, visitors: 0 },
-    'Mai': { month: 'Mai', cellules: 0, revenue: 0, visitors: 0 },
-    'Jun': { month: 'Jun', cellules: 0, revenue: 0, visitors: 0 },
-    'Jul': { month: 'Jul', cellules: 0, revenue: 0, visitors: 0 },
-    'Ago': { month: 'Ago', cellules: 0, revenue: 0, visitors: 0 },
-    'Set': { month: 'Set', cellules: 0, revenue: 0, visitors: 0 },
-    'Out': { month: 'Out', cellules: 0, revenue: 0, visitors: 0 },
-    'Nov': { month: 'Nov', cellules: 0, revenue: 0, visitors: 0 },
-    'Dez': { month: 'Dez', cellules: 0, revenue: 0, visitors: 0 }
+    'Jan': { month: 'Jan', membros: 0, revenue: 0, visitors: 0 },
+    'Fev': { month: 'Fev', membros: 0, revenue: 0, visitors: 0 },
+    'Mar': { month: 'Mar', membros: 0, revenue: 0, visitors: 0 },
+    'Abr': { month: 'Abr', membros: 0, revenue: 0, visitors: 0 },
+    'Mai': { month: 'Mai', membros: 0, revenue: 0, visitors: 0 },
+    'Jun': { month: 'Jun', membros: 0, revenue: 0, visitors: 0 },
+    'Jul': { month: 'Jul', membros: 0, revenue: 0, visitors: 0 },
+    'Ago': { month: 'Ago', membros: 0, revenue: 0, visitors: 0 },
+    'Set': { month: 'Set', membros: 0, revenue: 0, visitors: 0 },
+    'Out': { month: 'Out', membros: 0, revenue: 0, visitors: 0 },
+    'Nov': { month: 'Nov', membros: 0, revenue: 0, visitors: 0 },
+    'Dez': { month: 'Dez', membros: 0, revenue: 0, visitors: 0 }
   };
 
   const getMonthStr = (dateStr: string) => {
@@ -180,19 +159,18 @@ export function AdminDashboardMetrics({ userData }: { userData?: any }) {
     if (chartDataMap[m]) chartDataMap[m].revenue += f.amount;
   });
 
-  services.forEach(s => {
+  freqs.forEach(s => {
     const m = getMonthStr(s.date);
-    if (chartDataMap[m]) chartDataMap[m].visitors += s.visitorsActual;
+    if (chartDataMap[m]) {
+       chartDataMap[m].visitors += Number(s.visitors || 0);
+       chartDataMap[m].membros += Number(s.actualValue || 0);
+    }
   });
 
-  chartDataMap[getMonthStr(new Date().toISOString().split('T')[0])].cellules = activeCells;
-
-  // Convert to array and slice up to current month or show everything
   const computedAnalyticsData = Object.values(chartDataMap);
 
   return (
     <div className="space-y-6">
-      {/* Modals */}
       <AnimatePresence>
         {activeModal && (
           <div className="fixed inset-0 z-50 flex items-center justify-center px-4">
@@ -219,40 +197,7 @@ export function AdminDashboardMetrics({ userData }: { userData?: any }) {
                       <div><label className="text-xs text-white/60 uppercase">Meta Financeira (R$)</label><Input type="number" value={targetForm.revenueTarget} onChange={e => setTargetForm({...targetForm, revenueTarget: e.target.value as any})} className="bg-zinc-900"/></div>
                     )}
                   </div>
-                  <Button className="w-full bg-primary text-black font-bold" onClick={handleSaveAllTargets}>Salvar Metas</Button>
-                </>
-              )}
-
-              {activeModal === 'service' && (
-                <>
-                  <div className="flex justify-between items-center border-b border-white/10 pb-4">
-                    <h3 className="text-xl font-bold flex items-center gap-2"><Target className="w-5 h-5"/> Lançar Relatório de Culto</h3>
-                    <Button variant="ghost" size="icon" onClick={() => setActiveModal(null)}><X className="w-5 h-5"/></Button>
-                  </div>
-                  <div className="space-y-4 grid grid-cols-2 gap-4">
-                    <div className="col-span-2"><label className="text-xs text-white/60">Data Referência</label><Input type="date" value={serviceForm.date} onChange={e => setServiceForm({...serviceForm, date: e.target.value})} className="bg-zinc-900"/></div>
-                    <div className="col-span-2"><label className="text-xs text-white/60">Unidade/Horário (Ex: Sede 10h)</label><Input value={serviceForm.name} onChange={e => setServiceForm({...serviceForm, name: e.target.value})} className="bg-zinc-900"/></div>
-                    
-                    <div><label className="text-xs text-white/60">Presentes (Realizado)</label><Input type="number" value={serviceForm.actual} onChange={e => setServiceForm({...serviceForm, actual: e.target.value as any})} className="bg-zinc-900"/></div>
-                    <div><label className="text-xs text-white/60">Presentes (Meta)</label><Input type="number" value={serviceForm.target} onChange={e => setServiceForm({...serviceForm, target: e.target.value as any})} className="bg-zinc-900"/></div>
-                    
-                    <div><label className="text-xs text-white/60">Visitantes (Realizado)</label><Input type="number" value={serviceForm.visActual} onChange={e => setServiceForm({...serviceForm, visActual: e.target.value as any})} className="bg-zinc-900"/></div>
-                    <div><label className="text-xs text-white/60">Visitantes (Meta)</label><Input type="number" value={serviceForm.visTarget} onChange={e => setServiceForm({...serviceForm, visTarget: e.target.value as any})} className="bg-zinc-900"/></div>
-                  </div>
-                  <Button className="w-full bg-primary text-black font-bold mt-4" onClick={handleAddService}>Registrar Culto</Button>
-                  
-                  <div className="mt-6 border-t border-white/10 pt-4">
-                     <h4 className="text-sm font-bold mb-3 text-white/60">Histórico de Cultos</h4>
-                     <div className="max-h-40 overflow-y-auto space-y-2 pr-2">
-                       {services.sort((a,b) => b.date.localeCompare(a.date)).map(s => (
-                         <div key={s.id} className="text-xs bg-white/5 p-2 rounded flex justify-between">
-                            <div><span className="font-bold text-white">{s.date}</span> - {s.name}</div>
-                            <div className="text-right text-white/60">Pres: {s.attendanceActual}/{s.attendanceTarget} | Vis: {s.visitorsActual}</div>
-                         </div>
-                       ))}
-                       {services.length === 0 && <p className="text-xs text-white/40">Nenhum culto registrado.</p>}
-                     </div>
-                  </div>
+                  <Button className="w-full bg-primary text-black font-bold mt-4" onClick={handleSaveAllTargets}>Salvar Metas Globais</Button>
                 </>
               )}
 
@@ -332,8 +277,8 @@ export function AdminDashboardMetrics({ userData }: { userData?: any }) {
       <div className="grid md:grid-cols-4 gap-4">
         {[
           { id: 'cells', label: "Células Ativas", value: activeCells.toString(), meta: `Meta: ${targets.activeCells}`, progress: targets.activeCells ? Math.min((activeCells/targets.activeCells)*100, 100).toFixed(0) : 0, color: "text-primary", icon: Target, action: () => setActiveModal('targets') },
-          { id: 'attendance', label: "Frequência Cultos Máx", value: maxAttendance.toString(), meta: `Meta Avg: ${targets.attendanceAvg}`, progress: Math.min((maxAttendance/targets.attendanceAvg)*100, 100).toFixed(0), color: "text-secondary", icon: Users, action: () => setActiveModal('service') },
-          { id: 'visitors', label: "Novos Visitantes", value: totalVisitors.toString(), meta: `Meta: ${targets.visitorsTarget}`, progress: targets.visitorsTarget ? Math.min((totalVisitors/targets.visitorsTarget)*100, 100).toFixed(0) : 0, color: "text-primary", icon: TrendingUp, action: () => setActiveModal('service') },
+          { id: 'attendance', label: "Frequência Cultos Máx", value: maxAttendance.toString(), meta: `Meta Avg: ${targets.attendanceAvg}`, progress: Math.min((maxAttendance/targets.attendanceAvg)*100, 100).toFixed(0), color: "text-secondary", icon: Users, action: () => {} },
+          { id: 'visitors', label: "Novos Visitantes", value: totalVisitors.toString(), meta: `Meta: ${targets.visitorsTarget}`, progress: targets.visitorsTarget ? Math.min((totalVisitors/targets.visitorsTarget)*100, 100).toFixed(0) : 0, color: "text-primary", icon: TrendingUp, action: () => {} },
           { id: 'finance', label: "Receita (Dízimos/Off)", value: `R$ ${(totalFinancial/1000).toFixed(1)}k`, meta: `Meta: R$ ${(targets.revenueTarget/1000).toFixed(1)}k`, progress: targets.revenueTarget ? Math.min((totalFinancial/targets.revenueTarget)*100, 100).toFixed(0) : 0, color: "text-secondary", icon: DollarSign, action: () => setActiveModal('financial') },
         ].filter(kpi => kpi.id !== 'finance' || isHighLevel).map((kpi, i) => (
           <Card key={i} className="bg-zinc-900 border-white/10 relative overflow-hidden group cursor-pointer hover:border-primary/50 transition-all" onClick={kpi.action}>
@@ -366,8 +311,8 @@ export function AdminDashboardMetrics({ userData }: { userData?: any }) {
           <CardHeader>
             <div className="flex items-center justify-between">
               <div>
-                <CardTitle className="text-xl font-black">Crescimento Integrado</CardTitle>
-                <CardDescription>Células vs. Receita vs. Visitantes (2026)</CardDescription>
+                <CardTitle className="text-xl font-black">Acompanhamento Integrado</CardTitle>
+                <CardDescription>Membros vs. Receitas vs. Visitantes (2026)</CardDescription>
               </div>
               <Badge variant="outline" className="border-primary/50 text-primary">Q1 2026</Badge>
             </div>
@@ -380,9 +325,13 @@ export function AdminDashboardMetrics({ userData }: { userData?: any }) {
                     <stop offset="5%" stopColor="#eab308" stopOpacity={0.3}/>
                     <stop offset="95%" stopColor="#eab308" stopOpacity={0}/>
                   </linearGradient>
-                  <linearGradient id="colorCell" x1="0" y1="0" x2="0" y2="1">
+                  <linearGradient id="colorMembros" x1="0" y1="0" x2="0" y2="1">
                     <stop offset="5%" stopColor="#22c55e" stopOpacity={0.3}/>
                     <stop offset="95%" stopColor="#22c55e" stopOpacity={0}/>
+                  </linearGradient>
+                  <linearGradient id="colorVisitors" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%" stopColor="#06b6d4" stopOpacity={0.3}/>
+                    <stop offset="95%" stopColor="#06b6d4" stopOpacity={0}/>
                   </linearGradient>
                 </defs>
                 <CartesianGrid strokeDasharray="3 3" stroke="#ffffff10" vertical={false} />
@@ -394,7 +343,8 @@ export function AdminDashboardMetrics({ userData }: { userData?: any }) {
                   itemStyle={{ color: '#fff', fontSize: '12px' }}
                 />
                 {isHighLevel && <Area yAxisId="left" type="monotone" dataKey="revenue" stroke="#eab308" fillOpacity={1} fill="url(#colorRevenue)" name="Receita (R$)" />}
-                <Area yAxisId={isHighLevel ? "right" : "left"} type="monotone" dataKey="cellules" stroke="#22c55e" fillOpacity={1} fill="url(#colorCell)" name="Células" />
+                <Area yAxisId={isHighLevel ? "right" : "left"} type="monotone" dataKey="membros" stroke="#22c55e" fillOpacity={1} fill="url(#colorMembros)" name="Membros" />
+                <Area yAxisId={isHighLevel ? "right" : "left"} type="monotone" dataKey="visitors" stroke="#06b6d4" fillOpacity={1} fill="url(#colorVisitors)" name="Visitantes" />
               </AreaChart>
             </ResponsiveContainer>
           </CardContent>
@@ -430,6 +380,7 @@ export function AdminDashboardMetrics({ userData }: { userData?: any }) {
                   </p>
                   <Button size="sm" variant="outline" className="w-full mt-2 border-red-500/30 text-red-400 hover:bg-red-500/20">Agendar Reunião</Button>
                 </div>
+              </div>
             </CardContent>
           </Card>
         </div>

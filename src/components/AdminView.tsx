@@ -43,7 +43,7 @@ export function AdminView({ userData }: { userData?: any }) {
         </TabsContent>
 
         <TabsContent value="planning" className="space-y-6 mt-6">
-          <AdminPlanningKanban tenantId={userData?.tenantId} />
+          <AdminPlanningKanban userData={userData} />
         </TabsContent>
 
         <TabsContent value="school" className="space-y-6 mt-6">

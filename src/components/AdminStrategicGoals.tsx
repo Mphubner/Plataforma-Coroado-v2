@@ -21,6 +21,7 @@ export function AdminStrategicGoals({ userData }: { userData?: any }) {
   // Filters and Controls
   const [timeView, setTimeView] = useState<'weekly' | 'monthly' | 'yearly'>('monthly');
   const [monthsRange, setMonthsRange] = useState<number>(12); // Custom range filter
+  const [filterUnit, setFilterUnit] = useState<string>('Todas');
 
   // Cross Module Hook
   const { virtualKpis, virtualEntries, loading: virtualLoading } = useCrossModuleMetrics(userData?.tenantId, monthsRange);
@@ -141,6 +142,10 @@ export function AdminStrategicGoals({ userData }: { userData?: any }) {
          relevantEntries = combinedEntries.filter(e => e.kpiName === kpiId);
      }
 
+     if (filterUnit !== 'Todas') {
+         relevantEntries = relevantEntries.filter(e => e.unit === filterUnit || (e.kpiName.includes('sede') && filterUnit === 'Sede') || (e.kpiName.includes('norte') && filterUnit === 'Coroado Norte'));
+     }
+
      const aggType = kpiAggregations[kpiId] || 'sum';
 
      // Group by TimeView
@@ -150,7 +155,7 @@ export function AdminStrategicGoals({ userData }: { userData?: any }) {
          const date = parseISO(entry.date);
          let key = '';
          if (timeView === 'weekly') {
-             key = `Semana ${getWeek(date)} de ${format(date, 'yyyy')}`;
+             key = format(date, 'dd/MM/yyyy');
          } else if (timeView === 'monthly') {
              key = format(date, 'MMM yyyy', { locale: ptBR });
          } else {
@@ -523,6 +528,10 @@ export function AdminStrategicGoals({ userData }: { userData?: any }) {
         </div>
         <div className="flex flex-col items-end gap-2">
            <div className="flex gap-2 bg-zinc-900 p-1 rounded-lg border border-white/10">
+              <select className="bg-transparent text-sm text-white focus:outline-none pr-2 border-r border-white/10 mr-2" value={filterUnit} onChange={(e) => setFilterUnit(e.target.value)}>
+                 <option value="Todas">Todas Unidades</option>
+                 {unitsList.map((u, i) => <option key={i} value={u.name}>{u.name}</option>)}
+              </select>
               <select className="bg-transparent text-sm text-white focus:outline-none" value={monthsRange} onChange={(e) => setMonthsRange(Number(e.target.value))}>
                  <option value={1}>Último mês</option>
                  <option value={3}>Últimos 3 meses</option>
