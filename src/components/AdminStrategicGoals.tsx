@@ -53,19 +53,29 @@ export function AdminStrategicGoals({ userData }: { userData?: any }) {
   const [entryTime, setEntryTime] = useState<string>('18h');
   const [entryVisitors, setEntryVisitors] = useState<string>('0');
 
-  // Available times per unit
-  const serviceTimes: Record<string, string[]> = {
-    'Sede': ['10h', '18h', '20h'],
-    'Norte': ['19h'],
-    'BR': ['19h']
-  };
+  // Available units and times
+  const [unitsList, setUnitsList] = useState<any[]>([]);
 
-  // When unit changes, update time to the first available for that unit
+  // When unit changes, parse serviceTimes to get available times for that unit
   useEffect(() => {
-     if (serviceTimes[entryUnit]) {
-        setEntryTime(serviceTimes[entryUnit][0]);
+     const unit = unitsList.find(u => u.name === entryUnit);
+     if (unit && unit.serviceTimes) {
+        // Extract times like "10h", "18:00", etc
+        const times = unit.serviceTimes.match(/\b(?:[01]?\d|2[0-3])(?:h|:\d{2})\b/gi);
+        if (times && times.length > 0) {
+           setEntryTime(times[0]);
+        } else {
+           setEntryTime('Culto Único');
+        }
      }
-  }, [entryUnit]);
+  }, [entryUnit, unitsList]);
+
+  // Social Override State
+  const [socialMode, setSocialMode] = useState<'auto'|'manual'>('auto');
+  const [socialDate, setSocialDate] = useState<string>(formatISO(new Date(), { representation: 'date' }));
+  const [socialPaid, setSocialPaid] = useState<string>('0');
+  const [socialFree, setSocialFree] = useState<string>('0');
+  const [socialNotes, setSocialNotes] = useState<string>('');
 
   useEffect(() => {
     if (!userData?.tenantId) return;
@@ -77,7 +87,19 @@ export function AdminStrategicGoals({ userData }: { userData?: any }) {
     const qEntries = query(collection(db, 'kpi_entries'), where('tenantId', '==', userData.tenantId));
     const unEntries = onSnapshot(qEntries, (snap) => setEntries(snap.docs.map(d => ({ id: d.id, ...d.data() }))));
 
-    return () => { unKpi(); unEntries(); }
+    // Fetch Units
+    const qUnits = query(collection(db, 'units'), where('tenantId', '==', userData.tenantId));
+    const unUnits = onSnapshot(qUnits, (snap) => {
+       const list = snap.docs.map(d => ({ id: d.id, ...d.data() as any }));
+       if (list.length === 0) {
+          // Fallback
+          setUnitsList([{ name: 'Coroado Sede', serviceTimes: '10h, 18h, 20h' }, { name: 'Coroado Norte', serviceTimes: '19h' }]);
+       } else {
+          setUnitsList(list);
+       }
+    });
+
+    return () => { unKpi(); unEntries(); unUnits(); }
   }, [userData?.tenantId]);
 
   // Derived KPIs Calculation (Total Celebrações)
@@ -99,7 +121,7 @@ export function AdminStrategicGoals({ userData }: { userData?: any }) {
            2025: 430, 2026: 552, 2027: 617, 2028: 678.5, 2029: 746.85, 2030: 821, 2031: 903
         },
         color: 'border-blue-500',
-        isDerived: true
+        isDerived: false
      });
 
      return list.sort((a,b) => {
@@ -138,8 +160,14 @@ export function AdminStrategicGoals({ userData }: { userData?: any }) {
          if (!grouped[key]) grouped[key] = [];
          
          // Combine actualValue and visitors for the total count
-         const totalFreq = Number(entry.actualValue || 0) + Number(entry.visitors || 0);
-         grouped[key].push(totalFreq);
+         const totalFreq = Number(entry.actualValue || 0) + Number(entry.visitors || 0) + Number(entry.kids || 0) + Number(entry.teens || 0) + Number(entry.servants || 0);
+         
+         if (entry.kpiName === 'kpi_virt_social_atendimentos' && entry.isOverride) {
+             // For social overrides, we sum pagods + free
+             grouped[key].push(Number(entry.socialPaid || 0) + Number(entry.socialFree || 0));
+         } else {
+             grouped[key].push(totalFreq);
+         }
      });
 
      // Process Aggregation
@@ -172,8 +200,33 @@ export function AdminStrategicGoals({ userData }: { userData?: any }) {
      return chartData;
   };
 
+  const [entryKids, setEntryKids] = useState<string>('0');
+  const [entryTeens, setEntryTeens] = useState<string>('0');
+  const [entryServants, setEntryServants] = useState<string>('0');
+
   const handleAddEntry = async () => {
-    if (!userData?.tenantId || !selectedKpi || selectedKpi.isDerived) return;
+    if (!userData?.tenantId || !selectedKpi) return;
+    
+    // Virtual block but overriding
+    if (selectedKpi.id === 'kpi_virt_social_atendimentos' && socialMode === 'manual') {
+       if (!socialDate) return;
+       await addDoc(collection(db, 'kpi_entries'), {
+         kpiName: selectedKpi.id,
+         date: socialDate,
+         isOverride: true,
+         socialPaid: Number(socialPaid),
+         socialFree: Number(socialFree),
+         notes: socialNotes,
+         actualValue: Number(socialPaid) + Number(socialFree),
+         tenantId: userData.tenantId,
+         createdAt: serverTimestamp()
+       });
+       setSocialPaid('0'); setSocialFree('0'); setSocialNotes('');
+       return;
+    }
+
+    if (selectedKpi.isDerived || selectedKpi.isVirtual) return;
+
     const val = Number(entryValue);
     if (isNaN(val) || !entryDate) return;
 
@@ -189,6 +242,11 @@ export function AdminStrategicGoals({ userData }: { userData?: any }) {
        payload.unit = entryUnit;
        payload.serviceTime = entryTime;
        payload.visitors = Number(entryVisitors) || 0;
+       payload.kids = Number(entryKids) || 0;
+       payload.teens = Number(entryTeens) || 0;
+       payload.servants = Number(entryServants) || 0;
+       // We can store actualValue as the adults/base
+       payload.actualValue = val;
     }
 
     await addDoc(collection(db, 'kpi_entries'), payload);
@@ -196,6 +254,9 @@ export function AdminStrategicGoals({ userData }: { userData?: any }) {
     setEntryValue('');
     if (selectedKpi.id === 'kpi_frequencia_celebracoes') {
        setEntryVisitors('0');
+       setEntryKids('0');
+       setEntryTeens('0');
+       setEntryServants('0');
     }
   };
 
@@ -300,7 +361,47 @@ export function AdminStrategicGoals({ userData }: { userData?: any }) {
 
                  {/* Right Column: Entry Form & History */}
                  <div className="space-y-6">
-                    {(!selectedKpi.isDerived && !selectedKpi.isVirtual) && (
+                    {/* Social Override Form */}
+                    {selectedKpi.id === 'kpi_virt_social_atendimentos' && (
+                      <div className="bg-primary/10 border border-primary/20 rounded-xl p-4 space-y-4">
+                         <div className="flex justify-between items-center mb-2">
+                            <h4 className="text-sm font-bold text-primary uppercase tracking-wider flex items-center gap-2">
+                              <Plus className="w-4 h-4"/> Lançamento Social
+                            </h4>
+                            <div className="flex bg-black/50 rounded-lg p-1">
+                               <button onClick={() => setSocialMode('auto')} className={`px-2 py-1 text-[10px] uppercase font-bold rounded ${socialMode === 'auto' ? 'bg-primary text-black' : 'text-white/40'}`}>Automático</button>
+                               <button onClick={() => setSocialMode('manual')} className={`px-2 py-1 text-[10px] uppercase font-bold rounded ${socialMode === 'manual' ? 'bg-primary text-black' : 'text-white/40'}`}>Manual</button>
+                            </div>
+                         </div>
+                         {socialMode === 'manual' ? (
+                            <div className="space-y-3">
+                               <div>
+                                  <label className="text-xs font-bold text-white/60">Data Ref.</label>
+                                  <Input type="date" value={socialDate} onChange={e => setSocialDate(e.target.value)} className="bg-black border-white/10 mt-1 h-9" />
+                               </div>
+                               <div className="grid grid-cols-2 gap-2">
+                                  <div>
+                                     <label className="text-xs font-bold text-white/60">Pagos</label>
+                                     <Input type="number" placeholder="Ex: 97" value={socialPaid} onChange={e => setSocialPaid(e.target.value)} className="bg-black border-white/10 mt-1 h-9 font-black" />
+                                  </div>
+                                  <div>
+                                     <label className="text-xs font-bold text-white/60">Gratuitos/Subsidiados</label>
+                                     <Input type="number" placeholder="Ex: 6" value={socialFree} onChange={e => setSocialFree(e.target.value)} className="bg-black border-white/10 mt-1 h-9 font-black" />
+                                  </div>
+                               </div>
+                               <div>
+                                  <label className="text-xs font-bold text-white/60">Observações</label>
+                                  <textarea value={socialNotes} onChange={e => setSocialNotes(e.target.value)} className="w-full bg-black border border-white/10 rounded-lg p-2 text-sm text-white mt-1 h-16 custom-scrollbar focus:outline-none focus:ring-1 focus:ring-primary" placeholder="Justificativa..."></textarea>
+                               </div>
+                               <Button className="w-full bg-primary text-black font-bold h-9" onClick={handleAddEntry}>Lançar Dados (Override)</Button>
+                            </div>
+                         ) : (
+                            <p className="text-xs text-white/50 mb-2">Os dados sociais estão sendo extraídos automaticamente do módulo de Cuidado. Mude para "Manual" caso precise corrigir ou lançar um valor consolidado antigo.</p>
+                         )}
+                      </div>
+                    )}
+
+                    {(!selectedKpi.isDerived && !selectedKpi.isVirtual && selectedKpi.id !== 'kpi_virt_social_atendimentos') && (
                       <div className="bg-primary/10 border border-primary/20 rounded-xl p-4 space-y-4">
                          <h4 className="text-sm font-bold text-primary mb-2 uppercase tracking-wider flex items-center gap-2">
                            <Plus className="w-4 h-4"/> Novo Lançamento
@@ -316,34 +417,57 @@ export function AdminStrategicGoals({ userData }: { userData?: any }) {
                                   <div>
                                      <label className="text-xs font-bold text-white/60">Unidade</label>
                                      <select value={entryUnit} onChange={e => setEntryUnit(e.target.value)} className="w-full bg-black border border-white/10 rounded-lg p-2 text-sm text-white h-9 mt-1 focus:outline-none focus:ring-1 focus:ring-primary">
-                                        <option value="Sede">Sede</option>
-                                        <option value="Norte">Norte</option>
-                                        <option value="BR">BR</option>
+                                        {unitsList.map((u, i) => <option key={i} value={u.name}>{u.name}</option>)}
                                      </select>
                                   </div>
                                   <div>
-                                     <label className="text-xs font-bold text-white/60">Horário</label>
-                                     <select value={entryTime} onChange={e => setEntryTime(e.target.value)} className="w-full bg-black border border-white/10 rounded-lg p-2 text-sm text-white h-9 mt-1 focus:outline-none focus:ring-1 focus:ring-primary">
-                                        {serviceTimes[entryUnit]?.map(time => (
-                                           <option key={time} value={time}>{time}</option>
-                                        ))}
-                                     </select>
+                                     <label className="text-xs font-bold text-white/60">Reunião / Horário</label>
+                                     <Input list="serviceTimesList" value={entryTime} onChange={e => setEntryTime(e.target.value)} className="bg-black border-white/10 mt-1 h-9" placeholder="Ex: 18h" />
+                                     <datalist id="serviceTimesList">
+                                        {unitsList.find(u => u.name === entryUnit)?.serviceTimes?.match(/\b(?:[01]?\d|2[0-3])(?:h|:\d{2})\b/gi)?.map((t: string) => <option key={t} value={t} />)}
+                                        <option value="Culto Manhã" />
+                                        <option value="Culto Único" />
+                                        <option value="Ministério Kids" />
+                                        <option value="Ministério Teens" />
+                                     </datalist>
                                   </div>
                                </div>
                             )}
 
-                            <div className="grid grid-cols-2 gap-2">
-                               <div>
-                                  <label className="text-xs font-bold text-white/60">Presentes / Valor</label>
-                                  <Input type="number" placeholder="Ex: 15" value={entryValue} onChange={e => setEntryValue(e.target.value)} className="bg-black border-white/10 mt-1 h-9 font-black" />
-                               </div>
-                               {selectedKpi.id === 'kpi_frequencia_celebracoes' && (
+                            {selectedKpi.id === 'kpi_frequencia_celebracoes' ? (
+                               <div className="grid grid-cols-2 gap-2">
+                                  <div>
+                                     <label className="text-xs font-bold text-white/60">Adultos (Base)</label>
+                                     <Input type="number" placeholder="Ex: 15" value={entryValue} onChange={e => setEntryValue(e.target.value)} className="bg-black border-white/10 mt-1 h-9 font-black" />
+                                  </div>
                                   <div>
                                      <label className="text-xs font-bold text-white/60">Visitantes</label>
                                      <Input type="number" placeholder="Ex: 5" value={entryVisitors} onChange={e => setEntryVisitors(e.target.value)} className="bg-black border-white/10 mt-1 h-9 font-black" />
                                   </div>
-                               )}
-                            </div>
+                                  <div>
+                                     <label className="text-xs font-bold text-white/60">Kids</label>
+                                     <Input type="number" placeholder="Ex: 0" value={entryKids} onChange={e => setEntryKids(e.target.value)} className="bg-black border-white/10 mt-1 h-9 font-black" />
+                                  </div>
+                                  <div>
+                                     <label className="text-xs font-bold text-white/60">Teens</label>
+                                     <Input type="number" placeholder="Ex: 0" value={entryTeens} onChange={e => setEntryTeens(e.target.value)} className="bg-black border-white/10 mt-1 h-9 font-black" />
+                                  </div>
+                                  <div className="col-span-2">
+                                     <label className="text-xs font-bold text-white/60">Servos Escalados</label>
+                                     <Input type="number" placeholder="Ex: 10" value={entryServants} onChange={e => setEntryServants(e.target.value)} className="bg-black border-white/10 mt-1 h-9 font-black" />
+                                  </div>
+                                  <div className="col-span-2 bg-black/50 border border-white/10 rounded-lg p-3 flex justify-between items-center mt-2">
+                                     <span className="text-xs font-bold text-white/60 uppercase">Total Consolidado</span>
+                                     <span className="text-lg font-black text-primary">{(Number(entryValue) || 0) + (Number(entryVisitors) || 0) + (Number(entryKids) || 0) + (Number(entryTeens) || 0) + (Number(entryServants) || 0)}</span>
+                                  </div>
+                               </div>
+                            ) : (
+                               <div>
+                                  <label className="text-xs font-bold text-white/60">Valor Realizado</label>
+                                  <Input type="number" placeholder="Ex: 15" value={entryValue} onChange={e => setEntryValue(e.target.value)} className="bg-black border-white/10 mt-1 h-9 font-black" />
+                               </div>
+                            )}
+
                             <Button className="w-full bg-primary text-black font-bold h-9" onClick={handleAddEntry}>Lançar Dados</Button>
                          </div>
                       </div>
@@ -362,9 +486,12 @@ export function AdminStrategicGoals({ userData }: { userData?: any }) {
                                 <div>
                                    <p className="text-xs font-bold text-white">{format(parseISO(e.date), 'dd/MM/yyyy')}</p>
                                    <p className="text-xs text-white/40">
-                                      {e.actualValue} registros
-                                      {e.unit && ` • ${e.unit} (${e.serviceTime})`}
-                                      {e.visitors !== undefined && ` • ${e.visitors} visitantes`}
+                                       {e.actualValue} {e.isOverride ? '(Total Manual)' : 'registros'}
+                                       {e.unit && ` • ${e.unit} (${e.serviceTime})`}
+                                       {e.visitors !== undefined && ` • ${e.visitors} vis`}
+                                       {e.kids !== undefined && ` • ${e.kids} kids`}
+                                       {e.teens !== undefined && ` • ${e.teens} teens`}
+                                       {e.servants !== undefined && ` • ${e.servants} servos`}
                                    </p>
                                 </div>
                                 {(!selectedKpi.isDerived && !selectedKpi.isVirtual) && (

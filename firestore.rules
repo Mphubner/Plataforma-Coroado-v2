@@ -948,7 +948,7 @@ service cloud.firestore {
     }
 
     match /action_plans/{planId} {
-      allow read, write: if isSignedIn() && hasAnyRole(['admin', 'seniorPastor', 'networkPastor', 'auxPastor', 'manager']);
+      allow read, write: if isSignedIn() && (isAdmin() || (currentUserExists() && (resource == null || resource.data.tenantId == currentUser().data.tenantId)));
     }
 
     match /orders/{orderId} {

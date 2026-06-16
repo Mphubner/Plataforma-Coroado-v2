@@ -28,8 +28,10 @@ export function AdminDashboardMetrics({ userData }: { userData?: any }) {
 
   // Form states
   const [serviceForm, setServiceForm] = useState({ name: '', date: '', actual: 0, target: 0, visActual: 0, visTarget: 0 });
-  const [financeForm, setFinanceForm] = useState({ title: '', date: '', amount: 0, target: 0 });
+  const [financeForm, setFinanceForm] = useState({ title: '', date: '', amount: '', target: '', unit: '', category: '', project: '', receipt: '' });
   const [targetForm, setTargetForm] = useState({ activeCells: 0, attendanceAvg: 0, visitorsTarget: 0, revenueTarget: 0 });
+
+  const [unitsList, setUnitsList] = useState<any[]>([]);
 
   const isHighLevel = can(userData, 'manage:finance');
 
@@ -57,14 +59,18 @@ export function AdminDashboardMetrics({ userData }: { userData?: any }) {
        setCellCount(snap.size);
     });
 
+    const unUnits = onSnapshot(query(collection(db, 'units'), where('tenantId', '==', userData.tenantId)), (snap) => {
+       setUnitsList(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+    });
+
     if (isHighLevel) {
       const unF = onSnapshot(query(collection(db, 'financial_reports'), where('tenantId', '==', userData.tenantId)), (snap) => {
          setFinancials(snap.docs.map(d => ({id: d.id, ...d.data()})));
       });
-      return () => { unT(); unS(); unC(); unF(); };
+      return () => { unT(); unS(); unC(); unUnits(); unF(); };
     }
 
-    return () => { unT(); unS(); unC(); };
+    return () => { unT(); unS(); unC(); unUnits(); };
   }, [userData, isHighLevel]);
 
   const handleSaveTarget = async (name: string, value: number) => {
@@ -108,15 +114,19 @@ export function AdminDashboardMetrics({ userData }: { userData?: any }) {
   const handleAddFinance = async () => {
     if (!userData?.tenantId) return;
     await addDoc(collection(db, 'financial_reports'), {
-       title: financeForm.title || 'Dízimos e Ofertas',
+       title: financeForm.title || `${financeForm.category || 'Receita'} - ${financeForm.unit || 'Geral'}`,
        date: financeForm.date || new Date().toISOString().split('T')[0],
        amount: Number(financeForm.amount),
-       target: Number(financeForm.target),
+       target: Number(financeForm.target) || 0,
+       unit: financeForm.unit,
+       category: financeForm.category,
+       project: financeForm.project,
+       receipt: financeForm.receipt,
        tenantId: userData.tenantId,
        createdAt: serverTimestamp(),
        updatedAt: serverTimestamp()
     });
-    setFinanceForm({ title: '', date: '', amount: 0, target: 0 });
+    setFinanceForm({ title: '', date: '', amount: '', target: '', unit: '', category: '', project: '', receipt: '' });
     setActiveModal(null);
   };
 
@@ -253,22 +263,61 @@ export function AdminDashboardMetrics({ userData }: { userData?: any }) {
                     <Button variant="ghost" size="icon" onClick={() => setActiveModal(null)}><X className="w-5 h-5"/></Button>
                   </div>
                   <div className="space-y-4">
-                    <div><label className="text-xs text-white/60">Data Fechamento</label><Input type="date" value={financeForm.date} onChange={e => setFinanceForm({...financeForm, date: e.target.value})} className="bg-zinc-900"/></div>
-                    <div><label className="text-xs text-white/60">Título / Origem</label><Input placeholder="Ex: Dízimos Domingo" value={financeForm.title} onChange={e => setFinanceForm({...financeForm, title: e.target.value})} className="bg-zinc-900"/></div>
-                    <div><label className="text-xs text-white/60">Arrecadação R$ (Realizado)</label><Input type="number" value={financeForm.amount} onChange={e => setFinanceForm({...financeForm, amount: e.target.value as any})} className="bg-zinc-900"/></div>
-                    <div><label className="text-xs text-white/60">Meta Período R$</label><Input type="number" value={financeForm.target} onChange={e => setFinanceForm({...financeForm, target: e.target.value as any})} className="bg-zinc-900"/></div>
+                    <div className="grid grid-cols-2 gap-2">
+                       <div><label className="text-xs text-white/60">Data Fechamento</label><Input type="date" value={financeForm.date} onChange={e => setFinanceForm({...financeForm, date: e.target.value})} className="bg-zinc-900"/></div>
+                       <div>
+                          <label className="text-xs text-white/60">Unidade Geradora</label>
+                          <select value={financeForm.unit} onChange={e => setFinanceForm({...financeForm, unit: e.target.value})} className="w-full bg-zinc-900 border border-white/10 rounded-md p-2 text-sm text-white h-10 mt-1">
+                             <option value="">Selecione...</option>
+                             {unitsList.map(u => <option key={u.id} value={u.name}>{u.name}</option>)}
+                          </select>
+                       </div>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-2">
+                       <div>
+                          <label className="text-xs text-white/60">Categoria da Receita</label>
+                          <Input list="financeCategories" placeholder="Ex: Dízimos" value={financeForm.category} onChange={e => setFinanceForm({...financeForm, category: e.target.value})} className="bg-zinc-900"/>
+                          <datalist id="financeCategories">
+                             <option value="Dízimos e Ofertas" />
+                             <option value="Bazar" />
+                             <option value="Livraria" />
+                             <option value="Cantina" />
+                             <option value="Eventos" />
+                          </datalist>
+                       </div>
+                       <div>
+                          <label className="text-xs text-white/60">Projeto / Destinação</label>
+                          <Input list="financeProjects" placeholder="Ex: Caixa Geral" value={financeForm.project} onChange={e => setFinanceForm({...financeForm, project: e.target.value})} className="bg-zinc-900"/>
+                          <datalist id="financeProjects">
+                             <option value="Caixa Geral" />
+                             <option value="Missões" />
+                             <option value="Construção Boquira" />
+                          </datalist>
+                       </div>
+                    </div>
+
+                    <div><label className="text-xs text-white/60">Valor Arrecadado R$ (Realizado)</label><Input type="number" placeholder="0.00" value={financeForm.amount} onChange={e => setFinanceForm({...financeForm, amount: e.target.value as any})} className="bg-zinc-900 font-bold"/></div>
+                    
+                    <div className="grid grid-cols-2 gap-2">
+                       <div><label className="text-xs text-white/60">Comprovante (Anexo ou Link)</label><Input type="text" placeholder="URL do arquivo..." value={financeForm.receipt} onChange={e => setFinanceForm({...financeForm, receipt: e.target.value})} className="bg-zinc-900"/></div>
+                       <div><label className="text-xs text-white/60">Título (Opcional)</label><Input placeholder="Ex: Oferta Culto 10h" value={financeForm.title} onChange={e => setFinanceForm({...financeForm, title: e.target.value})} className="bg-zinc-900"/></div>
+                    </div>
                   </div>
                   <Button className="w-full bg-primary text-black font-bold mt-4" onClick={handleAddFinance}>Registrar Conta</Button>
                   
                   <div className="mt-6 border-t border-white/10 pt-4">
                      <h4 className="text-sm font-bold mb-3 text-white/60">Histórico de Receitas</h4>
                      <div className="max-h-40 overflow-y-auto space-y-2 pr-2">
-                       {financials.sort((a,b) => b.date.localeCompare(a.date)).map(f => (
-                         <div key={f.id} className="text-xs bg-white/5 p-2 rounded flex justify-between items-center">
-                            <div><span className="font-bold text-white">{f.date}</span> - {f.title}</div>
-                            <div className="text-right text-green-400 font-bold">R$ {f.amount.toFixed(2).replace('.', ',')}</div>
-                         </div>
-                       ))}
+                         {financials.sort((a,b) => b.date.localeCompare(a.date)).map(f => (
+                           <div key={f.id} className="text-xs bg-white/5 p-2 rounded flex justify-between items-center">
+                              <div>
+                                 <span className="font-bold text-white">{f.date}</span> - {f.title || f.category}
+                                 {f.unit && <span className="text-white/40 block">Unidade: {f.unit} • Destino: {f.project}</span>}
+                              </div>
+                              <div className="text-right text-green-400 font-bold">R$ {Number(f.amount || 0).toFixed(2).replace('.', ',')}</div>
+                           </div>
+                         ))}
                        {financials.length === 0 && <p className="text-xs text-white/40">Nenhuma receita registrada.</p>}
                      </div>
                   </div>
