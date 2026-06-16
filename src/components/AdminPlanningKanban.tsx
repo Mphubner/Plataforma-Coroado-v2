@@ -107,13 +107,31 @@ export function AdminPlanningKanban({ userData }: { userData?: any }) {
 
   // Group plans into tree: Department -> Problem -> Plans
   const tree: any = {};
+  const defaultExpandedDepts: Record<string, boolean> = {};
+  const defaultExpandedProbs: Record<string, boolean> = {};
+
   plans.forEach(plan => {
     const dept = plan.group_department || 'Geral';
     const prob = plan.root_problem || 'Geral / Não Classificado';
-    if (!tree[dept]) tree[dept] = {};
-    if (!tree[dept][prob]) tree[dept][prob] = [];
+    if (!tree[dept]) {
+       tree[dept] = {};
+       defaultExpandedDepts[dept] = true;
+    }
+    if (!tree[dept][prob]) {
+       tree[dept][prob] = [];
+       defaultExpandedProbs[dept+prob] = true;
+    }
     tree[dept][prob].push(plan);
   });
+
+  useEffect(() => {
+     if (Object.keys(expandedDepts).length === 0 && Object.keys(defaultExpandedDepts).length > 0) {
+        setExpandedDepts(defaultExpandedDepts);
+        setExpandedProbs(defaultExpandedProbs);
+     }
+  }, [plans]);
+
+  console.log("Plans Loaded:", plans.length, "Tenant ID:", tenantId);
 
   return (
     <div className="space-y-6">
