@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { ImageUpload } from "@/components/ui/ImageUpload";
+import { ImageUpload } from "../ui/ImageUpload";
 
 export function AdminCourses() {
   const { courses, addCourse, updateCourse, deleteCourse } = useSchool();
