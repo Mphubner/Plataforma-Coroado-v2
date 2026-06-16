@@ -951,6 +951,14 @@ service cloud.firestore {
       allow read, write: if isSignedIn() && (isAdmin() || (currentUserExists() && (resource == null || resource.data.tenantId == currentUser().data.tenantId)));
     }
 
+    match /tasks/{taskId} {
+      allow read, write: if isSignedIn() && (isAdmin() || (currentUserExists() && (resource == null || resource.data.tenantId == currentUser().data.tenantId)));
+    }
+
+    match /task_updates/{updateId} {
+      allow read, write: if isSignedIn() && (isAdmin() || (currentUserExists() && (resource == null || resource.data.tenantId == currentUser().data.tenantId)));
+    }
+
     match /orders/{orderId} {
       allow get, list: if isSignedIn() && (isAdmin() || hasAnyRole(['seniorPastor', 'networkPastor', 'auxPastor']) || resource.data.userId == request.auth.uid);
       allow create: if isSignedIn() && isValidId(orderId) && isValidOrder(incoming()) &&

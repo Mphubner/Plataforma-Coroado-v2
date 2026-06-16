@@ -277,6 +277,15 @@ export function AdminPlanningKanban({ userData }: { userData?: any }) {
                 </div>
                 
                 <div className="space-y-2">
+                  <label className="text-xs font-bold text-white/40 uppercase">Estratégia (Como fazer)</label>
+                  <textarea 
+                    className="w-full h-20 bg-zinc-900 border border-white/10 rounded-lg p-3 text-sm focus:outline-none focus:ring-1 focus:ring-primary resize-none placeholder:text-white/20"
+                    placeholder="Detalhe operacional da ação..." 
+                    value={newTaskDescription} onChange={e => setNewTaskDescription(e.target.value)} 
+                  />
+                </div>
+                
+                <div className="space-y-2">
                   <label className="text-xs font-bold text-white/40 uppercase">Área Ministerial / Tag</label>
                   <Input placeholder="Ex: Comunicação, Eventos..." value={newTaskDept} onChange={e => setNewTaskDept(e.target.value)} className="bg-zinc-900 border-white/10" />
                 </div>
@@ -330,10 +339,10 @@ export function AdminPlanningKanban({ userData }: { userData?: any }) {
         </div>
       </div>
 
-      <div className="flex gap-6 overflow-x-auto pb-4 snap-x">
+      <div className="flex gap-6 overflow-x-auto pb-4 snap-x custom-scrollbar min-h-[calc(100vh-250px)] items-start">
          {Object.keys(groupedTasks).map(groupName => (
-           <div key={groupName} className="min-w-[320px] max-w-[320px] flex flex-col gap-3 snap-start">
-             <div className="flex items-center justify-between mb-2 px-1">
+           <div key={groupName} className="min-w-[320px] max-w-[320px] flex flex-col gap-3 snap-start h-full max-h-[calc(100vh-250px)]">
+             <div className="flex items-center justify-between mb-2 px-1 shrink-0">
                <h3 className="font-bold text-white flex items-center gap-2">
                  <div className={`w-2 h-2 rounded-full ${groupName === 'Concluído' ? 'bg-green-500' : (groupName === 'Em Andamento' ? 'bg-blue-500' : 'bg-white/30')}`}/>
                  {groupName}
@@ -341,7 +350,7 @@ export function AdminPlanningKanban({ userData }: { userData?: any }) {
                <span className="text-xs bg-white/10 text-white/70 px-2 py-0.5 rounded-full font-mono">{groupedTasks[groupName].length}</span>
              </div>
              
-             <div className="flex flex-col gap-3">
+             <div className="flex flex-col gap-3 overflow-y-auto custom-scrollbar pr-2 pb-4">
                {groupedTasks[groupName].map(task => {
                  const overdue = isOverdue(task.dueDate, task.status);
                  return (
