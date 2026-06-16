@@ -536,8 +536,12 @@ export function StoreView({ isAdmin = false, userData }: StoreViewProps) {
                        </select>
                     </div>
                     <div className="space-y-2">
-                       <label className="text-xs font-bold text-white/40 uppercase">URL da Imagem</label>
-                       <Input value={newProductForm.img} onChange={e => setNewProductForm({...newProductForm, img: e.target.value})} className="bg-black border-white/10" placeholder="https://unsplash.com/..."/>
+                       <label className="text-xs font-bold text-white/40 uppercase">Foto do Produto</label>
+                       <ImageUpload 
+                         value={newProductForm.img || ''} 
+                         onChange={url => setNewProductForm({...newProductForm, img: url})} 
+                         folder="images/loja"
+                       />
                     </div>
                     <div className="space-y-2">
                        <label className="text-xs font-bold text-white/40 uppercase">Descrição</label>

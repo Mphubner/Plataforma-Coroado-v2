@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { ImageUpload } from "@/components/ui/ImageUpload";
 
 export function AdminCourses() {
   const { courses, addCourse, updateCourse, deleteCourse } = useSchool();
@@ -198,8 +199,12 @@ export function AdminCourses() {
               </div>
             </div>
             <div className="space-y-2">
-              <label className="text-sm font-bold">URL da Imagem</label>
-              <Input value={editingCourse.img} onChange={e => setEditingCourse({...editingCourse, img: e.target.value})} className="bg-black border-white/10" required />
+              <label className="text-sm font-bold">Imagem da Capa</label>
+              <ImageUpload 
+                value={editingCourse.img} 
+                onChange={url => setEditingCourse({...editingCourse, img: url})} 
+                folder="images/cursos"
+              />
             </div>
             <div className="space-y-2">
               <label className="text-sm font-bold">Descrição</label>

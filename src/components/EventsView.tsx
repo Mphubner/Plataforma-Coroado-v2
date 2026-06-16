@@ -12,6 +12,7 @@ import { handleFirestoreError, OperationType } from '@/lib/firestoreUtils';
 import { can } from '@/src/lib/permissions';
 import { postJson } from '@/src/lib/api/http';
 import { pageMotion } from '@/src/lib/motion/presets';
+import { ImageUpload } from '@/components/ui/ImageUpload';
 
 type EventInfo = {
   id: string;
@@ -1032,6 +1033,15 @@ export function EventsView({ isLoggedIn = false, userData, onLoginClick }: { isL
                   <div className="space-y-2">
                     <label className="text-[10px] text-white/40 uppercase font-bold tracking-widest">Descrição</label>
                     <textarea className="w-full bg-black border border-white/10 rounded-lg px-3 py-2 text-sm text-white focus:border-primary focus:outline-none min-h-[80px]" placeholder="Mais detalhes sobre o evento..." value={newEvent.description || ''} onChange={(e) => setNewEvent({...newEvent, description: e.target.value})} />
+                  </div>
+
+                  <div className="space-y-2">
+                    <label className="text-[10px] text-white/40 uppercase font-bold tracking-widest">Foto do Evento</label>
+                    <ImageUpload 
+                      value={newEvent.image || ''} 
+                      onChange={url => setNewEvent({ ...newEvent, image: url })} 
+                      folder="images/eventos"
+                    />
                   </div>
 
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4 bg-black/40 p-4 rounded-xl border border-white/5">

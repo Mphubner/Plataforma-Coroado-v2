@@ -281,7 +281,7 @@ export function AdminStrategicGoals({ userData }: { userData?: any }) {
 
      return (
         <div style={{ height: `${height}px` }} className="w-full mt-4">
-          <ResponsiveContainer width="100%" height="100%">
+          <ResponsiveContainer width="100%" height="100%" minHeight={0} minWidth={0}>
             {timeView === 'yearly' ? (
               <AreaChart data={data} margin={{ top: 10, right: 0, left: -20, bottom: 0 }}>
                 <defs>

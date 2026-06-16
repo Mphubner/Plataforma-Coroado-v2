@@ -2,6 +2,7 @@ import { initializeApp } from 'firebase/app';
 import { getAuth, GoogleAuthProvider } from 'firebase/auth';
 import { initializeFirestore, doc, getDocFromServer } from 'firebase/firestore';
 import { getFunctions } from 'firebase/functions';
+import { getStorage } from 'firebase/storage';
 import firebaseConfig from '../firebase-applet-config.json';
 
 const app = initializeApp(firebaseConfig);
@@ -21,7 +22,7 @@ googleWorkspaceProvider.addScope('https://www.googleapis.com/auth/forms');
 googleWorkspaceProvider.addScope('https://www.googleapis.com/auth/spreadsheets');
 
 export const functions = getFunctions(app, 'us-central1'); // Ajuste se for outra região
-
+export const storage = getStorage(app);
 
 async function testConnection() {
   try {
