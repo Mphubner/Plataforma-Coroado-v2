@@ -6,6 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Search, Users, Heart, Shield, Edit2, X, Check, MapPin, Network, List, Download } from "lucide-react";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { ImageUpload } from '@/components/ui/ImageUpload';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { auth, db } from "@/lib/firebase";
 import { collection, query, where, onSnapshot, getDocs } from "firebase/firestore";
@@ -320,27 +321,13 @@ export function MembersView({ userData }: { userData?: any }) {
                   <Button variant="ghost" size="icon" onClick={() => setEditingMember(null)}><X className="h-4 w-4" /></Button>
                 </CardHeader>
                 <CardContent className="space-y-4">
-                  <div className="flex items-center gap-6 mb-4">
-                    <Avatar className="h-20 w-20 border-2 border-primary/50">
-                      <AvatarImage src={editingMember.avatarUrl} />
-                      <AvatarFallback className="bg-primary/20 text-primary text-2xl">{editingMember.name?.[0] || 'U'}</AvatarFallback>
-                    </Avatar>
-                    <div>
-                      <label className="cursor-pointer bg-white/10 hover:bg-white/20 text-white text-xs px-4 py-2 rounded-lg transition-colors font-bold">
-                        Alterar Foto
-                        <input type="file" accept="image/*" className="hidden" onChange={(e) => {
-                          const file = e.target.files?.[0];
-                          if (file) {
-                            if (file.size > 1024 * 1024) { alert("A imagem não pode ter mais de 1MB."); return; }
-                            const reader = new FileReader();
-                            reader.onloadend = () => {
-                              setEditingMember({ ...editingMember, avatarUrl: reader.result as string });
-                            };
-                            reader.readAsDataURL(file);
-                          }
-                        }} />
-                      </label>
-                    </div>
+                  <div className="flex flex-col gap-2 mb-4">
+                    <label className="text-xs font-bold text-white/60">Foto de Perfil</label>
+                    <ImageUpload 
+                      value={editingMember.avatarUrl || ''} 
+                      onChange={url => setEditingMember({ ...editingMember, avatarUrl: url })} 
+                      folder="images/membros"
+                    />
                   </div>
                   <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
                     <div className="space-y-2">

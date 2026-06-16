@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Facebook, Instagram, Youtube, Mail, ChevronRight, Calendar, X, AlertCircle, Edit3, Trash2, Plus, Clock, CheckCircle, ListTodo, Users, Search } from 'lucide-react';
+import { ImageUpload } from '@/components/ui/ImageUpload';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -516,8 +517,12 @@ export function PastorsView({ isAdmin, userData, isLoggedIn, onLoginClick }: { i
                   <Input required value={editingPastor.role} onChange={e => setEditingPastor({ ...editingPastor, role: e.target.value })} className="bg-black border-white/10" />
                 </div>
                 <div className="space-y-2">
-                  <label className="text-xs font-bold text-white/60">URL da Foto</label>
-                  <Input required value={editingPastor.image} onChange={e => setEditingPastor({ ...editingPastor, image: e.target.value })} className="bg-black border-white/10" />
+                  <label className="text-xs font-bold text-white/60">Foto do Pastor</label>
+                  <ImageUpload 
+                    value={editingPastor.image} 
+                    onChange={url => setEditingPastor({ ...editingPastor, image: url })} 
+                    folder="images/pastores"
+                  />
                 </div>
                 <div className="space-y-2">
                   <label className="text-xs font-bold text-white/60">Horários Disponíveis (separados por vírgula)</label>

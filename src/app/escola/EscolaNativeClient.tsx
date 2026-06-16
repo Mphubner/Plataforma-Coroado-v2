@@ -53,7 +53,7 @@ export function EscolaNativeClient() {
         <div className="flex flex-col items-center justify-center py-32 space-y-4">
           <h2 className="text-2xl font-bold font-serif italic text-white">Acesso Restrito</h2>
           <p className="text-white/50">Você precisa estar logado para acessar a Escola IDE.</p>
-          <button onClick={() => window.location.href = '/'} className="px-6 py-2 bg-primary text-black font-bold rounded-full">
+          <button onClick={() => window.location.href = '/login?redirect=/escola'} className="px-6 py-2 bg-primary text-black font-bold rounded-full">
             Fazer Login
           </button>
         </div>

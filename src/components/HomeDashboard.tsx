@@ -1,22 +1,26 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { motion } from 'motion/react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Users, Activity, Target, ShieldCheck, Heart, Crosshair, ArrowRight, BookOpen, Badge } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { pageMotion } from '@/src/lib/motion/presets';
+import { AdminDashboardMetrics } from './AdminDashboardMetrics';
+import { db } from "@/lib/firebase";
+import { collection, query, where, getDocs } from "firebase/firestore";
 
-function PersonalDashboard({ events, myScales }: { events: any[], myScales: any[] }) {
+function PersonalDashboard({ events, myScales, userData }: { events: any[], myScales: any[], userData: any }) {
+  const nextScale = myScales?.[0];
   return (
     <div className="space-y-6">
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
         <Card className="bg-zinc-900 border-white/10">
           <CardHeader className="pb-2">
-            <CardTitle className="text-sm text-white/60 uppercase tracking-wider">Próxima Célula</CardTitle>
+            <CardTitle className="text-sm text-white/60 uppercase tracking-wider">Próxima Escala</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-black text-white">Quinta, 20h</div>
-            <p className="text-xs text-primary mt-1">Célula Nova Vida</p>
+            <div className="text-2xl font-black text-white">{nextScale ? new Date(nextScale.date).toLocaleDateString() : 'Nenhuma'}</div>
+            <p className="text-xs text-primary mt-1">{nextScale ? nextScale.ministry : 'Você não possui escalas'}</p>
           </CardContent>
         </Card>
         <Card className="bg-zinc-900 border-white/10">
@@ -25,7 +29,7 @@ function PersonalDashboard({ events, myScales }: { events: any[], myScales: any[
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-black text-white">2 Cursos</div>
-            <p className="text-xs text-red-400 mt-1">Há 5 dias sem acesso</p>
+            <p className="text-xs text-green-400 mt-1">Ativos no momento</p>
           </CardContent>
         </Card>
         <Card className="bg-zinc-900 border-white/10">
@@ -47,117 +51,46 @@ function PersonalDashboard({ events, myScales }: { events: any[], myScales: any[
           </CardContent>
         </Card>
       </div>
-
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <div className="glass-card p-6 rounded-[2rem] border border-white/5">
-          <h3 className="font-serif italic text-2xl font-black mb-4">Próximos Eventos</h3>
-          <div className="space-y-4">
-            {events.slice(0, 3).map((ev: any, idx: number) => (
-              <div key={idx} className="flex items-center gap-4 p-4 rounded-xl bg-black/40">
-                <div className="w-12 h-12 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
-                  <Target className="w-5 h-5 text-primary" />
-                </div>
-                <div>
-                  <h4 className="font-bold">{ev.title}</h4>
-                  <p className="text-sm text-white/50">{ev.date} - {ev.loc}</p>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-
-        {myScales.length > 0 && (
-          <div className="glass-card p-6 rounded-[2rem] border border-white/5">
-            <h3 className="font-serif italic text-2xl font-black mb-4">Minhas Escalas</h3>
-            <div className="space-y-4">
-              {myScales.map((scale: any) => (
-                <div key={scale.id} className="flex flex-col gap-2 p-4 rounded-xl bg-black/40 border border-primary/20">
-                  <h4 className="font-bold">{scale.eventName}</h4>
-                  <p className="text-sm text-primary">{scale.date} às {scale.time}</p>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
-      </div>
     </div>
   )
 }
 
-function CellLeaderDashboard() {
+function CellLeaderDashboard({ stats }: { stats: any }) {
   return (
     <div className="space-y-6">
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+        <Card className="bg-zinc-900 border-white/10 border-l-4 border-l-primary">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm text-white/60 uppercase tracking-wider">Membros Ativos</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="text-3xl font-black text-white">{stats.cellMembers || 0}</div>
+          </CardContent>
+        </Card>
         <Card className="bg-zinc-900 border-white/10">
           <CardHeader className="pb-2">
             <CardTitle className="text-sm text-white/60 uppercase tracking-wider">Saúde da Célula</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-3xl font-black text-green-400">85%</div>
-            <p className="text-xs text-white/50 mt-1">+5% nesta semana</p>
+            <div className="text-3xl font-black text-green-400">Boa</div>
+            <p className="text-xs text-white/50 mt-1">Baseado nos últimos relatórios</p>
           </CardContent>
         </Card>
-        <Card className="bg-zinc-900 border-white/10">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm text-white/60 uppercase tracking-wider">Membros & Visitantes</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-3xl font-black text-white">12 <span className="text-lg text-primary">+3</span></div>
-            <p className="text-xs text-white/50 mt-1">Visitantes retidos: 2</p>
-          </CardContent>
-        </Card>
-        <Card className="bg-zinc-900 border-white/10">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm text-white/60 uppercase tracking-wider">Engajamento IDE</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-3xl font-black text-white">40%</div>
-            <p className="text-xs text-white/50 mt-1">Dos membros estão estudando</p>
-          </CardContent>
-        </Card>
-      </div>
-
-      <div className="glass-card p-6 rounded-[2rem] border border-white/5">
-        <h3 className="font-serif italic text-2xl font-black mb-4">Métricas Pessoais do Líder</h3>
-        <p className="text-white/60">Seu engajamento nos treinamentos de liderança e discipulado.</p>
-        <div className="mt-4 flex gap-4">
-          <Badge className="bg-primary/20 text-primary hover:bg-primary/30">Discipulado em dia</Badge>
-          <Badge className="bg-green-500/20 text-green-400 hover:bg-green-500/30">IDE Concluído</Badge>
-        </div>
       </div>
     </div>
   )
 }
 
-function SupervisorDashboard() {
+function SupervisorDashboard({ stats }: { stats: any }) {
   return (
     <div className="space-y-6">
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <Card className="bg-zinc-900 border-primary/20">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+        <Card className="bg-zinc-900 border-white/10 border-l-4 border-l-purple-500">
           <CardHeader className="pb-2">
-            <CardTitle className="text-sm text-white/60 uppercase tracking-wider">Células Supervisionadas</CardTitle>
+            <CardTitle className="text-sm text-white/60 uppercase tracking-wider">Células na Supervisão</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-3xl font-black text-white">4</div>
-            <p className="text-xs text-white/50 mt-1">Total de membros agregados: 48</p>
-          </CardContent>
-        </Card>
-        <Card className="bg-zinc-900 border-white/10">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm text-white/60 uppercase tracking-wider">Saúde Média da Rede</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-3xl font-black text-yellow-400">72%</div>
-            <p className="text-xs text-white/50 mt-1">Atenção em 1 célula</p>
-          </CardContent>
-        </Card>
-        <Card className="bg-zinc-900 border-white/10">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm text-white/60 uppercase tracking-wider">Encontros com Líderes</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-3xl font-black text-white">3/4</div>
-            <p className="text-xs text-red-400 mt-1">1 Líder pendente de discipulado</p>
+            <div className="text-3xl font-black text-white">{stats.supervisorCells || 0}</div>
           </CardContent>
         </Card>
       </div>
@@ -169,14 +102,6 @@ function MinistryLeaderDashboard() {
   return (
     <div className="space-y-6">
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-        <Card className="bg-zinc-900 border-white/10">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm text-white/60 uppercase tracking-wider">Servos Ativos</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-3xl font-black text-white">25</div>
-          </CardContent>
-        </Card>
         <Card className="bg-zinc-900 border-white/10">
           <CardHeader className="pb-2">
             <CardTitle className="text-sm text-white/60 uppercase tracking-wider">Escalas Preenchidas</CardTitle>
@@ -191,60 +116,8 @@ function MinistryLeaderDashboard() {
   )
 }
 
-function MacroDashboard() {
-  return (
-    <div className="space-y-6">
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-        <Card className="bg-zinc-900 border-primary/50 shadow-lg shadow-primary/5">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm text-primary uppercase tracking-wider font-bold">Total de Membros</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-4xl font-black text-white">1.204</div>
-            <p className="text-xs text-green-400 mt-1">+12 esse mês</p>
-          </CardContent>
-        </Card>
-        <Card className="bg-zinc-900 border-white/10">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm text-white/60 uppercase tracking-wider">Total de Células</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-4xl font-black text-white">84</div>
-          </CardContent>
-        </Card>
-        <Card className="bg-zinc-900 border-white/10">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm text-white/60 uppercase tracking-wider">Supervisões</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-4xl font-black text-white">12</div>
-          </CardContent>
-        </Card>
-        <Card className="bg-zinc-900 border-white/10">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm text-white/60 uppercase tracking-wider">Atendimentos Pastorais</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-4xl font-black text-white">5</div>
-            <p className="text-xs text-white/50 mt-1">Pendentes na agenda</p>
-          </CardContent>
-        </Card>
-      </div>
-
-      <div className="glass-card p-6 rounded-[2rem] border border-white/5">
-        <h3 className="font-serif italic text-2xl font-black mb-4 flex items-center gap-2">
-          <ShieldCheck className="text-primary" /> Árvore de Supervisão (Macro)
-        </h3>
-        <p className="text-white/50">Navegue pelas redes, supervisões e células em formato de árvore. (Em desenvolvimento)</p>
-        <div className="mt-4 p-8 border border-dashed border-white/10 rounded-xl flex items-center justify-center text-white/30 font-medium">
-          Integração com a base de hierarquia em breve...
-        </div>
-      </div>
-    </div>
-  )
-}
-
 export function HomeDashboard({ userData, events, myScales }: { userData: any, events: any[], myScales: any[] }) {
+  const [stats, setStats] = useState<any>({ cellMembers: 0, supervisorCells: 0 });
   const roles = userData?.roles || [];
   const isAdmin = roles.includes('admin');
   const isSeniorPastor = roles.includes('seniorPastor') || isAdmin;
@@ -252,6 +125,23 @@ export function HomeDashboard({ userData, events, myScales }: { userData: any, e
   const isMinistryLeader = roles.includes('ministryLeader') || isAdmin;
   const isSupervisor = roles.includes('supervisor') || roles.includes('networkPastor') || isAdmin;
   const isCellLeader = roles.includes('cellLeader') || isSupervisor || isAdmin;
+
+  useEffect(() => {
+    if (!userData?.id) return;
+    const fetchStats = async () => {
+      if (isSupervisor) {
+        const q = query(collection(db, 'cells'), where('supervisorId', '==', userData.id));
+        const snap = await getDocs(q);
+        setStats((s: any) => ({ ...s, supervisorCells: snap.size }));
+      }
+      if (isCellLeader && userData.cellId) {
+        const q = query(collection(db, 'members'), where('cellId', '==', userData.cellId));
+        const snap = await getDocs(q);
+        setStats((s: any) => ({ ...s, cellMembers: snap.size }));
+      }
+    };
+    fetchStats();
+  }, [userData, isSupervisor, isCellLeader]);
 
   let defaultTab = "personal";
   if (isSeniorPastor || isNetworkPastor) defaultTab = "macro";
@@ -268,7 +158,7 @@ export function HomeDashboard({ userData, events, myScales }: { userData: any, e
           <h1 className="text-4xl font-black tracking-tight font-serif italic text-white">
             Olá, {userData?.name?.split(' ')[0] || 'Irmão'}!
           </h1>
-          <p className="text-white/60 text-lg font-medium">Bem-vindo ao seu painel pessoal.</p>
+          <p className="text-white/60 text-lg font-medium">Bem-vindo ao seu painel.</p>
         </div>
       </div>
 
@@ -292,7 +182,7 @@ export function HomeDashboard({ userData, events, myScales }: { userData: any, e
               Meu Ministério
             </TabsTrigger>
           )}
-          {(isSeniorPastor || isNetworkPastor) && (
+          {(isSeniorPastor || isNetworkPastor || isAdmin) && (
             <TabsTrigger value="macro" className="rounded-full px-6 py-2.5 data-[state=active]:bg-primary data-[state=active]:text-black text-white/70 font-bold transition-all">
               Visão Igreja
             </TabsTrigger>
@@ -300,16 +190,16 @@ export function HomeDashboard({ userData, events, myScales }: { userData: any, e
         </TabsList>
 
         <TabsContent value="personal" className="mt-6 focus-visible:outline-none focus-visible:ring-0">
-          <PersonalDashboard events={events} myScales={myScales} />
+          <PersonalDashboard events={events} myScales={myScales} userData={userData} />
         </TabsContent>
         {isCellLeader && (
           <TabsContent value="leader" className="mt-6 focus-visible:outline-none focus-visible:ring-0">
-            <CellLeaderDashboard />
+            <CellLeaderDashboard stats={stats} />
           </TabsContent>
         )}
         {isSupervisor && (
           <TabsContent value="supervisor" className="mt-6 focus-visible:outline-none focus-visible:ring-0">
-            <SupervisorDashboard />
+            <SupervisorDashboard stats={stats} />
           </TabsContent>
         )}
         {isMinistryLeader && (
@@ -317,9 +207,11 @@ export function HomeDashboard({ userData, events, myScales }: { userData: any, e
             <MinistryLeaderDashboard />
           </TabsContent>
         )}
-        {(isSeniorPastor || isNetworkPastor) && (
+        {(isSeniorPastor || isNetworkPastor || isAdmin) && (
           <TabsContent value="macro" className="mt-6 focus-visible:outline-none focus-visible:ring-0">
-            <MacroDashboard />
+            <div className="space-y-6">
+              <AdminDashboardMetrics userData={userData} />
+            </div>
           </TabsContent>
         )}
       </Tabs>

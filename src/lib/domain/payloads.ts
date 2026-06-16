@@ -405,6 +405,7 @@ export type TaskPayloadInput = {
   title: string;
   description?: string;
   tag?: string;
+  rootCause?: string;
   assigneeId?: string;
   status?: string;
   tenantId?: string;
@@ -419,6 +420,7 @@ export function toTaskPayload(input: TaskPayloadInput) {
     title: cleanText(input.title, 200),
     description: cleanText(input.description, 1000),
     tag: cleanText(input.tag, 100) || 'Geral',
+    rootCause: cleanText(input.rootCause, 200),
     assigneeId: cleanText(input.assigneeId, 128) || 'Nao atribuido',
     status: cleanText(input.status, 50) || 'todo',
     tenantId: cleanText(input.tenantId, 128) || DEFAULT_PLATFORM_TENANT_ID,

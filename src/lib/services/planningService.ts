@@ -55,6 +55,7 @@ export async function updateTaskDetails(taskId: string, input: Partial<TaskPaylo
     title: normalized.title,
     description: normalized.description || '',
     tag: normalized.tag || 'Geral',
+    rootCause: input.rootCause || '',
     assigneeId: normalized.assigneeId || 'Nao atribuido',
     dueDate: normalized.dueDate || '',
     updatedAt: serverTimestamp(),

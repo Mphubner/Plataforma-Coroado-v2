@@ -129,8 +129,13 @@ export function Layout({ children, activeTab, setActiveTab, isLoggedIn = true, u
   const bottomNavIds = getBottomNavItems()
   const desktopPrimaryIds = getDesktopPrimaryItems()
 
-  const primaryNav = permittedNav.filter(item => desktopPrimaryIds.includes(item.id))
-  const secondaryNav = permittedNav.filter(item => !desktopPrimaryIds.includes(item.id))
+  const navGroups = [
+    { label: "Principal", ids: ["home"] },
+    { label: "Conexão & Igreja", ids: ["cell", "events", "members", "social", "media"] },
+    { label: "Crescimento", ids: ["school", "jornada", "pastors"] },
+    { label: "Institucional", ids: ["units", "ministries", "store"] },
+    { label: "Gestão", ids: ["admin", "finance"] }
+  ];
 
   return (
     <div className="min-h-screen bg-black text-white font-sans selection:bg-primary selection:text-black scroll-smooth">
@@ -149,53 +154,75 @@ export function Layout({ children, activeTab, setActiveTab, isLoggedIn = true, u
             </motion.div>
             
             <nav className="hidden md:flex items-center gap-1">
-              {primaryNav.map((item) => (
-                <Button
-                  key={item.id}
-                  variant="ghost"
-                  className={cn(
-                    "relative px-3 lg:px-4 py-2 text-sm font-semibold transition-all duration-300 hover:text-primary rounded-full",
-                    activeTab === item.id ? "text-primary bg-white/5" : "text-white/60"
-                  )}
-                  onClick={() => setActiveTab(item.id)}
-                >
-                  {item.label}
-                  {activeTab === item.id && (
-                    <motion.div
-                      layoutId="activeTab"
-                      className="absolute -bottom-1 left-4 right-4 h-0.5 bg-primary rounded-full"
-                      transition={{ type: "spring", stiffness: 380, damping: 30 }}
-                    />
-                  )}
-                </Button>
-              ))}
-              
-              {secondaryNav.length > 0 && (
-                <DropdownMenu>
-                  <DropdownMenuTrigger 
-                    className={cn(
-                      buttonVariants({ variant: "ghost" }), 
-                      "text-white/60 hover:text-primary gap-1 px-3 lg:px-4"
-                    )}
-                  >
-                    Mais <Menu className="h-4 w-4" />
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent className="bg-zinc-900 border-white/10 text-white w-48">
-                    <DropdownMenuGroup>
-                      {secondaryNav.map((item) => (
-                        <DropdownMenuItem 
-                          key={item.id}
-                          onClick={() => setActiveTab(item.id)}
-                          className={`hover:bg-white/5 focus:bg-white/5 cursor-pointer ${activeTab === item.id ? "text-primary" : ""}`}
-                        >
-                          <item.icon className="mr-2 h-4 w-4" />
-                          {item.label}
-                        </DropdownMenuItem>
-                      ))}
-                    </DropdownMenuGroup>
-                  </DropdownMenuContent>
-                </DropdownMenu>
-              )}
+              {navGroups.map((group) => {
+                const groupItems = group.ids
+                  .map(id => permittedNav.find(n => n.id === id))
+                  .filter(Boolean) as NavItem[];
+                  
+                if (groupItems.length === 0) return null;
+
+                // If only one item and it's "Principal", just show a button
+                if (group.ids.includes("home")) {
+                  const item = groupItems[0];
+                  return (
+                    <Button
+                      key={item.id}
+                      variant="ghost"
+                      className={cn(
+                        "relative px-3 lg:px-4 py-2 text-sm font-semibold transition-all duration-300 hover:text-primary rounded-full",
+                        activeTab === item.id ? "text-primary bg-white/5" : "text-white/60"
+                      )}
+                      onClick={() => setActiveTab(item.id)}
+                    >
+                      {item.label}
+                      {activeTab === item.id && (
+                        <motion.div
+                          layoutId="activeTab"
+                          className="absolute -bottom-1 left-4 right-4 h-0.5 bg-primary rounded-full"
+                          transition={{ type: "spring", stiffness: 380, damping: 30 }}
+                        />
+                      )}
+                    </Button>
+                  );
+                }
+
+                const isActiveGroup = groupItems.some(i => i.id === activeTab);
+
+                return (
+                  <DropdownMenu key={group.label}>
+                    <DropdownMenuTrigger 
+                      className={cn(
+                        buttonVariants({ variant: "ghost" }), 
+                        "text-white/60 hover:text-primary gap-1 px-3 lg:px-4 relative font-semibold",
+                        isActiveGroup ? "text-primary bg-white/5" : ""
+                      )}
+                    >
+                      {group.label} <Menu className="h-4 w-4" />
+                      {isActiveGroup && (
+                        <motion.div
+                          layoutId="activeTab"
+                          className="absolute -bottom-1 left-4 right-4 h-0.5 bg-primary rounded-full"
+                          transition={{ type: "spring", stiffness: 380, damping: 30 }}
+                        />
+                      )}
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent className="bg-zinc-900 border-white/10 text-white w-48">
+                      <DropdownMenuGroup>
+                        {groupItems.map((item) => (
+                          <DropdownMenuItem 
+                            key={item.id}
+                            onClick={() => setActiveTab(item.id)}
+                            className={`hover:bg-white/5 focus:bg-white/5 cursor-pointer ${activeTab === item.id ? "text-primary font-bold" : ""}`}
+                          >
+                            <item.icon className="mr-2 h-4 w-4" />
+                            {item.label}
+                          </DropdownMenuItem>
+                        ))}
+                      </DropdownMenuGroup>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                );
+              })}
             </nav>
           </div>
 

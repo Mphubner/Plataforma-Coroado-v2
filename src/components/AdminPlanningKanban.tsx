@@ -1,13 +1,13 @@
 import React, { useState, useEffect } from 'react';
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Plus, X, AlignLeft, User, CalendarCheck, Clock, Flag, Columns, ListFilter, Tag } from "lucide-react";
+import { Plus, X, AlignLeft, User, CalendarCheck, Clock, Flag, Columns, ListFilter, Tag, AlertCircle } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { auth, db } from "@/lib/firebase";
 import { collection, query, where, onSnapshot, getDocs, orderBy } from "firebase/firestore";
 import { motion, AnimatePresence } from "motion/react";
 import { createTask, updateTaskDetails, createTaskUpdate } from "@/src/lib/services/planningService";
-import { format, parseISO, isPast, isToday } from "date-fns";
+import { format, parseISO, isPast, isToday, startOfDay } from "date-fns";
 import { ptBR } from "date-fns/locale";
 
 const STATUSES = ['Pendente', 'Em Andamento', 'Concluído'];
@@ -17,7 +17,7 @@ export function AdminPlanningKanban({ userData }: { userData?: any }) {
   const [tasks, setTasks] = useState<any[]>([]);
   const [members, setMembers] = useState<any[]>([]);
   
-  const [groupBy, setGroupBy] = useState<'status' | 'assigneeId' | 'tag'>('status');
+  const [groupBy, setGroupBy] = useState<'status' | 'assigneeId' | 'tag' | 'rootCause'>('status');
 
   // Modals
   const [showModal, setShowModal] = useState(false);
@@ -28,6 +28,7 @@ export function AdminPlanningKanban({ userData }: { userData?: any }) {
   // New task forms
   const [newTaskTitle, setNewTaskTitle] = useState("");
   const [newTaskDept, setNewTaskDept] = useState("");
+  const [newTaskRootCause, setNewTaskRootCause] = useState("");
   const [newTaskAssignee, setNewTaskAssignee] = useState("");
   const [newTaskDescription, setNewTaskDescription] = useState("");
   const [newTaskStatus, setNewTaskStatus] = useState("Pendente");
@@ -74,6 +75,7 @@ export function AdminPlanningKanban({ userData }: { userData?: any }) {
           title: selectedTask.title || '',
           description: selectedTask.description || '',
           tag: selectedTask.tag || 'Geral',
+          rootCause: selectedTask.rootCause || '',
           assigneeId: selectedTask.assigneeId || 'Nao atribuido',
           dueDate: selectedTask.dueDate || '',
           startDate: selectedTask.startDate || '',
@@ -105,6 +107,7 @@ export function AdminPlanningKanban({ userData }: { userData?: any }) {
         title: newTaskTitle,
         description: newTaskDescription,
         tag: newTaskDept || 'Geral',
+        rootCause: newTaskRootCause || '',
         assigneeId: newTaskAssignee || 'Não atribuído',
         status: newTaskStatus || 'Pendente',
         tenantId: tenantId,
@@ -115,6 +118,7 @@ export function AdminPlanningKanban({ userData }: { userData?: any }) {
       setNewTaskTitle("");
       setNewTaskDescription("");
       setNewTaskDept("");
+      setNewTaskRootCause("");
       setNewTaskAssignee("");
       setNewTaskStatus("Pendente");
       setNewTaskDueDate("");
@@ -131,6 +135,10 @@ export function AdminPlanningKanban({ userData }: { userData?: any }) {
       return isPast(d) && !isToday(d);
     } catch { return false; }
   };
+
+  // Unique tags and root causes for datalist
+  const uniqueTags = Array.from(new Set(tasks.map(t => t.tag).filter(Boolean)));
+  const uniqueRootCauses = Array.from(new Set(tasks.map(t => t.rootCause).filter(Boolean)));
 
   // Grouping logic
   const groupedTasks: Record<string, any[]> = {};
@@ -152,8 +160,22 @@ export function AdminPlanningKanban({ userData }: { userData?: any }) {
     });
   }
 
+  const getInitials = (name: string) => {
+    if (!name || name === 'Não atribuído' || name === 'Nao atribuido') return '?';
+    const parts = name.split(' ');
+    if (parts.length > 1) return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+    return name.substring(0, 2).toUpperCase();
+  };
+
   return (
     <div className="space-y-6">
+      <datalist id="tags-list">
+        {uniqueTags.map(tag => <option key={tag} value={tag} />)}
+      </datalist>
+      <datalist id="causes-list">
+        {uniqueRootCauses.map(cause => <option key={cause} value={cause} />)}
+      </datalist>
+
       {/* Detail Modal */}
       <AnimatePresence>
         {selectedTask && (
@@ -170,14 +192,29 @@ export function AdminPlanningKanban({ userData }: { userData?: any }) {
             >
               <div className="p-6 border-b border-white/10 flex justify-between items-start bg-zinc-900/50">
                  <div className="w-full mr-4 space-y-2">
-                    <p className="text-xs text-white/40 uppercase tracking-widest font-bold flex items-center gap-1"><Tag className="w-3 h-3"/> {selectedTask.tag || 'Geral'}</p>
+                    <div className="flex gap-2 mb-2">
+                      <Input 
+                        list="tags-list"
+                        placeholder="Grupo Ministerial..."
+                        className="text-xs text-white/60 bg-black/50 border-white/10 h-7 w-auto"
+                        value={selectedTask.tag || ''}
+                        onChange={e => setSelectedTask({...selectedTask, tag: e.target.value})}
+                      />
+                      <Input 
+                        list="causes-list"
+                        placeholder="Problema Raiz..."
+                        className="text-xs text-white/60 bg-black/50 border-white/10 h-7 w-auto"
+                        value={selectedTask.rootCause || ''}
+                        onChange={e => setSelectedTask({...selectedTask, rootCause: e.target.value})}
+                      />
+                    </div>
                     <Input 
-                      className="text-2xl font-black bg-transparent border-none p-0 focus-visible:ring-0 h-auto rounded-none"
+                      className="text-2xl font-black bg-transparent border-none p-0 focus-visible:ring-0 h-auto rounded-none text-white"
                       value={selectedTask.title}
                       onChange={e => setSelectedTask({...selectedTask, title: e.target.value})}
                     />
                  </div>
-                 <Button variant="ghost" size="icon" className="hover:bg-white/10" onClick={() => setSelectedTask(null)}><X className="w-5 h-5"/></Button>
+                 <Button variant="ghost" size="icon" className="hover:bg-white/10 shrink-0" onClick={() => setSelectedTask(null)}><X className="w-5 h-5"/></Button>
               </div>
 
               <div className="flex-1 overflow-y-auto p-6 space-y-8">
@@ -210,8 +247,11 @@ export function AdminPlanningKanban({ userData }: { userData?: any }) {
                       <Input type="date" value={selectedTask.startDate || ''} onChange={e => setSelectedTask({...selectedTask, startDate: e.target.value})} className="bg-zinc-900 border-white/10 text-sm h-9"/>
                     </div>
                     <div className="space-y-2">
-                      <label className="text-[10px] font-bold text-white/40 uppercase tracking-wider">Data Final</label>
-                      <Input type="date" value={selectedTask.dueDate || ''} onChange={e => setSelectedTask({...selectedTask, dueDate: e.target.value})} className="bg-zinc-900 border-white/10 text-sm h-9"/>
+                      <label className="text-[10px] font-bold text-white/40 uppercase tracking-wider flex justify-between">
+                        Data Final 
+                        {isOverdue(selectedTask.dueDate, selectedTask.status) && <span className="text-red-400">Atrasado</span>}
+                      </label>
+                      <Input type="date" value={selectedTask.dueDate || ''} onChange={e => setSelectedTask({...selectedTask, dueDate: e.target.value})} className={`bg-zinc-900 border-white/10 text-sm h-9 ${isOverdue(selectedTask.dueDate, selectedTask.status) ? 'border-red-500/50' : ''}`}/>
                     </div>
                  </div>
 
@@ -287,9 +327,15 @@ export function AdminPlanningKanban({ userData }: { userData?: any }) {
                   />
                 </div>
                 
-                <div className="space-y-2">
-                  <label className="text-xs font-bold text-white/40 uppercase">Área Ministerial / Tag</label>
-                  <Input placeholder="Ex: Comunicação, Eventos..." value={newTaskDept} onChange={e => setNewTaskDept(e.target.value)} className="bg-zinc-900 border-white/10" />
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <label className="text-xs font-bold text-white/40 uppercase">Grupo Ministerial</label>
+                    <Input list="tags-list" placeholder="Ex: Comunicação..." value={newTaskDept} onChange={e => setNewTaskDept(e.target.value)} className="bg-zinc-900 border-white/10" />
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-xs font-bold text-white/40 uppercase">Problema Raiz</label>
+                    <Input list="causes-list" placeholder="Qual o problema?" value={newTaskRootCause} onChange={e => setNewTaskRootCause(e.target.value)} className="bg-zinc-900 border-white/10" />
+                  </div>
                 </div>
 
                 <div className="space-y-2">
@@ -341,6 +387,9 @@ export function AdminPlanningKanban({ userData }: { userData?: any }) {
              <Button variant="ghost" size="sm" className={`text-xs px-3 ${groupBy === 'tag' ? 'bg-white/10 text-white' : 'text-white/50 hover:text-white'}`} onClick={() => setGroupBy('tag')}>
                <Tag className="w-3 h-3 mr-2"/> Área
              </Button>
+             <Button variant="ghost" size="sm" className={`text-xs px-3 ${groupBy === 'rootCause' ? 'bg-white/10 text-white' : 'text-white/50 hover:text-white'}`} onClick={() => setGroupBy('rootCause')}>
+               <AlertCircle className="w-3 h-3 mr-2"/> Problema Raiz
+             </Button>
           </div>
           <Button className="bg-primary text-black font-bold" onClick={() => setShowModal(true)}>
             <Plus className="w-4 h-4 mr-2" /> Nova Ação
@@ -348,9 +397,9 @@ export function AdminPlanningKanban({ userData }: { userData?: any }) {
         </div>
       </div>
 
-      <div className="flex gap-6 overflow-x-auto pb-4 snap-x custom-scrollbar min-h-[calc(100vh-250px)] items-start">
+      <div className="flex gap-6 overflow-x-auto pb-4 snap-x custom-scrollbar h-[calc(100vh-250px)] items-start">
          {Object.keys(groupedTasks).map(groupName => (
-           <div key={groupName} className="min-w-[320px] max-w-[320px] flex flex-col gap-3 snap-start h-full max-h-[calc(100vh-250px)]">
+           <div key={groupName} className="min-w-[320px] max-w-[320px] flex flex-col gap-3 snap-start h-full">
              <div className="flex items-center justify-between mb-2 px-1 shrink-0">
                <h3 className="font-bold text-white flex items-center gap-2">
                  <div className={`w-2 h-2 rounded-full ${groupName === 'Concluído' ? 'bg-green-500' : (groupName === 'Em Andamento' ? 'bg-blue-500' : 'bg-white/30')}`}/>
@@ -363,25 +412,31 @@ export function AdminPlanningKanban({ userData }: { userData?: any }) {
                {groupedTasks[groupName].map(task => {
                  const overdue = isOverdue(task.dueDate, task.status);
                  return (
-                   <Card key={task.id} className="bg-zinc-900 border-white/10 hover:border-primary/50 hover:bg-zinc-900/80 cursor-pointer transition-all shadow-md group shrink-0" onClick={() => setSelectedTask(task)}>
+                   <Card key={task.id} className={`bg-zinc-900 border-white/10 hover:border-primary/50 hover:bg-zinc-900/80 cursor-pointer transition-all shadow-md group shrink-0 ${overdue ? 'border-red-500/30' : ''}`} onClick={() => setSelectedTask(task)}>
                      <CardContent className="p-4 space-y-3">
-                       <div className="flex justify-between items-start gap-2">
-                         <span className="text-[10px] font-bold px-2 py-0.5 bg-white/5 text-white/60 rounded-md truncate max-w-[150px]">{task.tag || 'Geral'}</span>
-                         {overdue && <span className="text-[9px] font-bold px-2 py-0.5 bg-red-500/20 text-red-400 rounded flex items-center gap-1"><Flag className="w-2 h-2"/> Atrasado</span>}
+                       <div className="flex justify-between items-start gap-2 flex-wrap">
+                         <span className="text-[10px] font-bold px-2 py-0.5 bg-primary/20 text-primary rounded-md truncate max-w-[150px]">{task.tag || 'Geral'}</span>
+                         {task.rootCause && <span className="text-[9px] font-bold px-2 py-0.5 bg-white/5 text-white/60 rounded-md truncate max-w-[120px]">{task.rootCause}</span>}
                        </div>
+                       
                        <h4 className="font-bold text-sm leading-tight text-white/90 group-hover:text-primary transition-colors">{task.title}</h4>
                        
                        <div className="flex justify-between items-center pt-2 border-t border-white/5">
-                         <div className="flex items-center gap-1.5 text-xs text-white/50">
-                           <User className="w-3 h-3" />
-                           <span className="truncate max-w-[100px]">{task.assigneeId || 'Não atribuído'}</span>
-                         </div>
-                         {(task.startDate || task.dueDate) && (
-                           <div className={`text-[10px] flex items-center gap-1 font-mono ${overdue ? 'text-red-400 font-bold' : 'text-white/40'}`}>
-                             <CalendarCheck className="w-3 h-3"/>
-                             {task.dueDate ? format(parseISO(task.dueDate), 'dd/MM') : (task.startDate ? format(parseISO(task.startDate), 'dd/MM') : '')}
+                         <div className="flex items-center gap-2 text-xs text-white/60">
+                           <div className="w-6 h-6 rounded-full bg-white/10 flex items-center justify-center font-bold text-[9px] text-white">
+                             {getInitials(task.assigneeId)}
                            </div>
-                         )}
+                           <span className="truncate max-w-[80px]">{task.assigneeId || 'Não atribuído'}</span>
+                         </div>
+                         <div className="flex items-center gap-2">
+                           {overdue && <span className="text-[9px] font-bold px-1.5 py-0.5 bg-red-500/20 text-red-400 rounded flex items-center gap-1"><Flag className="w-2 h-2"/> Atrasado</span>}
+                           {(task.startDate || task.dueDate) && (
+                             <div className={`text-[10px] flex items-center gap-1 font-mono ${overdue ? 'text-red-400 font-bold' : 'text-white/40'}`}>
+                               <CalendarCheck className="w-3 h-3"/>
+                               {task.dueDate ? format(parseISO(task.dueDate), 'dd/MM') : (task.startDate ? format(parseISO(task.startDate), 'dd/MM') : '')}
+                             </div>
+                           )}
+                         </div>
                        </div>
                      </CardContent>
                    </Card>

@@ -3,6 +3,8 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Facebook, Instagram, Youtube, Calendar, AlertCircle, Edit3, Trash2, Plus, Clock, CheckCircle, ListTodo, Users, Search } from 'lucide-react';
+import { ImageUpload } from '../../../components/ui/ImageUpload';
+import { useRouter } from 'next/navigation';
 import { Button } from '../../../components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '../../../components/ui/card';
 import { Badge } from '../../../components/ui/badge';
@@ -16,6 +18,7 @@ import { PastoralCareView } from '../../components/PastoralCareView';
 import { pagePreset } from '../../lib/motion/presets';
 
 export function PastoresNativeClient() {
+  const router = useRouter();
   const [pastorsList, setPastorsList] = useState<any[]>([]);
   const [pastorsError, setPastorsError] = useState('');
   const [selectedPastor, setSelectedPastor] = useState<any | null>(null);
@@ -310,7 +313,13 @@ export function PastoresNativeClient() {
                       )}
                     </div>
                     <div className="flex items-center gap-2 pt-2">
-                      <Button onClick={() => setSelectedPastor(pastor)} size="sm" className="bg-primary text-black hover:bg-primary/90 font-bold w-full">
+                      <Button onClick={() => {
+                        if (!userData) {
+                          router.push('/login?redirect=/pastores');
+                        } else {
+                          setSelectedPastor(pastor);
+                        }
+                      }} size="sm" className="bg-primary text-black hover:bg-primary/90 font-bold w-full">
                         Agendar
                       </Button>
                       {isAdmin && (
@@ -468,7 +477,13 @@ export function PastoresNativeClient() {
                     )}
                   </div>
                   <div className="flex items-center gap-2 pt-2">
-                    <Button onClick={() => setSelectedPastor(pastor)} size="sm" className="bg-primary text-black hover:bg-primary/90 font-bold w-full">
+                    <Button onClick={() => {
+                      if (!userData) {
+                        router.push('/login?redirect=/pastores');
+                      } else {
+                        setSelectedPastor(pastor);
+                      }
+                    }} size="sm" className="bg-primary text-black hover:bg-primary/90 font-bold w-full">
                       Agendar
                     </Button>
                   </div>
@@ -594,8 +609,12 @@ export function PastoresNativeClient() {
                   <Input required value={editingPastor.role} onChange={e => setEditingPastor({ ...editingPastor, role: e.target.value })} className="bg-black border-white/10 text-white" />
                 </div>
                 <div className="space-y-2">
-                  <label className="text-xs font-bold text-white/60">URL da Foto</label>
-                  <Input required value={editingPastor.image} onChange={e => setEditingPastor({ ...editingPastor, image: e.target.value })} className="bg-black border-white/10 text-white" />
+                  <label className="text-xs font-bold text-white/60">Foto do Pastor</label>
+                  <ImageUpload 
+                    value={editingPastor.image} 
+                    onChange={url => setEditingPastor({ ...editingPastor, image: url })} 
+                    folder="images/pastores"
+                  />
                 </div>
                 <div className="space-y-2">
                   <label className="text-xs font-bold text-white/60">Horários (separados por vírgula)</label>

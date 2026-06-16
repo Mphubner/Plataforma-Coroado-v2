@@ -1,4 +1,4 @@
-﻿import * as React from "react"
+import * as React from "react"
 import { motion, AnimatePresence } from "motion/react"
 import { 
   Play, BookOpen, Award, Clock, Star, ChevronRight, ChevronLeft, 
@@ -1293,7 +1293,7 @@ function SchoolAdmin() {
             <Card className="bg-zinc-900 border-white/10">
               <CardHeader><CardTitle>Matrículas (Últimos 30 dias)</CardTitle></CardHeader>
               <CardContent className="h-[250px] w-full">
-                <ResponsiveContainer width="99%" height={250}>
+                <ResponsiveContainer width="99%" height={250} minHeight={0} minWidth={0}>
                   <LineChart data={[{name: '01', val: 12}, {name: '05', val: 19}, {name: '10', val: 15}, {name: '15', val: 25}, {name: '20', val: 22}, {name: '25', val: 30}, {name: '30', val: 28}]}>
                     <CartesianGrid strokeDasharray="3 3" stroke="#333" vertical={false} />
                     <XAxis dataKey="name" stroke="#666" fontSize={12} tickLine={false} axisLine={false} />
@@ -1307,7 +1307,7 @@ function SchoolAdmin() {
             <Card className="bg-zinc-900 border-white/10">
               <CardHeader><CardTitle>Engajamento por Ministério</CardTitle></CardHeader>
               <CardContent className="h-[250px] flex items-center justify-center w-full">
-                <ResponsiveContainer width="99%" height={250}>
+                <ResponsiveContainer width="99%" height={250} minHeight={0} minWidth={0}>
                   <PieChart>
                     <Pie
                       data={[

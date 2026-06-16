@@ -127,7 +127,7 @@ export function EventosNativeClient() {
   async function handleEnroll(event: EventOverviewItem) {
     const user = auth.currentUser;
     if (!user) {
-      window.location.href = '/login';
+      window.location.href = '/login?redirect=/eventos';
       return;
     }
 
