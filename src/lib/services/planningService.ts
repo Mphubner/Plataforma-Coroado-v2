@@ -51,14 +51,22 @@ export async function updatePlanningTaskStatus(taskId: string, status: string) {
 
 export async function updateTaskDetails(taskId: string, input: Partial<TaskPayloadInput> & Record<string, unknown>) {
   const normalized = normalizeTaskInput(input);
-  await updateDoc(doc(db, COLLECTIONS.tasks, taskId), {
+  const payload: any = {
     title: normalized.title,
     description: normalized.description || '',
     tag: normalized.tag || 'Geral',
     assigneeId: normalized.assigneeId || 'Nao atribuido',
     dueDate: normalized.dueDate || '',
     updatedAt: serverTimestamp(),
-  });
+  };
+  if (input.status) payload.status = normalized.status;
+  if (input.startDate !== undefined) payload.startDate = normalized.startDate;
+  
+  if (input.status === 'done' || input.status === 'Concluído') {
+    payload.completedAt = new Date().toISOString().split('T')[0];
+  }
+
+  await updateDoc(doc(db, COLLECTIONS.tasks, taskId), payload);
 }
 
 export async function createTaskUpdate(input: TaskUpdatePayloadInput) {
