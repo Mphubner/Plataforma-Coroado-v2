@@ -155,9 +155,9 @@ export function AdminStrategicGoals({ userData }: { userData?: any }) {
          const date = parseISO(entry.date);
          let key = '';
          if (timeView === 'weekly') {
-             key = format(date, 'dd/MM/yyyy');
+             key = format(date, 'yyyy-MM-dd');
          } else if (timeView === 'monthly') {
-             key = format(date, 'MMM yyyy', { locale: ptBR });
+             key = format(date, 'yyyy-MM');
          } else {
              key = format(date, 'yyyy');
          }
@@ -175,7 +175,6 @@ export function AdminStrategicGoals({ userData }: { userData?: any }) {
          }
      });
 
-     // Process Aggregation
      const chartData = Object.keys(grouped).sort((a,b) => {
         return a.localeCompare(b);
      }).map(key => {
@@ -185,7 +184,11 @@ export function AdminStrategicGoals({ userData }: { userData?: any }) {
          else if (aggType === 'avg') val = Math.round(vals.reduce((acc, v) => acc + v, 0) / vals.length);
          else if (aggType === 'last') val = vals[vals.length - 1];
 
-         return { name: key, Realizado: val };
+         let displayKey = key;
+         if (timeView === 'weekly') displayKey = format(parseISO(key), 'dd/MM/yyyy');
+         else if (timeView === 'monthly') displayKey = format(parseISO(key + '-01'), 'MMM yyyy', { locale: ptBR });
+
+         return { name: displayKey, Realizado: val, originalKey: key };
      });
 
      // Fill targets if view is Yearly
