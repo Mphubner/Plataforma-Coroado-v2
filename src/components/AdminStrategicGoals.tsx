@@ -49,6 +49,23 @@ export function AdminStrategicGoals({ userData }: { userData?: any }) {
   // Form State for new entry
   const [entryDate, setEntryDate] = useState<string>(formatISO(new Date(), { representation: 'date' }));
   const [entryValue, setEntryValue] = useState<string>('');
+  const [entryUnit, setEntryUnit] = useState<string>('Sede');
+  const [entryTime, setEntryTime] = useState<string>('18h');
+  const [entryVisitors, setEntryVisitors] = useState<string>('0');
+
+  // Available times per unit
+  const serviceTimes: Record<string, string[]> = {
+    'Sede': ['10h', '18h', '20h'],
+    'Norte': ['19h'],
+    'BR': ['19h']
+  };
+
+  // When unit changes, update time to the first available for that unit
+  useEffect(() => {
+     if (serviceTimes[entryUnit]) {
+        setEntryTime(serviceTimes[entryUnit][0]);
+     }
+  }, [entryUnit]);
 
   useEffect(() => {
     if (!userData?.tenantId) return;
@@ -65,23 +82,23 @@ export function AdminStrategicGoals({ userData }: { userData?: any }) {
 
   // Derived KPIs Calculation (Total Celebrações)
   const computedKpis = useMemo(() => {
-     let list = [...combinedKpis];
+     let list = combinedKpis.filter(k => !['kpi_freq_sede', 'kpi_freq_norte', 'kpi_freq_br'].includes(k.id));
      const order = [
-       'kpi_celulas', 'kpi_batismos', 'kpi_freq_sede', 'kpi_freq_norte', 'kpi_freq_br', 'kpi_total_celebracoes', 
+       'kpi_celulas', 'kpi_batismos', 'kpi_frequencia_celebracoes', 
        'kpi_virt_celulas_freq', 'kpi_virt_celulas_vis', 'kpi_virt_escola_ide_ativos',
        'kpi_virt_pastoral_atendimentos', 'kpi_virt_social_atendimentos',
        'kpi_freq_celulas', 'kpi_lideres'
      ];
      
-     // Add pseudo-KPI for Total
+     // Add pseudo-KPI for Frequência Integrada
      list.push({
-        id: 'kpi_total_celebracoes',
-        title: 'TOTAL CELEBRAÇÕES (Soma Unidades)',
+        id: 'kpi_frequencia_celebracoes',
+        title: 'Frequência nas Celebrações',
         pillar: 'Crescer',
         targetData: {
            2025: 430, 2026: 552, 2027: 617, 2028: 678.5, 2029: 746.85, 2030: 821, 2031: 903
         },
-        color: 'border-white/50',
+        color: 'border-blue-500',
         isDerived: true
      });
 
@@ -94,10 +111,10 @@ export function AdminStrategicGoals({ userData }: { userData?: any }) {
 
   // Engine: Group and aggregate entries for a KPI
   const getAggregatedData = (kpiId: string) => {
-     // For Derived KPI, we need to gather entries from Sede, Norte, BR, aggregate them FIRST, then sum them up.
      let relevantEntries = [];
-     if (kpiId === 'kpi_total_celebracoes') {
-         relevantEntries = combinedEntries.filter(e => ['kpi_freq_sede', 'kpi_freq_norte', 'kpi_freq_br'].includes(e.kpiName));
+     if (kpiId === 'kpi_frequencia_celebracoes') {
+         // Gather the new combined kpi entries AND the old legacy entries for backwards compatibility
+         relevantEntries = combinedEntries.filter(e => ['kpi_frequencia_celebracoes', 'kpi_freq_sede', 'kpi_freq_norte', 'kpi_freq_br'].includes(e.kpiName));
      } else {
          relevantEntries = combinedEntries.filter(e => e.kpiName === kpiId);
      }
@@ -117,26 +134,23 @@ export function AdminStrategicGoals({ userData }: { userData?: any }) {
          } else {
              key = format(date, 'yyyy');
          }
-
-         // For derived Total, we group by EXACT date first to sum units on the same day, but to keep it simple, 
-         // if it's "TOTAL", and aggType is "avg", we actually want the Average of the Sums per day.
-         // Let's just group values by the timeView. This might not be mathematically perfect for Average of Sums,
-         // but it works for visualization. A more precise approach is to group by Date -> Sum -> then Aggregate by TimeView.
          
          if (!grouped[key]) grouped[key] = [];
-         grouped[key].push(Number(entry.actualValue || 0));
+         
+         // Combine actualValue and visitors for the total count
+         const totalFreq = Number(entry.actualValue || 0) + Number(entry.visitors || 0);
+         grouped[key].push(totalFreq);
      });
 
      // Process Aggregation
      const chartData = Object.keys(grouped).sort((a,b) => {
-        // Sort keys chronologically (basic string sort might fail for months, but fine for years. Weekly has year)
         return a.localeCompare(b);
      }).map(key => {
          const vals = grouped[key];
          let val = 0;
          if (aggType === 'sum') val = vals.reduce((acc, v) => acc + v, 0);
          else if (aggType === 'avg') val = Math.round(vals.reduce((acc, v) => acc + v, 0) / vals.length);
-         else if (aggType === 'last') val = vals[vals.length - 1]; // Assuming sorted insertion
+         else if (aggType === 'last') val = vals[vals.length - 1];
 
          return { name: key, Realizado: val };
      });
@@ -147,7 +161,6 @@ export function AdminStrategicGoals({ userData }: { userData?: any }) {
          chartData.forEach(d => {
              d.Expectativa = kpiDef.targetData[Number(d.name)] || 0;
          });
-         // Fill missing years from 2025 to 2031
          [2025, 2026, 2027, 2028, 2029, 2030, 2031].forEach(y => {
              if (!chartData.find(d => d.name === y.toString())) {
                  chartData.push({ name: y.toString(), Realizado: null, Expectativa: kpiDef.targetData[y] || 0 });
@@ -164,15 +177,26 @@ export function AdminStrategicGoals({ userData }: { userData?: any }) {
     const val = Number(entryValue);
     if (isNaN(val) || !entryDate) return;
 
-    await addDoc(collection(db, 'kpi_entries'), {
+    const payload: any = {
       kpiName: selectedKpi.id,
       actualValue: val,
       date: entryDate,
       tenantId: userData.tenantId,
       createdAt: serverTimestamp()
-    });
+    };
+
+    if (selectedKpi.id === 'kpi_frequencia_celebracoes') {
+       payload.unit = entryUnit;
+       payload.serviceTime = entryTime;
+       payload.visitors = Number(entryVisitors) || 0;
+    }
+
+    await addDoc(collection(db, 'kpi_entries'), payload);
 
     setEntryValue('');
+    if (selectedKpi.id === 'kpi_frequencia_celebracoes') {
+       setEntryVisitors('0');
+    }
   };
 
   const handleDeleteEntry = async (entryId: string) => {
@@ -286,9 +310,39 @@ export function AdminStrategicGoals({ userData }: { userData?: any }) {
                                <label className="text-xs font-bold text-white/60">Data Ref.</label>
                                <Input type="date" value={entryDate} onChange={e => setEntryDate(e.target.value)} className="bg-black border-white/10 mt-1 h-9" />
                             </div>
-                            <div>
-                               <label className="text-xs font-bold text-white/60">Valor Realizado</label>
-                               <Input type="number" placeholder="Ex: 15" value={entryValue} onChange={e => setEntryValue(e.target.value)} className="bg-black border-white/10 mt-1 h-9 font-black" />
+                            
+                            {selectedKpi.id === 'kpi_frequencia_celebracoes' && (
+                               <div className="grid grid-cols-2 gap-2">
+                                  <div>
+                                     <label className="text-xs font-bold text-white/60">Unidade</label>
+                                     <select value={entryUnit} onChange={e => setEntryUnit(e.target.value)} className="w-full bg-black border border-white/10 rounded-lg p-2 text-sm text-white h-9 mt-1 focus:outline-none focus:ring-1 focus:ring-primary">
+                                        <option value="Sede">Sede</option>
+                                        <option value="Norte">Norte</option>
+                                        <option value="BR">BR</option>
+                                     </select>
+                                  </div>
+                                  <div>
+                                     <label className="text-xs font-bold text-white/60">Horário</label>
+                                     <select value={entryTime} onChange={e => setEntryTime(e.target.value)} className="w-full bg-black border border-white/10 rounded-lg p-2 text-sm text-white h-9 mt-1 focus:outline-none focus:ring-1 focus:ring-primary">
+                                        {serviceTimes[entryUnit]?.map(time => (
+                                           <option key={time} value={time}>{time}</option>
+                                        ))}
+                                     </select>
+                                  </div>
+                               </div>
+                            )}
+
+                            <div className="grid grid-cols-2 gap-2">
+                               <div>
+                                  <label className="text-xs font-bold text-white/60">Presentes / Valor</label>
+                                  <Input type="number" placeholder="Ex: 15" value={entryValue} onChange={e => setEntryValue(e.target.value)} className="bg-black border-white/10 mt-1 h-9 font-black" />
+                               </div>
+                               {selectedKpi.id === 'kpi_frequencia_celebracoes' && (
+                                  <div>
+                                     <label className="text-xs font-bold text-white/60">Visitantes</label>
+                                     <Input type="number" placeholder="Ex: 5" value={entryVisitors} onChange={e => setEntryVisitors(e.target.value)} className="bg-black border-white/10 mt-1 h-9 font-black" />
+                                  </div>
+                               )}
                             </div>
                             <Button className="w-full bg-primary text-black font-bold h-9" onClick={handleAddEntry}>Lançar Dados</Button>
                          </div>
@@ -307,7 +361,11 @@ export function AdminStrategicGoals({ userData }: { userData?: any }) {
                              <div key={e.id} className="flex justify-between items-center p-2 rounded bg-black/40 border border-white/5 hover:border-white/20 transition-colors group">
                                 <div>
                                    <p className="text-xs font-bold text-white">{format(parseISO(e.date), 'dd/MM/yyyy')}</p>
-                                   <p className="text-xs text-white/40">{e.actualValue} registros</p>
+                                   <p className="text-xs text-white/40">
+                                      {e.actualValue} registros
+                                      {e.unit && ` • ${e.unit} (${e.serviceTime})`}
+                                      {e.visitors !== undefined && ` • ${e.visitors} visitantes`}
+                                   </p>
                                 </div>
                                 {(!selectedKpi.isDerived && !selectedKpi.isVirtual) && (
                                    <Button variant="ghost" size="icon" className="h-6 w-6 text-red-400 opacity-0 group-hover:opacity-100 transition-opacity" onClick={() => handleDeleteEntry(e.id)}>
@@ -354,7 +412,7 @@ export function AdminStrategicGoals({ userData }: { userData?: any }) {
         </div>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         {computedKpis.map((kpi, i) => {
           const chartData = getAggregatedData(kpi.id);
           const lastPoint = chartData[chartData.length - 1];
@@ -362,7 +420,7 @@ export function AdminStrategicGoals({ userData }: { userData?: any }) {
           const target = timeView === 'yearly' ? (lastPoint?.Expectativa || 0) : null;
           
           return (
-          <Card key={kpi.id} className={`bg-zinc-900/50 border border-white/10 border-t-4 ${kpi.color} cursor-pointer hover:bg-white/5 transition-all group`} onClick={() => setSelectedKpi(kpi)}>
+          <Card key={kpi.id} className={`bg-zinc-900/50 border border-white/10 border-t-4 ${kpi.color} cursor-pointer hover:bg-white/5 transition-all group lg:col-span-${kpi.id === 'kpi_frequencia_celebracoes' ? '2' : '1'}`} onClick={() => setSelectedKpi(kpi)}>
             <CardHeader className="pb-2">
               <div className="flex justify-between items-start">
                 <div>
@@ -382,7 +440,7 @@ export function AdminStrategicGoals({ userData }: { userData?: any }) {
                    </div>
                 </div>
                 
-                {renderChart(kpi, 100)}
+                {renderChart(kpi, kpi.id === 'kpi_frequencia_celebracoes' ? 200 : 100)}
             </CardContent>
           </Card>
         )})}
