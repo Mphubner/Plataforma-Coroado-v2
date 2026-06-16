@@ -118,7 +118,7 @@ export function Layout({ children, activeTab, setActiveTab, isLoggedIn = true, u
   const getBottomNavItems = () => permittedNav.filter(item => item.bottom).slice(0, 5).map(item => item.id)
 
   const getDesktopPrimaryItems = () => {
-    const preferredLogged: RouteId[] = ["home", "cell", "school", "members", "ministries", "events", "finance", "jornada", "admin", "pastoral"];
+    const preferredLogged: RouteId[] = ["home", "cell", "school", "members", "ministries", "events", "finance", "jornada", "admin", "pastors"];
     const preferredPublic: RouteId[] = ["home", "cell", "ministries", "events", "units", "pastors", "social", "store", "media"];
     const preferred = isLoggedIn ? preferredLogged : preferredPublic;
     
@@ -289,7 +289,7 @@ export function Layout({ children, activeTab, setActiveTab, isLoggedIn = true, u
 
                       const categories = isLoggedIn ? [
                         { id: 'main', label: 'Principal', items: visibleItems.filter(i => ['home', 'jornada', 'events'].includes(i.id)) },
-                        { id: 'igreja', label: 'Conexão & Igreja', items: visibleItems.filter(i => ['cell', 'members', 'ministries', 'pastoral'].includes(i.id)) },
+                        { id: 'igreja', label: 'Conexão & Igreja', items: visibleItems.filter(i => ['cell', 'members', 'ministries', 'pastors'].includes(i.id)) },
                         { id: 'estudos', label: 'Crescimento', items: visibleItems.filter(i => ['school', 'finance', 'store'].includes(i.id)) },
                         { id: 'public', label: 'Institucional', items: visibleItems.filter(i => ['units', 'social', 'media'].includes(i.id)) },
                         { id: 'admin', label: 'Gestão', items: visibleItems.filter(i => ['admin'].includes(i.id)) }

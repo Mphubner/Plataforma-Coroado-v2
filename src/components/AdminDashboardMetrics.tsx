@@ -31,6 +31,7 @@ export function AdminDashboardMetrics({ userData }: { userData?: any }) {
   const [targetForm, setTargetForm] = useState({ activeCells: 0, attendanceAvg: 0, visitorsTarget: 0, revenueTarget: 0 });
 
   const [unitsList, setUnitsList] = useState<any[]>([]);
+  const [filterUnit, setFilterUnit] = useState('Todas');
 
   const isHighLevel = can(userData, 'manage:finance');
 
@@ -112,8 +113,11 @@ export function AdminDashboardMetrics({ userData }: { userData?: any }) {
     setActiveModal(null);
   };
 
-  const totalRevenue = financials.reduce((acc, f) => acc + f.amount, 0);
-  const freqs = kpiEntries.filter(e => e.kpiName === 'kpi_frequencia_celebracoes');
+  const filteredFinancials = filterUnit === 'Todas' ? financials : financials.filter(f => f.unit === filterUnit);
+  const filteredFreqs = filterUnit === 'Todas' ? kpiEntries.filter(e => e.kpiName === 'kpi_frequencia_celebracoes') : kpiEntries.filter(e => e.kpiName === 'kpi_frequencia_celebracoes' && e.unit === filterUnit);
+
+  const totalRevenue = filteredFinancials.reduce((acc, f) => acc + f.amount, 0);
+  const freqs = filteredFreqs;
   const totalAttendance = freqs.reduce((acc, curr) => acc + Number(curr.actualValue || 0), 0);
   const totalVisitors = freqs.reduce((acc, curr) => acc + Number(curr.visitors || 0), 0);
   const maxAttendance = freqs.length > 0 ? Math.max(...freqs.map(s => Number(s.actualValue || 0))) : 0;
@@ -154,12 +158,12 @@ export function AdminDashboardMetrics({ userData }: { userData?: any }) {
     return months[parseInt(m, 10)-1] || 'Jan';
   };
 
-  financials.forEach(f => {
+  filteredFinancials.forEach(f => {
     const m = getMonthStr(f.date);
     if (chartDataMap[m]) chartDataMap[m].revenue += f.amount;
   });
 
-  freqs.forEach(s => {
+  filteredFreqs.forEach(s => {
     const m = getMonthStr(s.date);
     if (chartDataMap[m]) {
        chartDataMap[m].visitors += Number(s.visitors || 0);
@@ -171,6 +175,14 @@ export function AdminDashboardMetrics({ userData }: { userData?: any }) {
 
   return (
     <div className="space-y-6">
+      <div className="flex justify-end mb-4">
+        <div className="flex gap-2 bg-zinc-900 p-1 rounded-lg border border-white/10">
+            <select className="bg-transparent text-sm text-white focus:outline-none pr-2" value={filterUnit} onChange={(e) => setFilterUnit(e.target.value)}>
+                <option value="Todas">Todas Unidades</option>
+                {unitsList.map((u, i) => <option key={i} value={u.name}>{u.name}</option>)}
+            </select>
+        </div>
+      </div>
       <AnimatePresence>
         {activeModal && (
           <div className="fixed inset-0 z-50 flex items-center justify-center px-4">
