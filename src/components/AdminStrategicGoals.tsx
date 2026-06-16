@@ -143,7 +143,7 @@ export function AdminStrategicGoals({ userData }: { userData?: any }) {
      }
 
      if (filterUnit !== 'Todas') {
-         relevantEntries = relevantEntries.filter(e => e.unit === filterUnit || (e.kpiName.includes('sede') && filterUnit === 'Sede') || (e.kpiName.includes('norte') && filterUnit === 'Coroado Norte'));
+         relevantEntries = relevantEntries.filter(e => e.unit === filterUnit || (e.kpiName.includes('sede') && filterUnit.includes('Sede')) || (e.kpiName.includes('norte') && filterUnit.includes('Norte')));
      }
 
      const aggType = kpiAggregations[kpiId] || 'sum';
