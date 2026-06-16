@@ -6,7 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Search, Users, Heart, Shield, Edit2, X, Check, MapPin, Network, List, Download } from "lucide-react";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { ImageUpload } from '@/components/ui/ImageUpload';
+import { ImageUpload } from './ui/ImageUpload';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { auth, db } from "@/lib/firebase";
 import { collection, query, where, onSnapshot, getDocs } from "firebase/firestore";

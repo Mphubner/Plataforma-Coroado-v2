@@ -12,7 +12,7 @@ import { handleFirestoreError, OperationType } from '@/lib/firestoreUtils';
 import { can } from '@/src/lib/permissions';
 import { postJson } from '@/src/lib/api/http';
 import { pageMotion } from '@/src/lib/motion/presets';
-import { ImageUpload } from '@/components/ui/ImageUpload';
+import { ImageUpload } from './ui/ImageUpload';
 
 type EventInfo = {
   id: string;
