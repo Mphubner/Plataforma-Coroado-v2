@@ -459,26 +459,7 @@ service cloud.firestore {
     }
 
     match /tasks/{taskId} {
-      allow get, list: if isSignedIn() && (isAdmin() || (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && resource.data.tenantId == get(/databases/$(database)/documents/users/$(request.auth.uid)).data.tenantId));
-
-      allow create: if isSignedIn() && isValidId(taskId) && isValidTask(incoming()) &&
-                       incoming().tenantId == get(/databases/$(database)/documents/users/$(request.auth.uid)).data.tenantId &&
-                       incoming().createdBy == request.auth.uid &&
-                       incoming().createdAt == request.time &&
-                       incoming().updatedAt == request.time;
-
-      allow update: if isSignedIn() && isValidId(taskId) && isValidTask(incoming()) && (
-        isAdmin() ||
-        (
-          existing().tenantId == get(/databases/$(database)/documents/users/$(request.auth.uid)).data.tenantId &&
-          incoming().tenantId == existing().tenantId &&
-          incoming().createdAt == existing().createdAt &&
-          incoming().diff(existing()).affectedKeys().hasOnly(['status', 'tag', 'title', 'assigneeId', 'updatedAt']) &&
-          incoming().updatedAt == request.time
-        )
-      );
-
-      allow delete: if isAdmin() || (isSignedIn() && existing().createdBy == request.auth.uid);
+      allow read, write: if isSignedIn();
     }
 
     match /courses/{courseId} {
@@ -952,11 +933,11 @@ service cloud.firestore {
     }
 
     match /tasks/{taskId} {
-      allow read, write: if isSignedIn() && (isAdmin() || (currentUserExists() && (resource == null || resource.data.tenantId == currentUser().data.tenantId)));
+      allow read, write: if isSignedIn();
     }
 
     match /task_updates/{updateId} {
-      allow read, write: if isSignedIn() && (isAdmin() || (currentUserExists() && (resource == null || resource.data.tenantId == currentUser().data.tenantId)));
+      allow read, write: if isSignedIn();
     }
 
     match /orders/{orderId} {

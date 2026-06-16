@@ -177,9 +177,9 @@ export function AdminDashboardMetrics({ userData }: { userData?: any }) {
     <div className="space-y-6">
       <div className="flex justify-end mb-4">
         <div className="flex gap-2 bg-zinc-900 p-1 rounded-lg border border-white/10">
-            <select className="bg-transparent text-sm text-white focus:outline-none pr-2" value={filterUnit} onChange={(e) => setFilterUnit(e.target.value)}>
-                <option value="Todas">Todas Unidades</option>
-                {unitsList.map((u, i) => <option key={i} value={u.name}>{u.name}</option>)}
+            <select className="bg-zinc-900 text-sm text-white focus:outline-none pr-2" value={filterUnit} onChange={(e) => setFilterUnit(e.target.value)}>
+                <option value="Todas" className="bg-zinc-900 text-white">Todas Unidades</option>
+                {unitsList.map((u, i) => <option key={i} value={u.name} className="bg-zinc-900 text-white">{u.name}</option>)}
             </select>
         </div>
       </div>

@@ -531,15 +531,15 @@ export function AdminStrategicGoals({ userData }: { userData?: any }) {
         </div>
         <div className="flex flex-col items-end gap-2">
            <div className="flex gap-2 bg-zinc-900 p-1 rounded-lg border border-white/10">
-              <select className="bg-transparent text-sm text-white focus:outline-none pr-2 border-r border-white/10 mr-2" value={filterUnit} onChange={(e) => setFilterUnit(e.target.value)}>
-                 <option value="Todas">Todas Unidades</option>
-                 {unitsList.map((u, i) => <option key={i} value={u.name}>{u.name}</option>)}
+              <select className="bg-zinc-900 text-sm text-white focus:outline-none pr-2 border-r border-white/10 mr-2" value={filterUnit} onChange={(e) => setFilterUnit(e.target.value)}>
+                 <option value="Todas" className="bg-zinc-900 text-white">Todas Unidades</option>
+                 {unitsList.map((u, i) => <option key={i} value={u.name} className="bg-zinc-900 text-white">{u.name}</option>)}
               </select>
-              <select className="bg-transparent text-sm text-white focus:outline-none" value={monthsRange} onChange={(e) => setMonthsRange(Number(e.target.value))}>
-                 <option value={1}>Último mês</option>
-                 <option value={3}>Últimos 3 meses</option>
-                 <option value={6}>Últimos 6 meses</option>
-                 <option value={12}>Últimos 12 meses</option>
+              <select className="bg-zinc-900 text-sm text-white focus:outline-none" value={monthsRange} onChange={(e) => setMonthsRange(Number(e.target.value))}>
+                 <option value={1} className="bg-zinc-900 text-white">Último mês</option>
+                 <option value={3} className="bg-zinc-900 text-white">Últimos 3 meses</option>
+                 <option value={6} className="bg-zinc-900 text-white">Últimos 6 meses</option>
+                 <option value={12} className="bg-zinc-900 text-white">Últimos 12 meses</option>
                  <option value={60}>Histórico Completo</option>
               </select>
            </div>

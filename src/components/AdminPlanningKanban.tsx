@@ -30,6 +30,7 @@ export function AdminPlanningKanban({ userData }: { userData?: any }) {
   const [newTaskDept, setNewTaskDept] = useState("");
   const [newTaskAssignee, setNewTaskAssignee] = useState("");
   const [newTaskDescription, setNewTaskDescription] = useState("");
+  const [newTaskStatus, setNewTaskStatus] = useState("Pendente");
   const [newTaskDueDate, setNewTaskDueDate] = useState("");
   const [newTaskStartDate, setNewTaskStartDate] = useState("");
 
@@ -105,7 +106,7 @@ export function AdminPlanningKanban({ userData }: { userData?: any }) {
         description: newTaskDescription,
         tag: newTaskDept || 'Geral',
         assigneeId: newTaskAssignee || 'Não atribuído',
-        status: 'Pendente',
+        status: newTaskStatus || 'Pendente',
         tenantId: tenantId,
         startDate: newTaskStartDate || '',
         dueDate: newTaskDueDate || '',
@@ -115,6 +116,7 @@ export function AdminPlanningKanban({ userData }: { userData?: any }) {
       setNewTaskDescription("");
       setNewTaskDept("");
       setNewTaskAssignee("");
+      setNewTaskStatus("Pendente");
       setNewTaskDueDate("");
       setNewTaskStartDate("");
     } catch (error) {
@@ -298,6 +300,13 @@ export function AdminPlanningKanban({ userData }: { userData?: any }) {
                   </select>
                 </div>
 
+                <div className="space-y-2">
+                  <label className="text-xs font-bold text-white/40 uppercase">Status</label>
+                  <select value={newTaskStatus} onChange={e => setNewTaskStatus(e.target.value)} className="w-full bg-zinc-900 border border-white/10 rounded-lg p-2 text-sm focus:outline-none focus:ring-1 focus:ring-primary text-white h-10">
+                     {STATUSES.map(s => <option key={s} value={s}>{s}</option>)}
+                  </select>
+                </div>
+
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-2">
                     <label className="text-xs font-bold text-white/40 uppercase">Data Início</label>
@@ -354,7 +363,7 @@ export function AdminPlanningKanban({ userData }: { userData?: any }) {
                {groupedTasks[groupName].map(task => {
                  const overdue = isOverdue(task.dueDate, task.status);
                  return (
-                   <Card key={task.id} className="bg-zinc-900 border-white/10 hover:border-primary/50 hover:bg-zinc-900/80 cursor-pointer transition-all shadow-md group" onClick={() => setSelectedTask(task)}>
+                   <Card key={task.id} className="bg-zinc-900 border-white/10 hover:border-primary/50 hover:bg-zinc-900/80 cursor-pointer transition-all shadow-md group shrink-0" onClick={() => setSelectedTask(task)}>
                      <CardContent className="p-4 space-y-3">
                        <div className="flex justify-between items-start gap-2">
                          <span className="text-[10px] font-bold px-2 py-0.5 bg-white/5 text-white/60 rounded-md truncate max-w-[150px]">{task.tag || 'Geral'}</span>
