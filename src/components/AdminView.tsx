@@ -25,8 +25,8 @@ export function AdminView({ userData }: { userData?: any }) {
 
       <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
         <TabsList className="bg-zinc-900 border border-white/10 p-1 rounded-full overflow-x-auto whitespace-nowrap flex w-fit">
-          <TabsTrigger value="analytics" className="rounded-full px-6 data-[state=active]:bg-primary data-[state=active]:text-black">Analytics (Visão 360)</TabsTrigger>
-          <TabsTrigger value="goals" className="rounded-full px-6 data-[state=active]:bg-primary data-[state=active]:text-black">Metas 2026</TabsTrigger>
+          <TabsTrigger value="analytics" className="rounded-full px-6 data-[state=active]:bg-primary data-[state=active]:text-black">Resumo</TabsTrigger>
+          <TabsTrigger value="goals" className="rounded-full px-6 data-[state=active]:bg-primary data-[state=active]:text-black">Indicadores</TabsTrigger>
           <TabsTrigger value="planning" className="rounded-full px-6 data-[state=active]:bg-primary data-[state=active]:text-black">Planejamento</TabsTrigger>
           <TabsTrigger value="school" className="rounded-full px-6 data-[state=active]:bg-primary data-[state=active]:text-black">Escola IDE</TabsTrigger>
           <TabsTrigger value="jornada" className="rounded-full px-6 data-[state=active]:bg-primary data-[state=active]:text-black">Trilhas Formativas</TabsTrigger>
