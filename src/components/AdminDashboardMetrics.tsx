@@ -430,18 +430,6 @@ export function AdminDashboardMetrics({ userData }: { userData?: any }) {
                   </p>
                   <Button size="sm" variant="outline" className="w-full mt-2 border-red-500/30 text-red-400 hover:bg-red-500/20">Agendar Reunião</Button>
                 </div>
-
-                <div className="p-4 bg-blue-500/10 border border-blue-500/20 rounded-xl space-y-2 mt-4">
-                  <div className="flex items-center gap-2 text-blue-500">
-                    <Database className="h-4 w-4" />
-                    <span className="text-sm font-bold">Camada SQL / BI</span>
-                    <Badge variant="outline" className="border-blue-500/50 text-blue-400 ml-auto text-[10px]">Planejado</Badge>
-                  </div>
-                  <p className="text-xs text-white/60">
-                    Ainda não há replicação SQL ativa. A base operacional segue no Firebase; a camada SQL deve entrar como evolução para BI, relatórios e auditoria financeira.
-                  </p>
-                </div>
-              </div>
             </CardContent>
           </Card>
         </div>
