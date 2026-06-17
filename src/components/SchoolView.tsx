@@ -263,34 +263,73 @@ export function SchoolView({ userRole = [], isAdmin = false }: { userRole?: stri
 
 function SchoolDashboard({ onSelectCourse, user }: { onSelectCourse: (course: any) => void, user?: any }) {
   const [currentCourse, setCurrentCourse] = React.useState<any>(null)
+  const [recommendations, setRecommendations] = React.useState<any[]>([])
+  const [nextClasses, setNextClasses] = React.useState<any[]>([])
+  const [stats, setStats] = React.useState({ hours: 0, completed: 0, badges: 3 })
+  const [ranking, setRanking] = React.useState<any[]>([])
   
   React.useEffect(() => {
-    if (!user?.uid) return;
+    if (!user?.uid || !user?.tenantId) return;
     
-    // Simplification for the current course. Fetch first enrollment.
+    // Fetch user enrollments for nextClasses and currentCourse
     const enrollmentsQuery = query(collection(db, "enrollments"), where("userId", "==", user.uid));
-    const unsub = onSnapshot(enrollmentsQuery, async (snapshot) => {
-      if (!snapshot.empty) {
-        const docSnap = snapshot.docs[0];
-        const enrData = docSnap.data();
-        // Load the course
+    const unsubEnr = onSnapshot(enrollmentsQuery, async (snapshot) => {
+      const enrDocs = snapshot.docs.map(d => d.data());
+      
+      let completedCount = 0;
+      const nClasses: any[] = [];
+      let cCourse: any = null;
+
+      for (const enrData of enrDocs) {
+        if (enrData.progress === 100) {
+           completedCount++;
+        }
+        
         const courseRef = doc(db, "courses", enrData.courseId);
         const courseSnap = await getDoc(courseRef);
         if (courseSnap.exists()) {
-          setCurrentCourse({
-             id: courseSnap.id,
-             ...courseSnap.data(),
-             progress: enrData.progress,
-             lesson: "Continuar de onde parou",
-          });
+          const cData = courseSnap.data();
+          
+          if (enrData.progress < 100) {
+            nClasses.push({
+               title: cData.title,
+               lesson: cData.modules?.[0]?.lessons?.[0]?.title || "Continuar",
+               id: courseSnap.id,
+               course: { id: courseSnap.id, ...cData }
+            });
+            
+            if (!cCourse) {
+               cCourse = {
+                 id: courseSnap.id,
+                 ...cData,
+                 progress: enrData.progress,
+                 lesson: cData.modules?.[0]?.lessons?.[0]?.title || "Continuar aula",
+               };
+            }
+          }
         }
-      } else {
-        setCurrentCourse(null)
       }
+      setCurrentCourse(cCourse);
+      setNextClasses(nClasses.slice(0, 3));
+      setStats(prev => ({ ...prev, completed: completedCount, hours: completedCount * 2 }));
     });
-    
-    return () => unsub();
-  }, [user?.uid])
+
+    // Fetch Recommendations (courses)
+    const coursesQuery = query(collection(db, "courses"), where("tenantId", "==", user.tenantId), limit(5));
+    const unsubCourses = onSnapshot(coursesQuery, (snap) => {
+      const all = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+      setRecommendations(all.slice(0, 3));
+    });
+
+    // Set dynamic ranking from cell members (mock logic using actual names or defaults)
+    setRanking([
+      { name: "Líder", pts: "1.450 XP", pos: 1 },
+      { name: user.displayName || "Você", pts: "1.250 XP", pos: 2 },
+      { name: "Membro", pts: "980 XP", pos: 3 },
+    ]);
+
+    return () => { unsubEnr(); unsubCourses(); };
+  }, [user?.uid, user?.tenantId])
 
   return (
     <div className="space-y-8">
@@ -313,36 +352,29 @@ function SchoolDashboard({ onSelectCourse, user }: { onSelectCourse: (course: an
       {currentCourse ? (
         <Card className="bg-zinc-900 border-white/10 overflow-hidden">
           <div className="flex flex-col md:flex-row">
-            <div className="md:w-1/3 aspect-video relative group cursor-pointer" onClick={() => onSelectCourse(currentCourse)}>
-              {currentCourse.img ? (
-                <img src={currentCourse.img} alt="Curso" className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" />
-              ) : (
-                 <div className="w-full h-full flex items-center justify-center bg-zinc-800">
-                    <BookOpen className="w-10 h-10 text-white/20" />
-                 </div>
-              )}
-              <div className="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
-                <Button size="icon" className="h-12 w-12 rounded-full bg-primary text-black scale-90 group-hover:scale-100 transition-transform">
-                  <Play className="h-5 w-5 ml-1" />
-                </Button>
+            <div className="w-full md:w-1/3 aspect-video md:aspect-auto relative">
+              <img src={currentCourse.img} alt={currentCourse.title} className="w-full h-full object-cover" />
+              <div className="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 hover:opacity-100 transition-opacity">
+                <Button className="rounded-full w-12 h-12 p-0" onClick={() => onSelectCourse(currentCourse)}><PlayCircle className="w-6 h-6 ml-1" /></Button>
               </div>
             </div>
-            <div className="p-6 md:w-2/3 flex flex-col justify-center space-y-4">
-              <div>
-                <p className="text-sm text-white/60 font-medium">Continuar Estudando</p>
-                <h3 className="text-2xl font-bold mt-1">{currentCourse.title}</h3>
-                <p className="text-white/80 mt-1">{currentCourse.lesson}</p>
+            <div className="p-6 flex-1 flex flex-col justify-center">
+              <div className="flex justify-between items-start mb-4">
+                <div>
+                  <Badge className="bg-primary/20 text-primary border-none mb-2">Continuar Estudando</Badge>
+                  <h3 className="text-2xl font-bold">{currentCourse.title}</h3>
+                  <p className="text-white/60 mt-1">{currentCourse.lesson}</p>
+                </div>
+                <Button onClick={() => onSelectCourse(currentCourse)}>Continuar</Button>
               </div>
               <div className="space-y-2">
                 <div className="flex justify-between text-sm">
-                  <span className="text-white/60">Progresso do Curso</span>
-                  <span className="font-bold">{currentCourse.progress || 0}%</span>
+                  <span className="text-white/60">Progresso</span>
+                  <span className="font-bold">{currentCourse.progress}%</span>
                 </div>
-                <Progress value={currentCourse.progress || 0} className="h-2" />
-              </div>
-              <div className="flex gap-4 pt-2">
-                <Button className="bg-primary text-black font-bold" onClick={() => onSelectCourse(currentCourse)}>Continuar Aula</Button>
-                <Button variant="outline" className="border-white/10" onClick={() => document.querySelector('button[value="my-learning"]')?.dispatchEvent(new MouseEvent('click', { bubbles: true }))}>Ver todos os meus cursos</Button>
+                <div className="w-full bg-white/5 h-2 rounded-full overflow-hidden">
+                  <div className="bg-primary h-full rounded-full transition-all duration-1000" style={{ width: `${currentCourse.progress}%` }} />
+                </div>
               </div>
             </div>
           </div>
@@ -363,10 +395,10 @@ function SchoolDashboard({ onSelectCourse, user }: { onSelectCourse: (course: an
       {/* Resumo de Atividade */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         {[
-          { label: "Horas Assistidas", value: "24h", icon: Clock, color: "text-blue-400" },
-          { label: "Cursos Concluídos", value: "3", icon: CheckCircle2, color: "text-green-400" },
+          { label: "Horas Assistidas", value: `${stats.hours}h`, icon: Clock, color: "text-blue-400" },
+          { label: "Cursos Concluídos", value: `${stats.completed}`, icon: CheckCircle2, color: "text-green-400" },
           { label: "Média de Notas", value: "9.5", icon: Star, color: "text-yellow-400" },
-          { label: "Badges", value: "8", icon: Award, color: "text-purple-400" },
+          { label: "Badges", value: `${stats.badges}`, icon: Award, color: "text-purple-400" },
         ].map((stat, i) => (
           <Card key={i} className="bg-zinc-900 border-white/10">
             <CardContent className="p-6 flex flex-col items-center text-center space-y-2">
@@ -381,23 +413,25 @@ function SchoolDashboard({ onSelectCourse, user }: { onSelectCourse: (course: an
       {/* Trilhas Recomendadas */}
       <div className="space-y-4">
         <div className="flex justify-between items-center">
-          <h3 className="text-xl font-bold">Recomendado para você em Louvor</h3>
-          <Button variant="link" className="text-primary">Ver tudo</Button>
+          <h3 className="text-xl font-bold">Recomendado para você</h3>
+          <Button variant="link" className="text-primary" onClick={() => document.querySelector('button[value="catalog"]')?.dispatchEvent(new MouseEvent('click', { bubbles: true }))}>Ver Catálogo</Button>
         </div>
         <div className="flex gap-4 overflow-x-auto pb-4">
-          {[1, 2, 3].map((i) => (
-            <Card key={i} className="bg-zinc-900 border-white/10 min-w-[300px] shrink-0 cursor-pointer hover:border-primary/50 transition-colors">
+          {recommendations.length > 0 ? recommendations.map((rec) => (
+            <Card key={rec.id} onClick={() => onSelectCourse(rec)} className="bg-zinc-900 border-white/10 min-w-[300px] shrink-0 cursor-pointer hover:border-primary/50 transition-colors">
               <div className="aspect-video relative overflow-hidden rounded-t-xl">
-                <img src={`https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?q=80&w=600&auto=format&fit=crop&sig=${i}`} alt="Trilha" className="w-full h-full object-cover" />
+                <img src={rec.img} alt={rec.title} className="w-full h-full object-cover" />
                 <div className="absolute inset-0 bg-gradient-to-t from-black/80 to-transparent" />
-                <Badge className="absolute bottom-3 left-3 bg-primary text-black border-none">Trilha</Badge>
+                <Badge className="absolute bottom-3 left-3 bg-primary text-black border-none">{rec.category}</Badge>
               </div>
               <CardContent className="p-4">
-                <h4 className="font-bold text-lg">Formação de Músicos</h4>
-                <p className="text-sm text-white/60 mt-1">4 cursos • 0% concluído</p>
+                <h4 className="font-bold text-lg">{rec.title}</h4>
+                <p className="text-sm text-white/60 mt-1">{rec.modules?.length || 0} módulos • Nível {rec.level}</p>
               </CardContent>
             </Card>
-          ))}
+          )) : (
+             <p className="text-white/60 text-sm">Nenhuma recomendação disponível no momento.</p>
+          )}
         </div>
       </div>
 
@@ -408,20 +442,17 @@ function SchoolDashboard({ onSelectCourse, user }: { onSelectCourse: (course: an
             <CardTitle className="flex items-center gap-2 text-lg"><Lock className="w-5 h-5 text-primary" /> Próximas Aulas</CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
-            <div className="flex items-center justify-between p-3 bg-white/5 rounded-xl border border-white/5">
-              <div>
-                <p className="font-bold text-sm">Aula 4 — Prática</p>
-                <p className="text-xs text-white/60">Liderança de Célula</p>
+            {nextClasses.length > 0 ? nextClasses.map((nc, idx) => (
+              <div key={idx} onClick={() => onSelectCourse(nc.course)} className="flex items-center justify-between p-3 bg-white/5 rounded-xl border border-white/5 cursor-pointer hover:border-primary/50 transition-colors">
+                <div>
+                  <p className="font-bold text-sm">{nc.lesson}</p>
+                  <p className="text-xs text-white/60">{nc.title}</p>
+                </div>
+                <Badge variant="outline" className="border-primary/50 text-primary"><PlayCircle className="w-3 h-3 mr-1"/> Assistir</Badge>
               </div>
-              <Badge variant="outline" className="border-primary/50 text-primary">Em 3 dias</Badge>
-            </div>
-            <div className="flex items-center justify-between p-3 bg-white/5 rounded-xl border border-white/5">
-              <div>
-                <p className="font-bold text-sm">Aula 5 — Setlist</p>
-                <p className="text-xs text-white/60">Liderança de Célula</p>
-              </div>
-              <Badge variant="outline" className="border-white/20 text-white/60">Em 10 dias</Badge>
-            </div>
+            )) : (
+              <p className="text-sm text-white/40 italic">Você não possui aulas pendentes.</p>
+            )}
           </CardContent>
         </Card>
 
@@ -457,18 +488,14 @@ function SchoolDashboard({ onSelectCourse, user }: { onSelectCourse: (course: an
               <p className="text-sm font-bold text-secondary">Você está em 2º na sua célula!</p>
             </div>
             <div className="space-y-3">
-              {[
-                { name: "Maria Costa", pts: "1.450 XP", pos: 1 },
-                { name: "João (Você)", pts: "1.250 XP", pos: 2 },
-                { name: "Pedro Oliveira", pts: "980 XP", pos: 3 },
-              ].map((user, i) => (
+              {ranking.map((userObj, i) => (
                 <div key={i} className="flex items-center justify-between">
                   <div className="flex items-center gap-3">
-                    <span className={`font-black text-sm ${user.pos === 1 ? 'text-yellow-500' : user.pos === 2 ? 'text-secondary' : 'text-white/40'}`}>{user.pos}º</span>
-                    <Avatar className="w-8 h-8"><AvatarFallback>{user.name[0]}</AvatarFallback></Avatar>
-                    <span className={`text-sm ${user.pos === 2 ? 'font-bold' : ''}`}>{user.name}</span>
+                    <span className={`font-black text-sm ${userObj.pos === 1 ? 'text-yellow-500' : userObj.pos === 2 ? 'text-secondary' : 'text-white/40'}`}>{userObj.pos}º</span>
+                    <Avatar className="w-8 h-8"><AvatarFallback>{userObj.name[0]}</AvatarFallback></Avatar>
+                    <span className={`text-sm ${userObj.pos === 2 ? 'font-bold' : ''}`}>{userObj.name}</span>
                   </div>
-                  <span className="text-xs font-mono text-white/60">{user.pts}</span>
+                  <span className="text-xs font-mono text-white/60">{userObj.pts}</span>
                 </div>
               ))}
             </div>
@@ -497,7 +524,7 @@ function SchoolCatalog({ onSelectCourse, user }: { onSelectCourse: (course: any)
           const q = query(
             collection(db, 'courses'), 
             where('tenantId', '==', tenantId),
-            where('status', '==', 'Publicado')
+            where('status', '==', 'published')
           );
           
           unsubscribe = onSnapshot(q, (snapshot) => {
@@ -2000,7 +2027,7 @@ function CourseDetails({ course, onBack, onStartLesson, user, isSubscribed, onSu
           <div className="space-y-4">
             <h3 className="text-2xl font-bold">O que você vai aprender</h3>
             <div className="grid sm:grid-cols-2 gap-3">
-              {["Fundamentos bíblicos da célula", "Como preparar um estudo", "Lidando com conflitos", "Multiplicação saudável"].map((item, i) => (
+              {(course.learningOutcomes?.length > 0 ? course.learningOutcomes : ["Fundamentos bíblicos", "Práticas ministeriais"]).map((item: string, i: number) => (
                 <div key={i} className="flex items-start gap-2">
                   <CheckCircle2 className="w-5 h-5 text-primary shrink-0" />
                   <span className="text-sm text-white/80">{item}</span>
@@ -2009,21 +2036,26 @@ function CourseDetails({ course, onBack, onStartLesson, user, isSubscribed, onSu
             </div>
           </div>
 
-          <div className="space-y-4">
-            <h3 className="text-2xl font-bold">Pré-requisitos</h3>
-            <Card className="bg-zinc-900 border-white/10 p-4 flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 bg-green-500/20 rounded-lg flex items-center justify-center">
-                  <CheckCircle2 className="w-5 h-5 text-green-500"/>
-                </div>
-                <div>
-                  <p className="font-bold">Fundamentos da Fé</p>
-                  <p className="text-xs text-white/60">Status: Concluído</p>
-                </div>
+          {(course.prerequisites && course.prerequisites.length > 0) && (
+            <div className="space-y-4">
+              <h3 className="text-2xl font-bold">Pré-requisitos</h3>
+              <div className="grid gap-2">
+                {course.prerequisites.map((req: string, i: number) => (
+                  <Card key={i} className="bg-zinc-900 border-white/10 p-4 flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 bg-white/5 rounded-lg flex items-center justify-center">
+                        <BookOpen className="w-5 h-5 text-white/40"/>
+                      </div>
+                      <div>
+                        <p className="font-bold">{req}</p>
+                        <p className="text-xs text-white/60">Recomendado antes de iniciar</p>
+                      </div>
+                    </div>
+                  </Card>
+                ))}
               </div>
-              <Button variant="outline" size="sm" className="border-white/10">Revisar</Button>
-            </Card>
-          </div>
+            </div>
+          )}
 
           <div className="space-y-4">
             <h3 className="text-2xl font-bold">Currículo do Curso</h3>
@@ -2112,14 +2144,29 @@ function CourseDetails({ course, onBack, onStartLesson, user, isSubscribed, onSu
           <div className="space-y-4">
             <h3 className="text-2xl font-bold">Sobre o Professor</h3>
             <div className="flex flex-col sm:flex-row gap-6 items-start">
-              <Avatar className="w-24 h-24 border-2 border-white/10"><AvatarFallback>PR</AvatarFallback></Avatar>
+              <Avatar className="w-24 h-24 border-2 border-white/10"><AvatarFallback>{(course.professor || "PR").substring(0,2).toUpperCase()}</AvatarFallback></Avatar>
               <div className="space-y-2">
-                <h4 className="text-xl font-bold text-primary">Pr. João Silva</h4>
-                <p className="text-sm text-white/80 leading-relaxed">Pastor de Louvor e Adoração na Igreja Coroado há 10 anos. Formado em Teologia e Música, tem paixão por treinar líderes que adoram em espírito e em verdade. Já formou mais de 500 líderes de célula.</p>
+                <h4 className="text-xl font-bold text-primary">{course.professor || "Instrutor"}</h4>
+                <p className="text-sm text-white/80 leading-relaxed">{course.professorBio || "Instrutor focado em formar e capacitar os alunos com excelência."}</p>
                 <Button variant="link" className="text-primary p-0 h-auto">Ver outros cursos do professor</Button>
               </div>
             </div>
           </div>
+
+          {/* O que inclui */}
+          {(course.includes && course.includes.length > 0) && (
+            <div className="space-y-4">
+              <h3 className="text-2xl font-bold">O que este curso inclui</h3>
+              <div className="grid sm:grid-cols-2 gap-3">
+                {course.includes.map((item: string, i: number) => (
+                  <div key={i} className="flex items-start gap-2">
+                    <CheckCircle2 className="w-5 h-5 text-secondary shrink-0" />
+                    <span className="text-sm text-white/80">{item}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
 
           <Separator className="bg-white/10" />
 

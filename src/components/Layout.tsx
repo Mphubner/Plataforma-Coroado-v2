@@ -129,100 +129,74 @@ export function Layout({ children, activeTab, setActiveTab, isLoggedIn = true, u
   const bottomNavIds = getBottomNavItems()
   const desktopPrimaryIds = getDesktopPrimaryItems()
 
-  const navGroups = [
-    { label: "Principal", ids: ["home"] },
-    { label: "Conexão & Igreja", ids: ["cell", "events", "members", "social", "media"] },
-    { label: "Crescimento", ids: ["school", "jornada", "pastors"] },
-    { label: "Institucional", ids: ["units", "ministries", "store"] },
-    { label: "Gestão", ids: ["admin", "finance"] }
-  ];
+  const primaryNav = permittedNav.filter(item => desktopPrimaryIds.includes(item.id))
+  const secondaryNav = permittedNav.filter(item => !desktopPrimaryIds.includes(item.id))
 
   return (
     <div className="min-h-screen bg-black text-white font-sans selection:bg-primary selection:text-black scroll-smooth">
-      {/* Header */}
-      <header className="fixed top-0 left-0 right-0 z-50 border-b border-white/10 bg-black/60 backdrop-blur-2xl">
-        <div className="container mx-auto px-4 h-20 flex items-center justify-between">
-          <div className="flex items-center gap-4 lg:gap-8">
+      {/* Navbar Fixa no Topo */}
+      <header className="fixed top-0 left-0 right-0 h-16 md:h-20 bg-black/80 backdrop-blur-xl border-b border-white/5 z-50">
+        <div className="container mx-auto px-4 md:px-6 h-full flex items-center justify-between">
+          <div className="flex items-center gap-4 md:gap-8">
             <motion.div 
-              className="flex items-center gap-2 cursor-pointer"
+              className="flex items-center gap-3 cursor-pointer"
               whileHover={{ scale: 1.02 }}
-              whileTap={{ scale: 0.98 }}
-              onClick={() => setActiveTab("home")}
+              onClick={() => setActiveTab('home')}
             >
-              <img src="/simbolob.png" alt="Coroado Icon" className="h-10 w-auto object-contain text-white" />
-              <img src="/logomarcab.png" alt="Coroado" className="h-5 w-auto object-contain hidden lg:block mt-1 text-white" />
+              <div className="w-8 h-8 md:w-10 md:h-10 rounded-xl bg-gradient-to-tr from-primary to-primary/80 flex items-center justify-center shadow-lg shadow-primary/20">
+                <Heart className="h-5 w-5 md:h-6 md:w-6 text-black fill-current" />
+              </div>
+              <span className="text-xl md:text-2xl font-black tracking-tight hidden sm:block">Coroado</span>
             </motion.div>
             
             <nav className="hidden md:flex items-center gap-1">
-              {navGroups.map((group) => {
-                const groupItems = group.ids
-                  .map(id => permittedNav.find(n => n.id === id))
-                  .filter(Boolean) as NavItem[];
-                  
-                if (groupItems.length === 0) return null;
-
-                // If only one item and it's "Principal", just show a button
-                if (group.ids.includes("home")) {
-                  const item = groupItems[0];
-                  return (
-                    <Button
-                      key={item.id}
-                      variant="ghost"
-                      className={cn(
-                        "relative px-3 lg:px-4 py-2 text-sm font-semibold transition-all duration-300 hover:text-primary rounded-full",
-                        activeTab === item.id ? "text-primary bg-white/5" : "text-white/60"
-                      )}
-                      onClick={() => setActiveTab(item.id)}
-                    >
-                      {item.label}
-                      {activeTab === item.id && (
-                        <motion.div
-                          layoutId="activeTab"
-                          className="absolute -bottom-1 left-4 right-4 h-0.5 bg-primary rounded-full"
-                          transition={{ type: "spring", stiffness: 380, damping: 30 }}
-                        />
-                      )}
-                    </Button>
-                  );
-                }
-
-                const isActiveGroup = groupItems.some(i => i.id === activeTab);
-
-                return (
-                  <DropdownMenu key={group.label}>
-                    <DropdownMenuTrigger 
-                      className={cn(
-                        buttonVariants({ variant: "ghost" }), 
-                        "text-white/60 hover:text-primary gap-1 px-3 lg:px-4 relative font-semibold",
-                        isActiveGroup ? "text-primary bg-white/5" : ""
-                      )}
-                    >
-                      {group.label} <Menu className="h-4 w-4" />
-                      {isActiveGroup && (
-                        <motion.div
-                          layoutId="activeTab"
-                          className="absolute -bottom-1 left-4 right-4 h-0.5 bg-primary rounded-full"
-                          transition={{ type: "spring", stiffness: 380, damping: 30 }}
-                        />
-                      )}
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent className="bg-zinc-900 border-white/10 text-white w-48">
-                      <DropdownMenuGroup>
-                        {groupItems.map((item) => (
-                          <DropdownMenuItem 
-                            key={item.id}
-                            onClick={() => setActiveTab(item.id)}
-                            className={`hover:bg-white/5 focus:bg-white/5 cursor-pointer ${activeTab === item.id ? "text-primary font-bold" : ""}`}
-                          >
-                            <item.icon className="mr-2 h-4 w-4" />
-                            {item.label}
-                          </DropdownMenuItem>
-                        ))}
-                      </DropdownMenuGroup>
-                    </DropdownMenuContent>
-                  </DropdownMenu>
-                );
-              })}
+              {primaryNav.map((item) => (
+                <Button
+                  key={item.id}
+                  variant="ghost"
+                  className={cn(
+                    "relative px-3 lg:px-4 py-2 text-sm font-semibold transition-all duration-300 hover:text-primary rounded-full",
+                    activeTab === item.id ? "text-primary bg-white/5" : "text-white/60"
+                  )}
+                  onClick={() => setActiveTab(item.id)}
+                >
+                  {item.label}
+                  {activeTab === item.id && (
+                    <motion.div
+                      layoutId="activeTab"
+                      className="absolute -bottom-1 left-4 right-4 h-0.5 bg-primary rounded-full"
+                      transition={{ type: "spring", stiffness: 380, damping: 30 }}
+                    />
+                  )}
+                </Button>
+              ))}
+              
+              {secondaryNav.length > 0 && (
+                <DropdownMenu>
+                  <DropdownMenuTrigger 
+                    className={cn(
+                      buttonVariants({ variant: "ghost" }), 
+                      "text-white/60 hover:text-primary gap-1 px-3 lg:px-4"
+                    )}
+                  >
+                    Mais <Menu className="h-4 w-4" />
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent className="bg-zinc-900 border-white/10 text-white w-48">
+                    <DropdownMenuGroup>
+                      {secondaryNav.map((item) => (
+                        <DropdownMenuItem 
+                          key={item.id}
+                          onClick={() => setActiveTab(item.id)}
+                          className={`hover:bg-white/5 focus:bg-white/5 cursor-pointer ${activeTab === item.id ? "text-primary" : ""}`}
+                        >
+                          <item.icon className="mr-2 h-4 w-4" />
+                          {item.label}
+                        </DropdownMenuItem>
+                      ))}
+                    </DropdownMenuGroup>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              )}
             </nav>
           </div>
 
