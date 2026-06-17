@@ -6,7 +6,7 @@ import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Carousel, CarouselContent, CarouselItem, CarouselNext, CarouselPrevious } from '@/components/ui/carousel';
 import { db } from "@/lib/firebase";
-import { collection, query, onSnapshot, limit, updateDoc, doc, serverTimestamp } from "firebase/firestore";
+import { collection, query, onSnapshot, limit, updateDoc, doc, serverTimestamp, where } from "firebase/firestore";
 import { handleFirestoreError, OperationType } from '@/lib/firestoreUtils';
 import { CalendarCheck, Music } from 'lucide-react';
 import { getHomeSections, routeById, type RouteId } from '@/src/lib/permissions';

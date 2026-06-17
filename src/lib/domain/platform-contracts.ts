@@ -150,9 +150,13 @@ export const eventEnrollmentRequestKidSchema = z.object({
 
 export const eventEnrollmentRequestSchema = z.object({
   eventId: idText('Evento obrigatorio'),
+  ticketTypeId: z.string().optional(),
+  isServant: z.boolean().optional(),
   kids: z.array(eventEnrollmentRequestKidSchema).max(30).optional(),
 }).transform(input => ({
   eventId: input.eventId,
+  ticketTypeId: input.ticketTypeId,
+  isServant: input.isServant,
   kids: (input.kids || []).filter(kid => kid.name.length > 0),
 }));
 

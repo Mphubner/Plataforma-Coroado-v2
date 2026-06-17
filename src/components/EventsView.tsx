@@ -29,6 +29,11 @@ type EventInfo = {
   visibilityId?: string;
   isPaid?: boolean;
   price?: number;
+  ticketTypes?: { id: string; name: string; price: number; capacity: number }[];
+  allowChildren?: boolean;
+  childTicketPrice?: number;
+  servantsSlug?: string;
+  servantsPrice?: number;
   requiresRegistration?: boolean;
   requiresFunding?: boolean;
   fundingAmount?: number;
@@ -39,6 +44,7 @@ type EventInfo = {
 type EventEnrollment = {
   id: string;
   eventId: string;
+  ticketTypeId?: string;
   userId: string;
   tenantId: string;
   checkedIn: boolean;
@@ -1085,10 +1091,65 @@ export function EventsView({ isLoggedIn = false, userData, onLoginClick }: { isL
                     </div>
                     
                     {newEvent.isPaid && (
-                      <div className="space-y-2 pl-6 border-l-2 border-primary/30">
-                        <label className="text-[10px] text-white/40 uppercase font-bold tracking-widest">Valor da Inscrição (R$)</label>
-                        <input type="number" step="0.01" className="w-32 bg-black border border-white/10 rounded-lg px-3 py-2 text-sm text-white focus:border-primary focus:outline-none" placeholder="0.00" value={newEvent.price || ''} onChange={(e) => setNewEvent({...newEvent, price: parseFloat(e.target.value) || 0})} />
-                        <p className="text-xs text-white/40">Nota: O ingresso só será liberado após confirmação do Mercado Pago.</p>
+                      <div className="space-y-4 pl-6 border-l-2 border-primary/30">
+                        <div className="bg-black/20 p-3 rounded-lg border border-white/5 space-y-3">
+                          <div className="flex justify-between items-center">
+                            <label className="text-[10px] text-white/40 uppercase font-bold tracking-widest">Tipos de Ingresso</label>
+                            <Button size="sm" variant="outline" className="h-6 text-xs" onClick={(e) => { e.preventDefault(); setNewEvent({ ...newEvent, ticketTypes: [...(newEvent.ticketTypes || []), { id: Date.now().toString(), name: 'Novo Ingresso', price: 0, capacity: 0 }] }); }}>
+                              + Adicionar
+                            </Button>
+                          </div>
+                          {(newEvent.ticketTypes || []).length === 0 && (
+                             <p className="text-xs text-white/40">Nenhum ingresso configurado. O evento não poderá receber pagamentos.</p>
+                          )}
+                          {(newEvent.ticketTypes || []).map((ticket, tIdx) => (
+                            <div key={ticket.id} className="flex flex-col gap-2 p-2 border border-white/10 rounded bg-black/40">
+                              <input type="text" className="bg-transparent text-sm border-b border-white/10 px-1 py-1" placeholder="Nome do Ingresso (ex: Conferência)" value={ticket.name} onChange={(e) => { const updated = [...(newEvent.ticketTypes || [])]; updated[tIdx].name = e.target.value; setNewEvent({ ...newEvent, ticketTypes: updated }); }} />
+                              <div className="flex gap-2">
+                                <div className="flex-1">
+                                  <label className="text-[10px] text-white/40">Preço (R$)</label>
+                                  <input type="number" step="0.01" className="w-full bg-black border border-white/10 rounded px-2 py-1 text-sm" value={ticket.price} onChange={(e) => { const updated = [...(newEvent.ticketTypes || [])]; updated[tIdx].price = parseFloat(e.target.value) || 0; setNewEvent({ ...newEvent, ticketTypes: updated }); }} />
+                                </div>
+                                <div className="flex-1">
+                                  <label className="text-[10px] text-white/40">Lote/Vagas (0 = ilimitado)</label>
+                                  <input type="number" className="w-full bg-black border border-white/10 rounded px-2 py-1 text-sm" value={ticket.capacity} onChange={(e) => { const updated = [...(newEvent.ticketTypes || [])]; updated[tIdx].capacity = parseInt(e.target.value, 10) || 0; setNewEvent({ ...newEvent, ticketTypes: updated }); }} />
+                                </div>
+                                <Button size="icon" variant="ghost" className="text-red-400 self-end mb-1" onClick={(e) => { e.preventDefault(); const updated = [...(newEvent.ticketTypes || [])]; updated.splice(tIdx, 1); setNewEvent({ ...newEvent, ticketTypes: updated }); }}>
+                                  <X className="w-4 h-4" />
+                                </Button>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+
+                        <div className="bg-black/20 p-3 rounded-lg border border-white/5 space-y-3">
+                          <div className="flex items-center gap-2">
+                            <input type="checkbox" checked={newEvent.allowChildren} onChange={(e) => setNewEvent({...newEvent, allowChildren: e.target.checked})} />
+                            <label className="text-sm font-bold text-white/80">Permitir Crianças</label>
+                          </div>
+                          {newEvent.allowChildren && (
+                            <div>
+                              <label className="text-[10px] text-white/40 uppercase font-bold">Valor para Criança (R$)</label>
+                              <input type="number" step="0.01" className="w-full bg-black border border-white/10 rounded px-2 py-1 text-sm" value={newEvent.childTicketPrice || 0} onChange={(e) => setNewEvent({...newEvent, childTicketPrice: parseFloat(e.target.value) || 0})} />
+                            </div>
+                          )}
+                        </div>
+
+                        <div className="bg-black/20 p-3 rounded-lg border border-white/5 space-y-3">
+                          <label className="text-sm font-bold text-white/80 block">Sublink de Servos</label>
+                          <p className="text-[10px] text-white/40 leading-tight">Configura um ingresso com desconto ou diferenciado. O URL ficará: /eventos?servant=SLUG</p>
+                          <div className="flex gap-2">
+                            <div className="flex-1">
+                              <label className="text-[10px] text-white/40 uppercase font-bold">Slug (ex: servos2026)</label>
+                              <input type="text" className="w-full bg-black border border-white/10 rounded px-2 py-1 text-sm" placeholder="servos" value={newEvent.servantsSlug || ''} onChange={(e) => setNewEvent({...newEvent, servantsSlug: e.target.value.toLowerCase().replace(/\s+/g, '')})} />
+                            </div>
+                            <div className="flex-1">
+                              <label className="text-[10px] text-white/40 uppercase font-bold">Preço (R$)</label>
+                              <input type="number" step="0.01" className="w-full bg-black border border-white/10 rounded px-2 py-1 text-sm" value={newEvent.servantsPrice || 0} onChange={(e) => setNewEvent({...newEvent, servantsPrice: parseFloat(e.target.value) || 0})} />
+                            </div>
+                          </div>
+                        </div>
+
                       </div>
                     )}
 
