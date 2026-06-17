@@ -76,6 +76,7 @@ export function PastorsView({ isAdmin, userData, isLoggedIn, onLoginClick }: { i
         availableTimes: typeof editingPastor.availableTimes === 'string' 
            ? editingPastor.availableTimes.split(',').map((t: string) => t.trim()) 
            : (editingPastor.availableTimes || []),
+        linkedEmail: editingPastor.linkedEmail || '',
         tenantId: userData.tenantId
       };
 
@@ -212,8 +213,8 @@ export function PastorsView({ isAdmin, userData, isLoggedIn, onLoginClick }: { i
             initial={{ scale: 1.1, opacity: 0 }}
             animate={{ scale: 1, opacity: 0.4 }}
             transition={{ duration: 1.5 }}
-            src="https://images.unsplash.com/photo-1438283173091-5dbf5c5a3206?q=80&w=1200&auto=format&fit=crop" 
-            alt="Igreja Coroado" 
+            src="https://images.unsplash.com/photo-1438232992991-995b7058bbb3?q=80&w=1200&auto=format&fit=crop" 
+            alt="Gabinete Pastoral Banner" 
             className="w-full h-full object-cover grayscale"
             referrerPolicy="no-referrer"
           />
@@ -267,10 +268,10 @@ export function PastorsView({ isAdmin, userData, isLoggedIn, onLoginClick }: { i
                   Anotações (Keep)
                 </Button>
                 {isAdmin && activeTab === 'list' && (
-                   <Button variant="outline" className="border-white/10" onClick={() => {
-                      setEditingPastor({ name: '', role: '', image: '', social: { facebook: '', instagram: '', youtube: '' }, availableTimes: '14:00, 15:00, 16:00' });
-                      setShowPastorForm(true);
-                   }}>
+                   <Button className="bg-primary text-black font-bold whitespace-nowrap" onClick={() => {
+                          setEditingPastor({ name: '', role: '', image: '', linkedEmail: '', social: { facebook: '', instagram: '', youtube: '' }, availableTimes: '14:00, 15:00, 16:00' });
+                          setShowPastorForm(true);
+                        }}>
                       <Plus className="w-4 h-4 mr-2" /> Adicionar Pastor
                    </Button>
                 )}
@@ -388,13 +389,17 @@ export function PastorsView({ isAdmin, userData, isLoggedIn, onLoginClick }: { i
                     <Calendar className="w-4 h-4 mr-2" /> Abrir Agenda
                   </Button>
                 </div>
-                {appointments.length === 0 ? (
+                {appointments
+                    .filter(app => isAdmin || (userData?.email && app.pastorEmail === userData.email) || app.pastorId === userData?.id || pastorsList.find(p => p.linkedEmail === userData?.email)?.id === app.pastorId)
+                    .length === 0 ? (
                   <div className="text-center p-12 bg-zinc-900 border border-white/10 rounded-[2.5rem] text-white/40">
                      Nenhum agendamento encontrado para sua agenda.
                   </div>
                 ) : (
                   <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                     {appointments.map(app => (
+                     {appointments
+                       .filter(app => isAdmin || (userData?.email && app.pastorEmail === userData.email) || app.pastorId === userData?.id || pastorsList.find(p => p.linkedEmail === userData?.email)?.id === app.pastorId)
+                       .map(app => (
                        <Card key={app.id} className="bg-zinc-900 border-white/10">
                           <CardHeader>
                             <Badge className="w-fit mb-2">{app.status}</Badge>
@@ -515,6 +520,11 @@ export function PastorsView({ isAdmin, userData, isLoggedIn, onLoginClick }: { i
                 <div className="space-y-2">
                   <label className="text-xs font-bold text-white/60">Cargo/Função</label>
                   <Input required value={editingPastor.role} onChange={e => setEditingPastor({ ...editingPastor, role: e.target.value })} className="bg-black border-white/10" />
+                </div>
+                <div className="space-y-2">
+                  <label className="text-xs font-bold text-white/60">Email da Conta (Para vínculo)</label>
+                  <Input type="email" value={editingPastor.linkedEmail || ''} onChange={e => setEditingPastor({ ...editingPastor, linkedEmail: e.target.value })} placeholder="emaildopastor@exemplo.com" className="bg-black border-white/10" />
+                  <p className="text-[10px] text-white/40 mt-1">Este email deve ser o mesmo utilizado pelo pastor para fazer login na plataforma.</p>
                 </div>
                 <div className="space-y-2">
                   <label className="text-xs font-bold text-white/60">Foto do Pastor</label>

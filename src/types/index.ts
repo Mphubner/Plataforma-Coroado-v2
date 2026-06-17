@@ -68,6 +68,9 @@ export type Course = {
   learningOutcomes: string[];
   rating: number;
   price?: number;
+  professorBio?: string;
+  prerequisites?: string[];
+  includes?: string[];
 };
 
 export type Note = {

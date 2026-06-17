@@ -73,8 +73,8 @@ export function HomeView({ onTabChange, userData }: { onTabChange: (tab: string)
 
     // Fetch scales if logged in
     let unScales: any = null;
-    if (userData?.id) {
-      const qScales = query(collection(db, 'scales'));
+    if (userData?.id && userData?.tenantId) {
+      const qScales = query(collection(db, 'scales'), where('tenantId', '==', userData.tenantId));
       unScales = onSnapshot(qScales, (snap) => {
         const all = snap.docs.map(d => ({ id: d.id, ...d.data() }));
         // Filter scales where this user is assigned
@@ -82,6 +82,8 @@ export function HomeView({ onTabChange, userData }: { onTabChange: (tab: string)
         // Sort by date upcoming
         userScales.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
         setMyScales(userScales);
+      }, (error) => {
+        handleFirestoreError(error, OperationType.LIST, 'scales');
       });
     }
 

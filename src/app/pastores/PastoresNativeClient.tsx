@@ -31,6 +31,8 @@ export function PastoresNativeClient() {
   const [showPastorForm, setShowPastorForm] = useState(false);
   const [editingPastor, setEditingPastor] = useState<any>(null);
   const [showSuccess, setShowSuccess] = useState(false);
+  const [dynamicAvailableTimes, setDynamicAvailableTimes] = useState<string[] | null>(null);
+  const [loadingTimes, setLoadingTimes] = useState(false);
   
   const [userData, setUserData] = useState<any>(null);
   const [isLoggedIn, setIsLoggedIn] = useState(false);
@@ -105,9 +107,39 @@ export function PastoresNativeClient() {
      return d;
   }).filter(d => d.getDay() !== 0 && d.getDay() !== 6);
 
-  const availableTimes = (selectedPastor?.availableTimes && selectedPastor.availableTimes.length > 0)
+  useEffect(() => {
+    if (!selectedPastor || !selectedDate) {
+      setDynamicAvailableTimes(null);
+      return;
+    }
+    
+    let isMounted = true;
+    const fetchFreeBusy = async () => {
+      setLoadingTimes(true);
+      try {
+        const response = await fetch(`/api/calendar/freebusy?pastorId=${selectedPastor.id}&date=${selectedDate}`);
+        const data = await response.json();
+        if (data.availableSlots && isMounted) {
+          setDynamicAvailableTimes(data.availableSlots);
+        } else if (isMounted) {
+           setDynamicAvailableTimes(null);
+        }
+      } catch (err) {
+        console.error("Failed to fetch available times", err);
+        if (isMounted) setDynamicAvailableTimes(null);
+      } finally {
+        if (isMounted) setLoadingTimes(false);
+      }
+    };
+    fetchFreeBusy();
+    return () => { isMounted = false; };
+  }, [selectedPastor, selectedDate]);
+
+  const fallbackTimes = (selectedPastor?.availableTimes && selectedPastor.availableTimes.length > 0)
     ? selectedPastor.availableTimes
     : ['14:00', '15:00', '16:00', '17:00', '18:00'];
+    
+  const availableTimes = dynamicAvailableTimes || fallbackTimes;
 
   const handleSavePastor = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -209,9 +241,9 @@ export function PastoresNativeClient() {
         <div className="absolute inset-0">
           <div className="absolute inset-0 bg-gradient-to-r from-black via-black/60 to-transparent z-10" />
           <img 
-            src="https://images.unsplash.com/photo-1438283173091-5dbf5c5a3206?q=80&w=1200&auto=format&fit=crop" 
-            alt="Igreja Coroado" 
-            className="w-full h-full object-cover grayscale opacity-40"
+            src="https://images.unsplash.com/photo-1438232992991-995b7058bbb3?q=80&w=1200&auto=format&fit=crop" 
+            alt="Gabinete Pastoral Banner" 
+            className="w-full h-full object-cover opacity-80"
             referrerPolicy="no-referrer"
           />
         </div>
@@ -550,21 +582,24 @@ export function PastoresNativeClient() {
                     {selectedDate && (
                       <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} className="space-y-3">
                         <label className="text-xs font-bold text-white/40 uppercase tracking-widest">Selecione o Horário</label>
-                        <div className="grid grid-cols-3 gap-2">
-                          {availableTimes.map((time: string) => {
+                        <div className="grid grid-cols-4 gap-2">
+                          {loadingTimes ? (
+                             <div className="col-span-4 text-center text-white/40 text-sm py-4">Carregando horários...</div>
+                          ) : availableTimes.length > 0 ? availableTimes.map((time: string) => {
                             const isSelected = selectedTime === time;
                             return (
-                              <button
+                              <Button
                                 key={time}
                                 onClick={() => setSelectedTime(time)}
-                                className={`p-3 rounded-xl border text-center transition-all ${
-                                  isSelected ? 'bg-white border-white text-black font-bold' : 'border-white/10 text-white/60 hover:border-white/30'
-                                }`}
+                                variant="outline"
+                                className={`rounded-full h-10 ${isSelected ? 'bg-primary text-black font-bold border-primary' : 'border-white/10 hover:border-primary/50'}`}
                               >
                                 {time}
-                              </button>
+                              </Button>
                             );
-                          })}
+                          }) : (
+                             <div className="col-span-4 text-center text-white/40 text-sm py-4">Nenhum horário disponível para esta data.</div>
+                          )}
                         </div>
                       </motion.div>
                     )}

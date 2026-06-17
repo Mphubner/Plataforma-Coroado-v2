@@ -41,7 +41,10 @@ export function AdminCourses() {
       category: "Geral",
       learningOutcomes: [],
       rating: 0,
-      modules: []
+      modules: [],
+      professorBio: "",
+      prerequisites: [],
+      includes: []
     });
   };
 
@@ -214,6 +217,36 @@ export function AdminCourses() {
                 className="w-full min-h-[100px] p-3 rounded-md bg-black border border-white/10 text-sm" 
                 required 
               />
+            </div>
+
+            <div className="space-y-2">
+              <label className="text-sm font-bold">Sobre o Professor (Bio)</label>
+              <textarea 
+                value={editingCourse.professorBio || ""} 
+                onChange={e => setEditingCourse({...editingCourse, professorBio: e.target.value})} 
+                className="w-full p-3 rounded-md bg-black border border-white/10 text-sm" 
+              />
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <label className="text-sm font-bold">Pré-requisitos (separados por vírgula)</label>
+                <Input 
+                  value={(editingCourse.prerequisites || []).join(", ")} 
+                  onChange={e => setEditingCourse({...editingCourse, prerequisites: e.target.value.split(",").map(s => s.trim()).filter(Boolean)})} 
+                  className="bg-black border-white/10" 
+                  placeholder="Ex: Liderança, Curso Básico"
+                />
+              </div>
+              <div className="space-y-2">
+                <label className="text-sm font-bold">O que inclui? (separado por vírgula)</label>
+                <Input 
+                  value={(editingCourse.includes || []).join(", ")} 
+                  onChange={e => setEditingCourse({...editingCourse, includes: e.target.value.split(",").map(s => s.trim()).filter(Boolean)})} 
+                  className="bg-black border-white/10" 
+                  placeholder="Ex: Certificado, PDF, Mentorias"
+                />
+              </div>
             </div>
 
             <div className="space-y-4 pt-4 border-t border-white/10">

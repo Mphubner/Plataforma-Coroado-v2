@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
+import { ImageUpload } from '@/components/ui/ImageUpload';
 import { auth, db } from '@/lib/firebase';
 import { collection, query, where, onSnapshot, addDoc, updateDoc, deleteDoc, doc, serverTimestamp } from 'firebase/firestore';
 import ReactQrCode from 'react-qr-code';
@@ -528,8 +529,12 @@ export function FinanceView({ userData }: FinanceViewProps) {
                   <Input type="date" value={editingCampaign.deadline} onChange={e => setEditingCampaign({ ...editingCampaign, deadline: e.target.value })} className="bg-black border-white/10" />
                 </div>
                 <div className="space-y-2">
-                  <label className="text-xs font-bold text-white/60">URL da Imagem de Capa</label>
-                  <Input value={editingCampaign.imageUrl} onChange={e => setEditingCampaign({ ...editingCampaign, imageUrl: e.target.value })} className="bg-black border-white/10" placeholder="https://..." />
+                  <label className="text-xs font-bold text-white/60">Foto de Capa</label>
+                  <ImageUpload
+                    value={editingCampaign.imageUrl || ''}
+                    onChange={url => setEditingCampaign({ ...editingCampaign, imageUrl: url })}
+                    folder="images/campanhas"
+                  />
                 </div>
                 
                 <div className="pt-6 flex gap-4">
