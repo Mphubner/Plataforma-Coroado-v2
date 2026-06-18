@@ -143,8 +143,8 @@ export function Layout({ children, activeTab, setActiveTab, isLoggedIn = true, u
               whileHover={{ scale: 1.02 }}
               onClick={() => setActiveTab('home')}
             >
-              <div className="w-8 h-8 md:w-10 md:h-10 rounded-xl bg-gradient-to-tr from-primary to-primary/80 flex items-center justify-center shadow-lg shadow-primary/20">
-                <Heart className="h-5 w-5 md:h-6 md:w-6 text-black fill-current" />
+              <div className="w-8 h-8 md:w-10 md:h-10 flex items-center justify-center">
+                <img src="/simbolob.png" alt="Logo Coroado" className="w-full h-full object-contain drop-shadow-md" />
               </div>
               <span className="text-xl md:text-2xl font-black tracking-tight hidden sm:block">Coroado</span>
             </motion.div>
