@@ -1,6 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.syncFirestoreToSql = exports.updateUserAccess = exports.mpWebhook = exports.createSubscription = exports.createPreference = void 0;
+exports.syncFirestoreToSql = exports.updateUserAccess = exports.mpWebhook = exports.createSubscription = exports.createPreference = exports.createEventEnrollment = void 0;
 const functions = require("firebase-functions");
 const admin = require("firebase-admin");
 const firestore_1 = require("firebase-admin/firestore");
@@ -72,6 +72,87 @@ function validateMercadoPagoSignature(req, notificationId) {
         reason: 'signature_checked',
     };
 }
+exports.createEventEnrollment = functions.https.onCall(async (data, context) => {
+    if (!context.auth) {
+        throw new functions.https.HttpsError('unauthenticated', 'User must be authenticated.');
+    }
+    const { eventId, kids, ticketTypeId, isServant } = data;
+    if (!eventId) {
+        throw new functions.https.HttpsError('invalid-argument', 'Missing eventId.');
+    }
+    const userId = context.auth.uid;
+    try {
+        const userSnap = await db().collection('users').doc(userId).get();
+        const userData = userSnap.data() || {};
+        const tenantId = userData.tenantId;
+        const eventSnap = await db().collection('events').doc(eventId).get();
+        if (!eventSnap.exists) {
+            throw new functions.https.HttpsError('not-found', 'Evento não encontrado.');
+        }
+        const event = eventSnap.data() || {};
+        if (event.tenantId && event.tenantId !== tenantId) {
+            throw new functions.https.HttpsError('permission-denied', 'Evento indisponível para sua unidade.');
+        }
+        const cleanText = (t) => String(t || '').trim().slice(0, 128);
+        const enrollmentId = `${cleanText(eventId)}_${cleanText(userId)}`;
+        let price = Number(event.price || 0);
+        let name = String(event.title || 'Ingresso Padrão');
+        if (isServant && event.servantsPrice !== undefined) {
+            price = Number(event.servantsPrice);
+            name = 'Ingresso Especial (Servos)';
+        }
+        else if (ticketTypeId && Array.isArray(event.ticketTypes)) {
+            const type = event.ticketTypes.find((t) => String(t.id) === String(ticketTypeId));
+            if (type) {
+                price = Number(type.price);
+                name = String(type.name);
+            }
+        }
+        let kidsCount = 0;
+        if (Array.isArray(kids))
+            kidsCount = kids.length;
+        let kidsPrice = Number(event.childTicketPrice || 0);
+        const totalAmount = price + (kidsCount * kidsPrice);
+        const enrollmentRef = db().collection('event_enrollments').doc(enrollmentId);
+        const enrollmentSnap = await enrollmentRef.get();
+        if (enrollmentSnap.exists) {
+            return {
+                success: true,
+                enrollmentId,
+                alreadyEnrolled: true,
+                paymentRequired: enrollmentSnap.data()?.paymentStatus === 'pending',
+                initPoint: enrollmentSnap.data()?.paymentInitPoint,
+            };
+        }
+        await enrollmentRef.set({
+            id: enrollmentId,
+            eventId,
+            userId,
+            tenantId,
+            ticketName: name,
+            basePrice: price,
+            kidsCount,
+            kidsTotal: kidsCount * kidsPrice,
+            totalAmount,
+            isServant: !!isServant,
+            paymentStatus: totalAmount > 0 ? 'pending' : 'paid',
+            status: 'active',
+            checkedIn: false,
+            createdAt: admin.firestore.FieldValue.serverTimestamp(),
+            updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+        });
+        return {
+            success: true,
+            enrollmentId,
+            alreadyEnrolled: false,
+            paymentRequired: totalAmount > 0,
+        };
+    }
+    catch (error) {
+        console.error('Error creating enrollment:', error);
+        throw new functions.https.HttpsError('internal', 'Não foi possível realizar a inscrição.');
+    }
+});
 exports.createPreference = functions.https.onCall(async (data, context) => {
     if (!context.auth) {
         throw new functions.https.HttpsError('unauthenticated', 'User must be authenticated.');
@@ -81,11 +162,14 @@ exports.createPreference = functions.https.onCall(async (data, context) => {
         throw new functions.https.HttpsError('invalid-argument', 'Missing required parameters.');
     }
     try {
-        const eventSnap = await db().collection('events').doc(eventId).get();
-        const eventData = eventSnap.data() || {};
-        const amount = Number(eventData.price || eventData.amount || 0);
-        const title = String(eventData.title || 'Ingresso Evento').slice(0, 120);
-        if (!eventSnap.exists || !Number.isFinite(amount) || amount <= 0) {
+        const enrollmentSnap = await db().collection('event_enrollments').doc(enrollmentId).get();
+        if (!enrollmentSnap.exists) {
+            throw new functions.https.HttpsError('not-found', 'Enrollment not found.');
+        }
+        const enrollmentData = enrollmentSnap.data() || {};
+        const amount = Number(enrollmentData.totalAmount || 0);
+        const title = String(enrollmentData.ticketName || 'Ingresso Evento').slice(0, 120);
+        if (!Number.isFinite(amount) || amount <= 0) {
             throw new functions.https.HttpsError('failed-precondition', 'Event price is not configured.');
         }
         const preference = new mercadopago_1.Preference(getMpClient());
