@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { X, CheckCircle2 } from 'lucide-react';
-import { Button } from './ui/button';
+import { Button } from '@/components/ui/button';
 import { initMercadoPago, Wallet } from '@mercadopago/sdk-react';
 import { functions } from '@/lib/firebase';
 import { httpsCallable } from 'firebase/functions';
