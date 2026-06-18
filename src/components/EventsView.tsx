@@ -536,14 +536,16 @@ export function EventsView({ isLoggedIn = false, userData, onLoginClick }: { isL
                   {filteredEvents.map(event => {
                     const occupancy = (event.enrolled / event.capacity) * 100;
                     const isFull = event.enrolled >= event.capacity;
-                    const alreadyEnrolled = enrollments.some(e => e.eventId === event.id);
+                    const userEnrollment = enrollments.find(e => e.eventId === event.id);
+                    const alreadyEnrolled = !!userEnrollment;
+                    const isPendingPayment = userEnrollment?.paymentStatus === 'pending';
                     return (
                       <Card key={event.id} className="bg-zinc-900 border-white/10 overflow-hidden flex flex-col group">
                         <div className="relative h-48 overflow-hidden">
                           <div className="absolute inset-0 bg-black/40 z-10" />
                           <img src={event.image} alt={event.title} className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110 grayscale group-hover:grayscale-0" />
                           <Badge className="absolute top-4 left-4 z-20 bg-primary/20 text-primary border-none">{event.type}</Badge>
-                          <Badge className="absolute top-4 right-4 z-20 bg-black/60 text-white border-white/20 backdrop-blur-md">
+                          <Badge variant="outline" className="absolute top-4 right-4 z-20 bg-black/60 border-white/20 text-white backdrop-blur-sm">
                             {new Date(event.date + 'T00:00:00').toLocaleDateString('pt-BR')}
                           </Badge>
                           {isAdmin && (
@@ -557,33 +559,33 @@ export function EventsView({ isLoggedIn = false, userData, onLoginClick }: { isL
                             </Button>
                           )}
                         </div>
-                        <CardHeader>
-                          <CardTitle className="text-xl line-clamp-1">{event.title}</CardTitle>
-                          <CardDescription className="flex items-center gap-2 mt-2 font-medium">
-                            <MapPin className="w-3 h-3 text-primary shrink-0" /> <span className="truncate">{event.location}</span>
-                            <Clock className="w-3 h-3 text-primary shrink-0 ml-2" /> <span>{event.time}</span>
-                          </CardDescription>
-                        </CardHeader>
-                        <CardContent className="flex-1 flex flex-col justify-end space-y-4">
-                          <div className="space-y-2">
-                            <div className="flex justify-between text-xs font-bold text-white/60">
+                        <CardContent className="p-6 flex-1 flex flex-col justify-between space-y-6">
+                          <div className="space-y-4">
+                            <h3 className="text-xl font-serif italic text-white font-black leading-tight line-clamp-2">{event.title}</h3>
+                            <div className="flex items-center gap-4 text-sm text-white/60 font-medium">
+                              <span className="flex items-center gap-1.5"><MapPin className="w-4 h-4 text-primary" /> {event.location}</span>
+                              <span className="flex items-center gap-1.5"><Clock className="w-4 h-4 text-primary" /> {event.time}</span>
+                            </div>
+                          </div>
+                          <div className="space-y-3">
+                            <div className="flex justify-between text-xs font-bold text-white/60 uppercase tracking-wider">
                               <span>Vagas: {event.enrolled} preenchidas</span>
                               <span>Capacidade: {event.capacity}</span>
                             </div>
                             <div className="h-1.5 bg-black rounded-full overflow-hidden">
                               <div className={`h-full ${isFull ? 'bg-red-500' : occupancy > 80 ? 'bg-yellow-500' : 'bg-primary'}`} style={{ width: `${occupancy}%` }} />
                             </div>
-                            {isFull && !alreadyEnrolled && <p className="text-xs text-red-500 font-bold">Lotação Esgotada</p>}
+                            {isFull && !alreadyEnrolled && !isPendingPayment && <p className="text-xs text-red-500 font-bold">Lotação Esgotada</p>}
                           </div>
                           <Button 
                             onClick={() => {
                               if (!isLoggedIn && onLoginClick) return onLoginClick();
-                              if (!alreadyEnrolled) setSelectedEvent(event);
+                              if (!alreadyEnrolled || isPendingPayment) setSelectedEvent(event);
                             }}
-                            disabled={isFull && !alreadyEnrolled}
-                            className={`w-full font-bold ${(isFull && !alreadyEnrolled) ? 'bg-zinc-800 text-white/40' : alreadyEnrolled ? 'bg-primary/20 text-primary border-primary hover:bg-primary/30' : 'bg-white/10 hover:bg-white/20 text-white border border-white/10'}`}
+                            disabled={isFull && !alreadyEnrolled && !isPendingPayment}
+                            className={`w-full font-bold ${(isFull && !alreadyEnrolled && !isPendingPayment) ? 'bg-zinc-800 text-white/40' : isPendingPayment ? 'bg-yellow-500/20 text-yellow-500 border-yellow-500 hover:bg-yellow-500/30' : alreadyEnrolled ? 'bg-primary/20 text-primary border-primary hover:bg-primary/30' : 'bg-white/10 hover:bg-white/20 text-white border border-white/10'}`}
                           >
-                            {alreadyEnrolled ? 'Já Inscrito' : isFull ? 'Esgotado' : 'Garantir Vaga'}
+                            {isPendingPayment ? 'Finalizar Pagamento' : alreadyEnrolled ? 'Já Inscrito' : isFull ? 'Esgotado' : 'Garantir Vaga'}
                           </Button>
                         </CardContent>
                       </Card>
@@ -601,7 +603,9 @@ export function EventsView({ isLoggedIn = false, userData, onLoginClick }: { isL
                        </h3>
                        <div className="space-y-3">
                          {(dayEvents as any[]).map(event => {
-                            const alreadyEnrolled = enrollments.some(e => e.eventId === event.id);
+                            const userEnrollment = enrollments.find(e => e.eventId === event.id);
+                            const alreadyEnrolled = !!userEnrollment;
+                            const isPendingPayment = userEnrollment?.paymentStatus === 'pending';
                             return (
                              <div key={event.id} className="flex flex-col sm:flex-row gap-4 items-center bg-black/40 hover:bg-white/5 transition-colors p-4 rounded-2xl border border-white/5 group">
                                <div className="text-center px-6 border-b sm:border-b-0 sm:border-r border-white/10 pb-4 sm:pb-0 shrink-0 w-full sm:w-auto">
@@ -615,11 +619,11 @@ export function EventsView({ isLoggedIn = false, userData, onLoginClick }: { isL
                                  <Button 
                                    onClick={() => { 
                                      if (!isLoggedIn && onLoginClick) return onLoginClick(); 
-                                     if (!alreadyEnrolled) setSelectedEvent(event); 
+                                     if (!alreadyEnrolled || isPendingPayment) setSelectedEvent(event); 
                                    }} 
-                                   className={`w-full sm:w-auto font-bold ${alreadyEnrolled ? 'bg-primary/20 text-primary hover:bg-primary/30' : 'bg-primary text-black'}`}
+                                   className={`w-full sm:w-auto font-bold ${isPendingPayment ? 'bg-yellow-500/20 text-yellow-500 hover:bg-yellow-500/30' : alreadyEnrolled ? 'bg-primary/20 text-primary hover:bg-primary/30' : 'bg-primary text-black'}`}
                                  >
-                                   {alreadyEnrolled ? 'Inscrito' : 'Garantir Vaga'}
+                                   {isPendingPayment ? 'Finalizar Pagamento' : alreadyEnrolled ? 'Inscrito' : 'Garantir Vaga'}
                                  </Button>
                                </div>
                              </div>
@@ -723,7 +727,14 @@ export function EventsView({ isLoggedIn = false, userData, onLoginClick }: { isL
                                  Continuar pagamento
                                </Button>
                              ) : (
-                               <p className="text-[10px] font-bold uppercase tracking-widest text-white/30">Aguardando link de pagamento</p>
+                               <Button
+                                 size="sm"
+                                 variant="outline"
+                                 className="rounded-full border-white/20 text-xs font-black text-white hover:bg-white/10 mt-2"
+                                 onClick={() => { setSelectedEvent(event); }}
+                               >
+                                 Tentar Novamente
+                               </Button>
                              )}
                            </div>
                          ) : (

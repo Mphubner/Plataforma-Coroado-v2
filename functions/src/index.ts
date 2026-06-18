@@ -225,9 +225,17 @@ export const createPreference = functions.https.onCall(async (data: any, context
       }
     });
 
+    const initPoint = response.init_point || response.sandbox_init_point;
+
+    // Update the enrollment with the generated preference and init point
+    await db().collection('event_enrollments').doc(enrollmentId).update({
+      paymentInitPoint: initPoint,
+      paymentPreferenceId: response.id
+    });
+
     return {
       preferenceId: response.id,
-      initPoint: response.init_point || response.sandbox_init_point
+      initPoint
     };
   } catch (error) {
     if (error instanceof functions.https.HttpsError) {
