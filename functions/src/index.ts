@@ -82,6 +82,99 @@ function validateMercadoPagoSignature(req: functions.https.Request, notification
   };
 }
 
+export const createEventEnrollment = functions.https.onCall(async (data: any, context: any) => {
+  if (!context.auth) {
+    throw new functions.https.HttpsError('unauthenticated', 'User must be authenticated.');
+  }
+
+  const { eventId, kids, ticketTypeId, isServant } = data;
+
+  if (!eventId) {
+    throw new functions.https.HttpsError('invalid-argument', 'Missing eventId.');
+  }
+
+  const userId = context.auth.uid;
+  
+  try {
+    const userSnap = await db().collection('users').doc(userId).get();
+    const userData = userSnap.data() || {};
+    const tenantId = userData.tenantId;
+
+    const eventSnap = await db().collection('events').doc(eventId).get();
+    if (!eventSnap.exists) {
+      throw new functions.https.HttpsError('not-found', 'Evento não encontrado.');
+    }
+    const event = eventSnap.data() || {};
+
+    if (event.tenantId && event.tenantId !== tenantId) {
+      throw new functions.https.HttpsError('permission-denied', 'Evento indisponível para sua unidade.');
+    }
+
+    const cleanText = (t: any) => String(t || '').trim().slice(0, 128);
+    const enrollmentId = `${cleanText(eventId)}_${cleanText(userId)}`;
+    
+    let price = Number(event.price || 0);
+    let name = String(event.title || 'Ingresso Padrão');
+
+    if (isServant && event.servantsPrice !== undefined) {
+      price = Number(event.servantsPrice);
+      name = 'Ingresso Especial (Servos)';
+    } else if (ticketTypeId && Array.isArray(event.ticketTypes)) {
+      const type = event.ticketTypes.find((t: any) => String(t.id) === String(ticketTypeId));
+      if (type) {
+        price = Number(type.price);
+        name = String(type.name);
+      }
+    }
+
+    let kidsCount = 0;
+    if (Array.isArray(kids)) kidsCount = kids.length;
+    let kidsPrice = Number(event.childTicketPrice || 0);
+    const totalAmount = price + (kidsCount * kidsPrice);
+
+    const enrollmentRef = db().collection('event_enrollments').doc(enrollmentId);
+    const enrollmentSnap = await enrollmentRef.get();
+
+    if (enrollmentSnap.exists) {
+      return {
+        success: true,
+        enrollmentId,
+        alreadyEnrolled: true,
+        paymentRequired: enrollmentSnap.data()?.paymentStatus === 'pending',
+        initPoint: enrollmentSnap.data()?.paymentInitPoint,
+      };
+    }
+
+    await enrollmentRef.set({
+      id: enrollmentId,
+      eventId,
+      userId,
+      tenantId,
+      ticketName: name,
+      basePrice: price,
+      kidsCount,
+      kidsTotal: kidsCount * kidsPrice,
+      totalAmount,
+      isServant: !!isServant,
+      paymentStatus: totalAmount > 0 ? 'pending' : 'paid',
+      status: 'active',
+      checkedIn: false,
+      createdAt: admin.firestore.FieldValue.serverTimestamp(),
+      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    });
+
+    return {
+      success: true,
+      enrollmentId,
+      alreadyEnrolled: false,
+      paymentRequired: totalAmount > 0,
+    };
+  } catch (error: any) {
+    console.error('Error creating enrollment:', error);
+    throw new functions.https.HttpsError('internal', 'Não foi possível realizar a inscrição.');
+  }
+});
+
 export const createPreference = functions.https.onCall(async (data: any, context: any) => {
   if (!context.auth) {
     throw new functions.https.HttpsError('unauthenticated', 'User must be authenticated.');
