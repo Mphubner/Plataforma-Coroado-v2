@@ -187,12 +187,15 @@ export const createPreference = functions.https.onCall(async (data: any, context
   }
 
   try {
-    const eventSnap = await db().collection('events').doc(eventId).get();
-    const eventData = eventSnap.data() || {};
-    const amount = Number(eventData.price || eventData.amount || 0);
-    const title = String(eventData.title || 'Ingresso Evento').slice(0, 120);
+    const enrollmentSnap = await db().collection('event_enrollments').doc(enrollmentId).get();
+    if (!enrollmentSnap.exists) {
+      throw new functions.https.HttpsError('not-found', 'Enrollment not found.');
+    }
+    const enrollmentData = enrollmentSnap.data() || {};
+    const amount = Number(enrollmentData.totalAmount || 0);
+    const title = String(enrollmentData.ticketName || 'Ingresso Evento').slice(0, 120);
 
-    if (!eventSnap.exists || !Number.isFinite(amount) || amount <= 0) {
+    if (!Number.isFinite(amount) || amount <= 0) {
       throw new functions.https.HttpsError('failed-precondition', 'Event price is not configured.');
     }
 
