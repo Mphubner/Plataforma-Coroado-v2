@@ -4,7 +4,8 @@ import * as React from 'react';
 import { motion } from 'motion/react';
 import { AlertCircle, Calendar, CheckCircle2, Clock3, MapPin, RefreshCw, Ticket, Users } from 'lucide-react';
 import { onAuthStateChanged } from 'firebase/auth';
-import { auth } from '../../../lib/firebase';
+import { auth, functions } from '../../../lib/firebase';
+import { httpsCallable } from 'firebase/functions';
 import { Button } from '../../../components/ui/button';
 import { listItemMotion, pageMotion, panelMotion } from '../../lib/motion/presets';
 import { CheckoutModal } from '../../../components/CheckoutModal';
@@ -154,18 +155,14 @@ export function EventosNativeClient() {
     setError('');
 
     try {
-      const token = await user.getIdToken();
-      const response = await fetch(`/api/events/${event.id}/enroll`, {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ kids: [] }),
+      const enrollFunction = httpsCallable(functions, 'createEventEnrollment');
+      const response = await enrollFunction({
+        eventId: event.id,
+        kids: []
       });
-      const payload = await response.json();
+      const payload: any = response.data;
 
-      if (!response.ok || !payload.success) {
+      if (!payload.success) {
         throw new Error(payload.error || 'Nao foi possivel fazer a inscricao.');
       }
 
