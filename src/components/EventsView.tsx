@@ -878,9 +878,11 @@ export function EventsView({ isLoggedIn = false, userData, onLoginClick }: { isL
       <AnimatePresence>
         {selectedEvent && (
           <CheckoutModal 
+            isOpen={true}
             event={selectedEvent} 
             onClose={() => { setSelectedEvent(null); setEnrollKids([]); }}
             onSuccess={() => { setSelectedEvent(null); setEnrollKids([]); }}
+            userToken=""
           />
         )}
       </AnimatePresence>
