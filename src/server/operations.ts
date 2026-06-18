@@ -126,9 +126,31 @@ export async function createEventEnrollment(ctx: ServerAuthContext, input: Event
   }
 
   const isPaid = Boolean(event.isPaid);
-  const price = Number(event.price || 0);
-  if (isPaid && (!Number.isFinite(price) || price <= 0)) {
-    throw new OperationError(400, 'Evento pago sem valor valido');
+  
+  let price = Number(event.price || 0);
+  let ticketName = 'Inscrição Padrão';
+  
+  if (isPaid) {
+    if (input.isServant && event.servantsPrice !== undefined) {
+      price = Number(event.servantsPrice);
+      ticketName = 'Inscrição Servo';
+    } else if (input.ticketTypeId && Array.isArray(event.ticketTypes)) {
+      const selectedTicket = event.ticketTypes.find((t: any) => t.id === input.ticketTypeId);
+      if (selectedTicket) {
+        price = Number(selectedTicket.price);
+        ticketName = selectedTicket.name;
+      }
+    }
+    
+    const kidsCount = input.kids ? input.kids.length : 0;
+    if (kidsCount > 0 && event.allowChildren) {
+      price += (Number(event.childTicketPrice) || 0) * kidsCount;
+      ticketName += ` (+${kidsCount} criança${kidsCount > 1 ? 's' : ''})`;
+    }
+
+    if (!Number.isFinite(price) || price <= 0) {
+      throw new OperationError(400, 'Evento pago sem valor valido');
+    }
   }
 
   const accessToken = getMercadoPagoAccessToken();
@@ -148,6 +170,8 @@ export async function createEventEnrollment(ctx: ServerAuthContext, input: Event
       obs: kid.obs,
       checkedIn: false,
     })),
+    ticketTypeId: input.ticketTypeId || null,
+    isServant: input.isServant || false,
     paymentStatus: isPaid ? 'pending' : 'approved',
     createdAt: admin.firestore.FieldValue.serverTimestamp(),
     updatedAt: admin.firestore.FieldValue.serverTimestamp(),
@@ -174,8 +198,8 @@ export async function createEventEnrollment(ctx: ServerAuthContext, input: Event
   const response = await preference.create({
     body: {
       items: [{
-        id: input.eventId,
-        title: eventTitle,
+        id: input.ticketTypeId || input.eventId,
+        title: `${eventTitle} - ${ticketName}`,
         quantity: 1,
         unit_price: price,
         currency_id: 'BRL',

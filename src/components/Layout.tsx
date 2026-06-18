@@ -277,8 +277,8 @@ export function Layout({ children, activeTab, setActiveTab, isLoggedIn = true, u
                 <div className="flex flex-col h-full">
                   <div className="p-6 border-b border-white/10 flex items-center justify-between">
                     <div className="flex items-center gap-2">
-                      <img src="/simbolob.png" alt="Coroado Icon" className="h-6 w-auto object-contain text-white" />
-                      <img src="/logomarcab.png" alt="Coroado" className="h-3 w-auto object-contain mt-0.5 text-white" />
+                      <img src="https://i.imgur.com/QVg57L1.png" alt="Coroado Icon" className="h-6 w-auto object-contain text-white" />
+                      <img src="https://i.imgur.com/ItH3qGm.png" alt="Coroado" className="h-3 w-auto object-contain mt-0.5 text-white" />
                     </div>
                     <Button variant="ghost" size="icon" onClick={() => setIsMobileMenuOpen(false)}>
                       <X className="h-6 w-6" />
@@ -395,8 +395,8 @@ export function Layout({ children, activeTab, setActiveTab, isLoggedIn = true, u
           <div className="grid grid-cols-1 md:grid-cols-3 gap-12 mb-12">
             <div className="space-y-4">
               <div className="flex items-center gap-2 text-white">
-                <img src="/simbolob.png" alt="Coroado Icon" className="h-8 w-auto object-contain" />
-                <img src="/logomarcab.png" alt="Coroado" className="h-4 w-auto object-contain mt-1" />
+                <img src="https://i.imgur.com/QVg57L1.png" alt="Coroado Icon" className="h-8 w-auto object-contain" />
+                <img src="https://i.imgur.com/ItH3qGm.png" alt="Coroado" className="h-4 w-auto object-contain mt-1" />
               </div>
               <p className="max-w-xs">Uma igreja em células, apaixonada por Jesus para transformar o mundo.</p>
             </div>

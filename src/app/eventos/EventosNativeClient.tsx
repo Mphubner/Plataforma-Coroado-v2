@@ -7,6 +7,7 @@ import { onAuthStateChanged } from 'firebase/auth';
 import { auth } from '../../../lib/firebase';
 import { Button } from '../../../components/ui/button';
 import { listItemMotion, pageMotion, panelMotion } from '../../lib/motion/presets';
+import { CheckoutModal } from '../../../components/CheckoutModal';
 
 type EventOverviewItem = {
   id: string;
@@ -21,6 +22,11 @@ type EventOverviewItem = {
   availableSeats: number | null;
   isPaid: boolean;
   price: number;
+  ticketTypes?: { id: string; name: string; price: number; capacity: number }[];
+  allowChildren?: boolean;
+  childTicketPrice?: number;
+  servantsSlug?: string;
+  servantsPrice?: number;
   requiresRegistration: boolean;
   description: string;
   image: string;
@@ -91,6 +97,8 @@ export function EventosNativeClient() {
   const [overview, setOverview] = React.useState<EventsOverview | null>(null);
   const [error, setError] = React.useState('');
   const [actionEventId, setActionEventId] = React.useState('');
+  const [checkoutEvent, setCheckoutEvent] = React.useState<EventOverviewItem | null>(null);
+  const [userToken, setUserToken] = React.useState('');
 
   const loadOverview = React.useCallback(async () => {
     setState('loading');
@@ -117,7 +125,13 @@ export function EventosNativeClient() {
   }, []);
 
   React.useEffect(() => {
-    const unsub = onAuthStateChanged(auth, () => {
+    const unsub = onAuthStateChanged(auth, async (user) => {
+      if (user) {
+         const t = await user.getIdToken();
+         setUserToken(t);
+      } else {
+         setUserToken('');
+      }
       void loadOverview();
     });
 
@@ -128,6 +142,11 @@ export function EventosNativeClient() {
     const user = auth.currentUser;
     if (!user) {
       window.location.href = '/login?redirect=/eventos';
+      return;
+    }
+
+    if (event.isPaid) {
+      setCheckoutEvent(event);
       return;
     }
 
@@ -269,7 +288,7 @@ export function EventosNativeClient() {
                           disabled={actionEventId === event.id}
                           onClick={() => void handleEnroll(event)}
                         >
-                          {actionEventId === event.id ? 'Enviando' : 'Inscrever'}
+                          {actionEventId === event.id ? 'Enviando' : event.isPaid ? 'Garantir Inscrição' : 'Inscrever'}
                         </Button>
                       )}
                     </div>
@@ -336,6 +355,14 @@ export function EventosNativeClient() {
           )}
         </motion.aside>
       </section>
+      
+      <CheckoutModal 
+        isOpen={!!checkoutEvent} 
+        event={checkoutEvent as any} 
+        onClose={() => setCheckoutEvent(null)} 
+        onSuccess={() => loadOverview()} 
+        userToken={userToken} 
+      />
     </motion.div>
   );
 }
