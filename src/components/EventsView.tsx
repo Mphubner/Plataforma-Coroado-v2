@@ -10,9 +10,9 @@ import { collection, query, onSnapshot, doc, setDoc, getDoc, serverTimestamp, wh
 import { Html5QrcodeScanner, Html5QrcodeScanType, Html5QrcodeSupportedFormats } from 'html5-qrcode';
 import { handleFirestoreError, OperationType } from '@/lib/firestoreUtils';
 import { can } from '@/src/lib/permissions';
-import { postJson } from '@/src/lib/api/http';
 import { pageMotion } from '@/src/lib/motion/presets';
 import { ImageUpload } from './ui/ImageUpload';
+import { CheckoutModal } from './CheckoutModal';
 
 type EventInfo = {
   id: string;
@@ -113,6 +113,11 @@ export function EventsView({ isLoggedIn = false, userData, onLoginClick }: { isL
             visibilityId: docData.visibilityId || '',
             isPaid: docData.isPaid || false,
             price: docData.price || 0,
+            ticketTypes: docData.ticketTypes || [],
+            allowChildren: docData.allowChildren || false,
+            childTicketPrice: docData.childTicketPrice || 0,
+            servantsSlug: docData.servantsSlug || '',
+            servantsPrice: docData.servantsPrice || 0,
             requiresRegistration: docData.requiresRegistration !== false,
             requiredMinistries: docData.requiredMinistries || [],
             status: docData.status || 'approved'
@@ -872,111 +877,11 @@ export function EventsView({ isLoggedIn = false, userData, onLoginClick }: { isL
 
       <AnimatePresence>
         {selectedEvent && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80">
-            <motion.div 
-               initial={{ opacity: 0, scale: 0.95 }}
-               animate={{ opacity: 1, scale: 1 }}
-               exit={{ opacity: 0, scale: 0.95 }}
-               className="bg-zinc-900 border border-white/10 rounded-[2.5rem] max-w-lg w-full overflow-hidden"
-            >
-              <div className="h-48 relative">
-                <img src={selectedEvent.image} alt={selectedEvent.title} className="w-full h-full object-cover" />
-                <div className="absolute inset-0 bg-gradient-to-t from-zinc-900 to-transparent" />
-                <Button 
-                   variant="ghost" 
-                   size="icon" 
-                   onClick={() => { setSelectedEvent(null); setEnrollKids([]); }}
-                   className="absolute top-4 right-4 bg-black/50 text-white hover:bg-black rounded-full"
-                >
-                  <X className="w-5 h-5" />
-                </Button>
-              </div>
-              <div className="p-8 space-y-6">
-                <div>
-                  <Badge className="bg-primary/20 text-primary border-none mb-3">{selectedEvent.type}</Badge>
-                  <h3 className="text-2xl font-black font-serif italic leading-tight mb-2">{selectedEvent.title}</h3>
-                  <p className="text-white/60">{selectedEvent.description}</p>
-                </div>
-                
-                <div className="grid grid-cols-2 gap-4 bg-black/40 p-4 rounded-2xl border border-white/5">
-                  <div className="space-y-1">
-                     <p className="text-[10px] text-white/40 uppercase font-bold tracking-widest">Data e Hora</p>
-                     <p className="font-bold text-sm">{new Date(selectedEvent.date).toLocaleDateString('pt-BR')} às {selectedEvent.time}</p>
-                  </div>
-                  <div className="space-y-1">
-                     <p className="text-[10px] text-white/40 uppercase font-bold tracking-widest">Local</p>
-                     <p className="font-bold text-sm">{selectedEvent.location}</p>
-                  </div>
-                </div>
-
-                <div className="space-y-4">
-                  <div className="flex justify-between items-center">
-                     <h4 className="font-bold text-sm text-white/80">Ministério Infantil / Dependentes</h4>
-                     <Button 
-                       variant="outline" 
-                       size="sm" 
-                       className="h-8 border-white/10 text-xs text-white"
-                       onClick={() => setEnrollKids([...enrollKids, {name: '', age: '', obs: ''}])}
-                     >
-                       + Adicionar Criança
-                     </Button>
-                  </div>
-                  {enrollKids.length > 0 && (
-                    <div className="space-y-3 max-h-48 overflow-y-auto pr-2">
-                      {enrollKids.map((kid, idx) => (
-                         <div key={idx} className="bg-white/5 p-4 rounded-xl space-y-3 relative border border-white/10">
-                           <Button 
-                             variant="ghost" 
-                             size="icon" 
-                             className="absolute top-1 right-1 h-6 w-6 text-white/40 hover:text-red-400"
-                             onClick={() => setEnrollKids(enrollKids.filter((_, i) => i !== idx))}
-                           >
-                             <X className="w-3 h-3" />
-                           </Button>
-                           <input 
-                             className="w-full bg-black/30 border border-white/10 rounded-lg px-3 py-2 text-sm text-white placeholder-white/30 focus:border-primary focus:outline-none" 
-                             placeholder="Nome da criança"
-                             value={kid.name}
-                             onChange={(e) => {
-                                const newKids = [...enrollKids];
-                                newKids[idx].name = e.target.value;
-                                setEnrollKids(newKids);
-                             }}
-                           />
-                           <div className="flex gap-2">
-                             <input 
-                               className="w-1/3 bg-black/30 border border-white/10 rounded-lg px-3 py-2 text-sm text-white placeholder-white/30 focus:border-primary focus:outline-none" 
-                               placeholder="Idade"
-                               value={kid.age}
-                               onChange={(e) => {
-                                  const newKids = [...enrollKids];
-                                  newKids[idx].age = e.target.value;
-                                  setEnrollKids(newKids);
-                               }}
-                             />
-                             <input 
-                               className="w-2/3 bg-black/30 border border-white/10 rounded-lg px-3 py-2 text-sm text-white placeholder-white/30 focus:border-primary focus:outline-none" 
-                               placeholder="Obs (Alergias, etc)"
-                               value={kid.obs}
-                               onChange={(e) => {
-                                  const newKids = [...enrollKids];
-                                  newKids[idx].obs = e.target.value;
-                                  setEnrollKids(newKids);
-                               }}
-                             />
-                           </div>
-                         </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-
-                <Button onClick={() => handleEnroll(selectedEvent)} className="w-full h-14 bg-primary text-black font-bold uppercase tracking-wider">
-                  Confirmar Inscrição
-                </Button>
-              </div>
-            </motion.div>
-          </div>
+          <CheckoutModal 
+            event={selectedEvent} 
+            onClose={() => { setSelectedEvent(null); setEnrollKids([]); }}
+            onSuccess={() => { setSelectedEvent(null); setEnrollKids([]); }}
+          />
         )}
       </AnimatePresence>
 
