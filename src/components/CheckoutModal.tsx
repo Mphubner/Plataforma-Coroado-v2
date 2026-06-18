@@ -2,7 +2,9 @@ import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { X, CheckCircle2 } from 'lucide-react';
 import { Button } from './ui/button';
-import { initMercadoPago, Payment } from '@mercadopago/sdk-react';
+import { initMercadoPago, Wallet } from '@mercadopago/sdk-react';
+import { functions } from '@/lib/firebase';
+import { httpsCallable } from 'firebase/functions';
 
 const publicKey = import.meta.env.VITE_MERCADOPAGO_PUBLIC_KEY || '';
 if (publicKey) {
@@ -92,78 +94,45 @@ export function CheckoutModal({ isOpen, event, onClose, onSuccess, userToken }: 
     try {
       const kidsArray = Array(kidsCount).fill({ name: 'Criança Adicional', age: 'N/A', obs: '' });
       
-      const response = await fetch(`/api/events/${event.id}/enroll`, {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${userToken}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ 
-          kids: kidsArray,
-          ticketTypeId: selectedTicketId,
-          isServant
-        }),
-      });
-      const payload = await response.json();
+      const enrollFunction = httpsCallable(functions, 'createEventEnrollment');
+      const createPreferenceFunction = httpsCallable(functions, 'createPreference');
 
-      if (!response.ok || !payload.success) {
+      // 1. Create Event Enrollment
+      const enrollResponse = await enrollFunction({ 
+        eventId: event.id,
+        kids: kidsArray,
+        ticketTypeId: selectedTicketId,
+        isServant
+      });
+      const payload: any = enrollResponse.data;
+
+      if (!payload.success) {
         throw new Error(payload.error || 'Não foi possível iniciar o pagamento.');
       }
 
-      if (payload.preferenceId) {
-        setPreferenceId(payload.preferenceId);
-        setStep('payment');
-      } else if (payload.alreadyEnrolled && !payload.paymentRequired) {
-        setStep('success');
-      } else if (payload.initPoint) {
+      if (payload.paymentRequired && !payload.initPoint) {
+        // 2. Generate Preference if required
+        const prefResponse = await createPreferenceFunction({
+          eventId: event.id,
+          enrollmentId: payload.enrollmentId
+        });
+        const prefPayload: any = prefResponse.data;
+        if (prefPayload.preferenceId) {
+          setPreferenceId(prefPayload.preferenceId);
+          setStep('payment');
+        } else {
+          throw new Error('Não foi possível gerar a preferência de pagamento.');
+        }
+      } else if (payload.paymentRequired && payload.initPoint) {
         window.location.href = payload.initPoint;
+      } else if (!payload.paymentRequired) {
+        setStep('success');
       }
     } catch (err: any) {
       setError(err.message);
     } finally {
       setIsLoading(false);
     }
-  };
-
-  const initialization = {
-    amount: calculateTotal(),
-    preferenceId,
-  };
-
-  const customization = {
-    paymentMethods: {
-      creditCard: 'all' as any,
-      bankTransfer: 'all' as any,
-      ticket: 'all' as any,
-      mercadoPago: 'all' as any,
-    },
-  };
-
-  const onSubmit = async ({ selectedPaymentMethod, formData }: any) => {
-    // Note: Brick creates the payment itself, but usually needs a backend endpoint if we want to customize.
-    // However, since we are using Preference Brick, it handles payment submission to MercadoPago servers directly
-    // based on preference ID. But wait! Payment Brick requires creating a payment through our backend.
-    // Let's implement the payment creation route just in case!
-    return new Promise((resolve, reject) => {
-      fetch("/api/checkout/payment", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${userToken}`,
-        },
-        body: JSON.stringify(formData),
-      })
-        .then((response) => response.json())
-        .then((response) => {
-          if (response.success) {
-             setStep('success');
-             resolve(true);
-          } else {
-             reject();
-          }
-        })
-        .catch((error) => reject());
-    });
   };
 
   return (
@@ -256,12 +225,7 @@ export function CheckoutModal({ isOpen, event, onClose, onSuccess, userToken }: 
              <div className="space-y-4">
                 <h2 className="text-xl font-black mb-4">Pagamento</h2>
                 {preferenceId ? (
-                   <Payment 
-                     initialization={initialization} 
-                     customization={customization} 
-                     onSubmit={onSubmit}
-                     locale="pt-BR"
-                   />
+                   <Wallet initialization={{ preferenceId }} />
                 ) : (
                   <p className="text-white/50 text-center py-8">Preparando pagamento...</p>
                 )}
