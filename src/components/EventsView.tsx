@@ -76,6 +76,27 @@ export function EventsView({ isLoggedIn = false, userData, onLoginClick }: { isL
     }
   }, []);
 
+  // Update URL when event is selected
+  useEffect(() => {
+    if (selectedEvent) {
+      const url = new URL(window.location.href);
+      url.searchParams.set('evento', selectedEvent.id);
+      window.history.pushState({}, '', url);
+    }
+  }, [selectedEvent]);
+
+  // Load event from URL when events are available
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const eventId = params.get('evento');
+    if (eventId && events.length > 0 && !selectedEvent) {
+      const eventToOpen = events.find(e => e.id === eventId);
+      if (eventToOpen) {
+        setSelectedEvent(eventToOpen);
+      }
+    }
+  }, [events]);
+
   // Form states
   const [showNewEventForm, setShowNewEventForm] = useState(false);
   const [newEvent, setNewEvent] = useState<Partial<EventInfo>>({
@@ -901,9 +922,23 @@ export function EventsView({ isLoggedIn = false, userData, onLoginClick }: { isL
           <CheckoutModal 
             isOpen={true}
             event={selectedEvent} 
-            onClose={() => { setSelectedEvent(null); setEnrollKids([]); }}
-            onSuccess={() => { setSelectedEvent(null); setEnrollKids([]); }}
-            userToken=""
+            onClose={() => { 
+               setSelectedEvent(null); 
+               setEnrollKids([]); 
+               const url = new URL(window.location.href);
+               url.searchParams.delete('evento');
+               window.history.pushState({}, '', url);
+            }}
+            onSuccess={() => { 
+               setSelectedEvent(null); 
+               setEnrollKids([]); 
+               setActiveTab('mytickets');
+               const url = new URL(window.location.href);
+               url.searchParams.delete('evento');
+               window.history.pushState({}, '', url);
+            }}
+            isLoggedIn={isLoggedIn}
+            onLoginClick={onLoginClick}
           />
         )}
       </AnimatePresence>
