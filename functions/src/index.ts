@@ -217,9 +217,9 @@ export const createPreference = functions.https.onCall(async (data: any, context
         },
         external_reference: enrollmentId,
         back_urls: {
-          success: 'https://coroado.org/', // Update these URLs later to your actual domains
-          pending: 'https://coroado.org/',
-          failure: 'https://coroado.org/'
+          success: 'https://coroado.org/eventos?tab=mytickets',
+          pending: 'https://coroado.org/eventos?tab=mytickets',
+          failure: 'https://coroado.org/eventos'
         },
         auto_return: 'approved'
       }

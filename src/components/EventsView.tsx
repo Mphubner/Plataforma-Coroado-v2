@@ -68,6 +68,14 @@ export function EventsView({ isLoggedIn = false, userData, onLoginClick }: { isL
   const [dateFilter, setDateFilter] = useState('');
   const [categoryFilter, setCategoryFilter] = useState('');
 
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const tabParam = params.get('tab');
+    if (tabParam === 'mytickets' || tabParam === 'upcoming' || tabParam === 'admin') {
+      setActiveTab(tabParam);
+    }
+  }, []);
+
   // Form states
   const [showNewEventForm, setShowNewEventForm] = useState(false);
   const [newEvent, setNewEvent] = useState<Partial<EventInfo>>({
