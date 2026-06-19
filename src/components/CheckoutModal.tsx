@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { X, CheckCircle2 } from 'lucide-react';
+import { X, CheckCircle2, MapPin } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { initMercadoPago, Wallet } from '@mercadopago/sdk-react';
 import { functions } from '@/lib/firebase';
@@ -27,6 +27,12 @@ interface EventData {
   childTicketPrice?: number;
   servantsSlug?: string;
   servantsPrice?: number;
+  image?: string;
+  description?: string;
+  location?: string;
+  date?: string;
+  time?: string;
+  requiresRegistration?: boolean;
 }
 
 interface CheckoutModalProps {
@@ -34,10 +40,11 @@ interface CheckoutModalProps {
   event: EventData | null;
   onClose: () => void;
   onSuccess: () => void;
-  userToken: string;
+  isLoggedIn?: boolean;
+  onLoginClick?: () => void;
 }
 
-export function CheckoutModal({ isOpen, event, onClose, onSuccess, userToken }: CheckoutModalProps) {
+export function CheckoutModal({ isOpen, event, onClose, onSuccess, isLoggedIn, onLoginClick }: CheckoutModalProps) {
   const [step, setStep] = useState<'selection' | 'payment' | 'success'>('selection');
   const [selectedTicketId, setSelectedTicketId] = useState<string>('');
   const [isServant, setIsServant] = useState(false);
@@ -83,6 +90,11 @@ export function CheckoutModal({ isOpen, event, onClose, onSuccess, userToken }: 
   };
 
   const handleGeneratePayment = async () => {
+    if (!isLoggedIn) {
+      if (onLoginClick) onLoginClick();
+      return;
+    }
+
     if (hasMultipleTickets && !selectedTicketId && !isServant) {
       setError('Por favor, selecione um tipo de ingresso.');
       return;
@@ -155,10 +167,29 @@ export function CheckoutModal({ isOpen, event, onClose, onSuccess, userToken }: 
 
           {step === 'selection' && (
             <div className="space-y-6">
-              <div>
-                <h2 className="text-xl font-black">{!event.requiresRegistration ? 'Informações do Evento' : 'Opções de Inscrição'}</h2>
-                <p className="text-sm text-white/50 mt-1">{event.title}</p>
+              <div className="relative -mt-6 -mx-6 mb-6 rounded-t-xl overflow-hidden h-48 bg-zinc-800">
+                 {event.image ? (
+                   <img src={event.image} alt={event.title} className="w-full h-full object-cover" />
+                 ) : (
+                   <div className="w-full h-full flex items-center justify-center text-white/20 font-black text-2xl text-center px-4">
+                     {event.title}
+                   </div>
+                 )}
+                 <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/40 to-transparent" />
+                 <div className="absolute bottom-4 left-4 right-4">
+                   <h2 className="text-2xl font-black text-white">{event.title}</h2>
+                   <div className="flex flex-wrap items-center gap-3 text-xs text-white/70 mt-2">
+                     {event.date && event.time && <span>{new Date(event.date + 'T00:00:00').toLocaleDateString('pt-BR')} às {event.time}</span>}
+                     {event.location && <span className="flex items-center gap-1"><MapPin className="w-3 h-3 text-primary" /> {event.location}</span>}
+                   </div>
+                 </div>
               </div>
+
+              {event.description && (
+                <div className="text-sm text-white/70 leading-relaxed bg-white/5 p-4 rounded-xl border border-white/10">
+                  {event.description}
+                </div>
+              )}
 
               {error && <div className="text-red-400 bg-red-400/10 p-3 rounded-lg text-sm">{error}</div>}
 
