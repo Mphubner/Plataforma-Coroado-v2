@@ -430,7 +430,7 @@ service cloud.firestore {
 
       allow list: if isSignedIn() && (
         isAdmin() ||
-        (isApprovedUser() && resource.data.tenantId == currentUser().data.tenantId && hasAnyRole(['cellLeader', 'ministryLeader', 'supervisor', 'networkPastor', 'auxPastor']))
+        (isApprovedUser() && hasAnyRole(['cellLeader', 'ministryLeader', 'supervisor', 'networkPastor', 'auxPastor']))
       );
 
       allow create: if isSignedIn() && isValidId(userId) &&
