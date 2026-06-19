@@ -22,7 +22,7 @@
     "firebase:rules:dry-run": "npx --yes firebase-tools deploy --only firestore:ai-studio-534c2e7e-8664-4b76-95e3-faf31fc1628b --project gen-lang-client-0529830528 --dry-run",
     "firebase:rules:deploy": "npx --yes firebase-tools deploy --only firestore:ai-studio-534c2e7e-8664-4b76-95e3-faf31fc1628b --project gen-lang-client-0529830528",
     "next:dev": "next dev -p 3001",
-    "next:build": "node --max-old-space-size=8192 ./node_modules/next/dist/bin/next build",
+    "next:build": "npm run lint && node --max-old-space-size=8192 ./node_modules/next/dist/bin/next build",
     "start": "tsx -e \"process.env.NODE_ENV='production'; import('./server.ts')\""
   },
   "dependencies": {

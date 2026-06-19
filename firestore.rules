@@ -430,7 +430,7 @@ service cloud.firestore {
 
       allow list: if isSignedIn() && (
         isAdmin() ||
-        (isApprovedUser() && resource.data.tenantId == currentUser().data.tenantId && hasAnyRole(['cellLeader', 'ministryLeader', 'supervisor', 'networkPastor', 'auxPastor']))
+        (isApprovedUser() && hasAnyRole(['cellLeader', 'ministryLeader', 'supervisor', 'networkPastor', 'auxPastor']))
       );
 
       allow create: if isSignedIn() && isValidId(userId) &&
@@ -450,7 +450,7 @@ service cloud.firestore {
           incoming().createdAt == existing().createdAt &&
           incoming().roles == existing().roles &&
           incoming().isApproved == existing().isApproved &&
-          incoming().diff(existing()).affectedKeys().hasOnly(['name', 'phone', 'birthdate', 'address', 'lat', 'lng', 'supervisorId', 'cellId', 'maritalStatus', 'profession', 'socialMedia', 'avatarUrl', 'details', 'workspaceConnected', 'googleWorkspaceConnected', 'googleWorkspaceConnectedAt', 'updatedAt']) &&
+          incoming().diff(existing()).affectedKeys().hasOnly(['name', 'phone', 'birthdate', 'address', 'cep', 'street', 'number', 'complement', 'neighborhood', 'city', 'lat', 'lng', 'supervisorId', 'cellId', 'ministryIds', 'maritalStatus', 'profession', 'socialMedia', 'avatarUrl', 'details', 'workspaceConnected', 'googleWorkspaceConnected', 'googleWorkspaceConnectedAt', 'updatedAt']) &&
           incoming().updatedAt == request.time
         )
       );
@@ -567,13 +567,13 @@ service cloud.firestore {
                        incoming().tenantId == get(/databases/$(database)/documents/users/$(request.auth.uid)).data.tenantId &&
                        incoming().createdAt == request.time &&
                        incoming().updatedAt == request.time &&
-                       isAdmin();
+                       (isAdmin() || hasAnyRole(['seniorPastor', 'networkPastor', 'auxPastor', 'supervisor', 'ministryLeader', 'cellLeader']));
 
       allow update: if isSignedIn() && isValidId(cellId) && isValidCell(incoming()) &&
                        incoming().tenantId == existing().tenantId &&
                        incoming().createdAt == existing().createdAt &&
                        (isAdmin() || existing().leaderId == request.auth.uid) &&
-                       incoming().diff(existing()).affectedKeys().hasOnly(['name', 'neighborhood', 'day', 'time', 'phone', 'leaderId', 'updatedAt']) &&
+                       incoming().diff(existing()).affectedKeys().hasOnly(['name', 'neighborhood', 'day', 'time', 'phone', 'leaderId', 'status', 'updatedAt']) &&
                        incoming().updatedAt == request.time;
 
       allow delete: if isAdmin();
@@ -639,7 +639,7 @@ service cloud.firestore {
                        incoming().tenantId == get(/databases/$(database)/documents/users/$(request.auth.uid)).data.tenantId &&
                        incoming().createdAt == request.time &&
                        incoming().updatedAt == request.time &&
-                       isAdmin();
+                       (isAdmin() || hasAnyRole(['seniorPastor', 'networkPastor', 'auxPastor', 'supervisor', 'ministryLeader', 'cellLeader']));
 
       allow update: if isSignedIn() && isValidId(ministryId) && isValidMinistry(incoming()) && (
         isAdmin() ||
@@ -648,7 +648,7 @@ service cloud.firestore {
           existing().leaderId == request.auth.uid &&
           incoming().tenantId == existing().tenantId &&
           incoming().createdAt == existing().createdAt &&
-          incoming().diff(existing()).affectedKeys().hasOnly(['name', 'description', 'leaderId', 'leaderName', 'icon', 'updatedAt']) &&
+          incoming().diff(existing()).affectedKeys().hasOnly(['name', 'description', 'leaderId', 'leaderName', 'icon', 'status', 'updatedAt']) &&
           incoming().updatedAt == request.time
         )
       );

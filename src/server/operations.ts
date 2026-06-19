@@ -13,6 +13,7 @@ import {
   DEFAULT_TENANT_ID,
   getAdminDb,
   getMercadoPagoAccessToken,
+  getMercadoPagoWebhookUrl,
   hasAnyRole,
   OWNER_EMAIL,
   type ServerAuthContext,
@@ -92,6 +93,53 @@ export async function checkInEventEnrollment(ctx: ServerAuthContext, enrollmentI
     enrollmentId,
     alreadyCheckedIn: false,
     checkedIn: true,
+  };
+}
+
+export async function getEventCheckInPreview(ctx: ServerAuthContext, enrollmentId: string) {
+  assertServerRole(ctx, EVENT_CHECKIN_ROLES);
+
+  const tenantId = getAuthTenantId(ctx);
+  const db = getAdminDb();
+  const ref = db.collection(COLLECTIONS.eventEnrollments).doc(enrollmentId);
+  const snap = await ref.get();
+
+  if (!snap.exists) {
+    throw new OperationError(404, 'Inscricao nao encontrada');
+  }
+
+  const enrollment = snap.data() || {};
+  if (enrollment.tenantId !== tenantId && ctx.authUser?.email !== OWNER_EMAIL) {
+    throw new OperationError(403, 'Inscricao de outra unidade');
+  }
+
+  const [eventSnap, userSnap] = await Promise.all([
+    enrollment.eventId ? db.collection(COLLECTIONS.events).doc(String(enrollment.eventId)).get() : Promise.resolve(null),
+    enrollment.userId ? db.collection(COLLECTIONS.users).doc(String(enrollment.userId)).get() : Promise.resolve(null),
+  ]);
+
+  const event = eventSnap?.exists ? eventSnap.data() || {} : {};
+  const attendee = userSnap?.exists ? userSnap.data() || {} : {};
+
+  return {
+    enrollment: {
+      id: enrollmentId,
+      eventId: String(enrollment.eventId || ''),
+      userId: String(enrollment.userId || ''),
+      checkedIn: Boolean(enrollment.checkedIn),
+      paymentStatus: String(enrollment.paymentStatus || 'approved'),
+      status: String(enrollment.status || ''),
+      ticketName: String(enrollment.ticketName || 'Inscricao'),
+      kids: Array.isArray(enrollment.kids) ? enrollment.kids : [],
+    },
+    attendee: {
+      name: String(attendee.name || attendee.displayName || 'Membro'),
+    },
+    event: {
+      title: String(event.title || 'Evento'),
+      date: String(event.date || ''),
+      time: String(event.time || ''),
+    },
   };
 }
 
@@ -194,6 +242,7 @@ export async function createEventEnrollment(ctx: ServerAuthContext, input: Event
   const client = new MercadoPagoConfig({ accessToken, options: { timeout: 5000 } });
   const preference = new Preference(client);
   const eventTitle = cleanString(event.title, 120) || 'Evento Coroado';
+  const notificationUrl = getMercadoPagoWebhookUrl();
 
   const response = await preference.create({
     body: {
@@ -217,6 +266,7 @@ export async function createEventEnrollment(ctx: ServerAuthContext, input: Event
         failure: `${origin}/eventos?payment=failure`,
         pending: `${origin}/eventos?payment=pending`,
       },
+      ...(notificationUrl ? { notification_url: notificationUrl } : {}),
       auto_return: 'approved',
     },
   });

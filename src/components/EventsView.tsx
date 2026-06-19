@@ -6,11 +6,12 @@ import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/com
 import { Badge } from '@/components/ui/badge';
 import ReactQrCode from 'react-qr-code';
 import { auth, db } from "@/lib/firebase";
-import { collection, query, onSnapshot, doc, setDoc, getDoc, serverTimestamp, where } from "firebase/firestore";
+import { collection, query, onSnapshot, doc, setDoc, serverTimestamp, where } from "firebase/firestore";
 import { Html5QrcodeScanner, Html5QrcodeScanType, Html5QrcodeSupportedFormats } from 'html5-qrcode';
 import { handleFirestoreError, OperationType } from '@/lib/firestoreUtils';
 import { can } from '@/src/lib/permissions';
 import { pageMotion } from '@/src/lib/motion/presets';
+import { getJson, postJson } from '@/src/lib/api/http';
 import { ImageUpload } from './ui/ImageUpload';
 import { CheckoutModal } from './CheckoutModal';
 
@@ -231,24 +232,21 @@ export function EventsView({ isLoggedIn = false, userData, onLoginClick }: { isL
         return;
       }
       
-      const enrollmentRef = doc(db, 'event_enrollments', decodedText);
-      const enrollmentSnap = await getDoc(enrollmentRef);
-      if (enrollmentSnap.exists()) {
-        const data = enrollmentSnap.data() as EventEnrollment;
-        data.id = enrollmentSnap.id;
-        setScanResult(data);
-        
-        // fetch user to show name
-        const uSnap = await getDoc(doc(db, 'users', data.userId));
-        if (uSnap.exists()) {
-           setScannedUser(uSnap.data());
-        } else {
-           setScannedUser({ name: "Usuário Desconhecido" });
-        }
-      } else {
-        alert("Ingresso não encontrado ou inválido.");
+      const token = await auth.currentUser?.getIdToken();
+      if (!token) {
+        alert("Sessao expirada. Entre novamente para validar o ingresso.");
         startScanner();
+        return;
       }
+
+      const preview = await getJson<{
+        enrollment: EventEnrollment;
+        attendee: { name: string };
+        event: { title: string; date: string; time: string };
+      }>(`/api/event-enrollments/${encodeURIComponent(decodedText)}/check-in-preview`, { token });
+
+      setScanResult(preview.enrollment);
+      setScannedUser({ name: preview.attendee.name });
     } catch(e) {
       console.error(e);
       // Se falhar por erro de rede ao tentar consultar
@@ -569,7 +567,7 @@ export function EventsView({ isLoggedIn = false, userData, onLoginClick }: { isL
                     const alreadyEnrolled = !!userEnrollment;
                     const isPendingPayment = userEnrollment?.paymentStatus === 'pending';
                     return (
-                      <Card key={event.id} className="bg-zinc-900 border-white/10 overflow-hidden flex flex-col group">
+                      <Card key={event.id} className="bg-zinc-900 border-white/10 overflow-hidden flex flex-col group cursor-pointer" onClick={() => setSelectedEvent(event)}>
                         <div className="relative h-48 overflow-hidden">
                           <div className="absolute inset-0 bg-black/40 z-10" />
                           <img src={event.image} alt={event.title} className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110 grayscale group-hover:grayscale-0" />
@@ -610,7 +608,6 @@ export function EventsView({ isLoggedIn = false, userData, onLoginClick }: { isL
                           )}
                           <Button 
                             onClick={() => {
-                              if (!isLoggedIn && onLoginClick) return onLoginClick();
                               if (!event.requiresRegistration || !alreadyEnrolled || isPendingPayment) setSelectedEvent(event);
                             }}
                             disabled={event.requiresRegistration && isFull && !alreadyEnrolled && !isPendingPayment}
@@ -649,7 +646,6 @@ export function EventsView({ isLoggedIn = false, userData, onLoginClick }: { isL
                                <div className="w-full sm:w-auto mt-4 sm:mt-0">
                                  <Button 
                                    onClick={() => { 
-                                     if (!isLoggedIn && onLoginClick) return onLoginClick(); 
                                      if (!event.requiresRegistration || !alreadyEnrolled || isPendingPayment) setSelectedEvent(event); 
                                    }} 
                                    className={`w-full sm:w-auto font-bold ${isPendingPayment ? 'bg-yellow-500/20 text-yellow-500 hover:bg-yellow-500/30' : alreadyEnrolled ? 'bg-primary/20 text-primary hover:bg-primary/30' : 'bg-primary text-black'}`}
@@ -895,10 +891,16 @@ export function EventsView({ isLoggedIn = false, userData, onLoginClick }: { isL
                      </div>
                    )}
                    
-                   {scanResult.checkedIn ? (
-                     <div className="space-y-4">
-                       <Badge className="bg-red-500/20 text-red-500 px-4 py-2 text-sm">Este ingresso já foi utilizado!</Badge>
-                       <Button onClick={cancelScanResult} variant="outline" className="w-full font-bold">Ler Novo Código</Button>
+                    {scanResult.paymentStatus === 'pending' ? (
+                      <div className="space-y-4">
+                        <Badge className="bg-amber-500/20 text-amber-300 px-4 py-2 text-sm">Pagamento ainda pendente</Badge>
+                        <p className="text-sm text-white/50">Finalize ou concilie o pagamento antes de liberar a entrada.</p>
+                        <Button onClick={cancelScanResult} variant="outline" className="w-full font-bold">Ler Novo Código</Button>
+                      </div>
+                    ) : scanResult.checkedIn ? (
+                      <div className="space-y-4">
+                        <Badge className="bg-red-500/20 text-red-500 px-4 py-2 text-sm">Este ingresso já foi utilizado!</Badge>
+                        <Button onClick={cancelScanResult} variant="outline" className="w-full font-bold">Ler Novo Código</Button>
                      </div>
                    ) : (
                      <div className="space-y-3">

@@ -93,9 +93,7 @@ export function AdminPlanningKanban({ userData }: { userData?: any }) {
       taskId: selectedTask.id,
       tenantId: tenantId!,
       content: newUpdateText,
-      authorId: auth.currentUser?.uid || '',
       authorName: userData?.displayName || 'Usuário',
-      type: 'comment'
     });
     setNewUpdateText('');
   }

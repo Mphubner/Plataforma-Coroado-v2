@@ -8,7 +8,7 @@ import { auth, functions } from '../../../lib/firebase';
 import { httpsCallable } from 'firebase/functions';
 import { Button } from '../../../components/ui/button';
 import { listItemMotion, pageMotion, panelMotion } from '../../lib/motion/presets';
-import { CheckoutModal } from '../../../components/CheckoutModal';
+import { CheckoutModal } from '@/src/components/CheckoutModal';
 
 type EventOverviewItem = {
   id: string;
@@ -353,12 +353,18 @@ export function EventosNativeClient() {
         </motion.aside>
       </section>
       
-      <CheckoutModal 
-        isOpen={!!checkoutEvent} 
-        event={checkoutEvent as any} 
-        onClose={() => setCheckoutEvent(null)} 
-        onSuccess={() => loadOverview()} 
-        userToken={userToken} 
+      <CheckoutModal
+        isOpen={!!checkoutEvent}
+        event={checkoutEvent}
+        onClose={() => setCheckoutEvent(null)}
+        onSuccess={() => {
+          setCheckoutEvent(null);
+          void loadOverview();
+        }}
+        isLoggedIn={Boolean(userToken)}
+        onLoginClick={() => {
+          window.location.href = '/login?redirect=/eventos';
+        }}
       />
     </motion.div>
   );

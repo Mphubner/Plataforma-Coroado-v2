@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'motion/react';
 import { X, CheckCircle2, MapPin } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -21,7 +22,7 @@ interface TicketType {
 interface EventData {
   id: string;
   title: string;
-  price: number;
+  price?: number;
   ticketTypes?: TicketType[];
   allowChildren?: boolean;
   childTicketPrice?: number;
@@ -45,6 +46,12 @@ interface CheckoutModalProps {
 }
 
 export function CheckoutModal({ isOpen, event, onClose, onSuccess, isLoggedIn, onLoginClick }: CheckoutModalProps) {
+  // Close on ESC
+  useEffect(() => {
+    const handleEsc = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
+    if (isOpen) window.addEventListener('keydown', handleEsc);
+    return () => window.removeEventListener('keydown', handleEsc);
+  }, [isOpen, onClose]);
   const [step, setStep] = useState<'selection' | 'payment' | 'success'>('selection');
   const [selectedTicketId, setSelectedTicketId] = useState<string>('');
   const [isServant, setIsServant] = useState(false);
@@ -147,21 +154,25 @@ export function CheckoutModal({ isOpen, event, onClose, onSuccess, isLoggedIn, o
     }
   };
 
-  return (
+  };
+
+  return createPortal(
     <AnimatePresence>
       <motion.div 
         initial={{ opacity: 0 }} 
         animate={{ opacity: 1 }} 
         exit={{ opacity: 0 }}
         className="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4"
+        onClick={onClose}
       >
         <motion.div 
           initial={{ scale: 0.95, opacity: 0 }} 
           animate={{ scale: 1, opacity: 1 }} 
           exit={{ scale: 0.95, opacity: 0 }}
           className="relative w-full max-w-lg rounded-xl bg-[#0f0f0f] border border-white/10 p-6 shadow-2xl overflow-y-auto max-h-[90vh]"
+          onClick={(e) => e.stopPropagation()}
         >
-          <Button variant="ghost" size="icon" className="absolute right-4 top-4 text-white/50 hover:text-white" onClick={onClose}>
+          <Button variant="ghost" size="icon" className="absolute right-2 top-2 z-10 bg-black/60 hover:bg-black/80 text-white/80 hover:text-white rounded-full" onClick={onClose}>
             <X className="w-5 h-5" />
           </Button>
 
@@ -256,7 +267,7 @@ export function CheckoutModal({ isOpen, event, onClose, onSuccess, isLoggedIn, o
                       disabled={isLoading || (!isServant && hasMultipleTickets && !selectedTicketId)}
                       onClick={handleGeneratePayment}
                     >
-                      {isLoading ? 'Processando...' : 'Prosseguir para Pagamento'}
+                      {isLoading ? 'Processando...' : !isLoggedIn ? 'Entrar para Garantir Vaga' : 'Prosseguir para Pagamento'}
                     </Button>
                   </div>
                 </>
@@ -289,6 +300,7 @@ export function CheckoutModal({ isOpen, event, onClose, onSuccess, isLoggedIn, o
           )}
         </motion.div>
       </motion.div>
-    </AnimatePresence>
+    </AnimatePresence>,
+    document.body
   );
 }

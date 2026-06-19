@@ -156,3 +156,7 @@ export function getMercadoPagoAccessToken() {
 export function getMercadoPagoWebhookSecret() {
   return process.env.MERCADOPAGO_WEBHOOK_SECRET || process.env.MP_WEBHOOK_SECRET || '';
 }
+
+export function getMercadoPagoWebhookUrl() {
+  return process.env.MERCADOPAGO_WEBHOOK_URL || process.env.MP_WEBHOOK_URL || '';
+}

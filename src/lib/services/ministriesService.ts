@@ -63,3 +63,17 @@ export async function updateBriefingStatus(
 
   await updateDoc(doc(db, COLLECTIONS.briefings, briefingId), updateData);
 }
+
+export async function approveMinistry(ministryId: string) {
+  await updateDoc(doc(db, COLLECTIONS.ministries, ministryId), {
+    status: 'approved',
+    updatedAt: serverTimestamp(),
+  });
+}
+
+export async function rejectMinistry(ministryId: string) {
+  await updateDoc(doc(db, COLLECTIONS.ministries, ministryId), {
+    status: 'rejected',
+    updatedAt: serverTimestamp(),
+  });
+}

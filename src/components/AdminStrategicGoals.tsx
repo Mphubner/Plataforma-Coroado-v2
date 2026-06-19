@@ -11,6 +11,13 @@ import { format, parseISO, startOfWeek, endOfWeek, startOfMonth, startOfYear, ge
 import { ptBR } from 'date-fns/locale';
 import { useCrossModuleMetrics } from '@/src/hooks/useCrossModuleMetrics';
 
+type KpiChartPoint = {
+  name: string;
+  Realizado: number | null;
+  originalKey?: string;
+  Expectativa?: number;
+};
+
 export function AdminStrategicGoals({ userData }: { userData?: any }) {
   const [kpis, setKpis] = useState<any[]>([]);
   const [entries, setEntries] = useState<any[]>([]);
@@ -175,7 +182,7 @@ export function AdminStrategicGoals({ userData }: { userData?: any }) {
          }
      });
 
-     const chartData = Object.keys(grouped).sort((a,b) => {
+     const chartData: KpiChartPoint[] = Object.keys(grouped).sort((a,b) => {
         return a.localeCompare(b);
      }).map(key => {
          const vals = grouped[key];

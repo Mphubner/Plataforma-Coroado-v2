@@ -2,23 +2,34 @@ import { NextResponse } from 'next/server';
 import { google } from 'googleapis';
 import { getGoogleOAuth2Client } from '@/src/lib/calendar';
 import { adminDb } from '@/src/lib/firebase-admin';
+import { resolveFirebaseAuthToken } from '@/src/server/context';
 
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
   const pastorId = searchParams.get('pastorId');
   const date = searchParams.get('date');
 
-  if (!pastorId || !date) {
+  if (!pastorId || !date || !/^\d{4}-\d{2}-\d{2}$/.test(date)) {
     return NextResponse.json({ error: 'Missing pastorId or date' }, { status: 400 });
   }
 
   try {
-    const pastorDoc = await adminDb.collection('users').doc(pastorId).get();
+    const pastorDoc = await adminDb.collection('pastors').doc(pastorId).get();
     if (!pastorDoc.exists) {
       return NextResponse.json({ error: 'Pastor not found' }, { status: 404 });
     }
 
     const data = pastorDoc.data() || {};
+    const header = request.headers.get('authorization') || '';
+    const token = header.startsWith('Bearer ') ? header.slice(7) : '';
+    const ctx = token ? await resolveFirebaseAuthToken(token).catch(() => ({} as any)) : {};
+    const isSameTenant = ctx.auth?.tenantId && data.tenantId === ctx.auth.tenantId;
+    const isPrivileged = ctx.auth?.roles?.some((role: string) => ['admin', 'seniorPastor', 'networkPastor', 'auxPastor'].includes(role));
+
+    if (data.isPublic === false && !isSameTenant && !isPrivileged) {
+      return NextResponse.json({ error: 'Permissao insuficiente' }, { status: 403 });
+    }
+
     const tokens = data.googleCalendarTokens;
     let baseAvailableTimes = Array.isArray(data.availableTimes) ? data.availableTimes : [];
     if (typeof data.availableTimes === 'string') {
@@ -80,8 +91,8 @@ export async function GET(request: Request) {
 
     return NextResponse.json({ availableSlots });
 
-  } catch (err: any) {
+  } catch (err) {
     console.error('Error fetching freebusy data:', err);
-    return NextResponse.json({ error: 'Failed to fetch free/busy data', details: err.message }, { status: 500 });
+    return NextResponse.json({ error: 'Failed to fetch free/busy data' }, { status: 500 });
   }
 }

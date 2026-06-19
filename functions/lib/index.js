@@ -12,7 +12,7 @@ function db() {
     return (0, firestore_1.getFirestore)(admin.app(), firestoreDatabaseId);
 }
 function getMpAccessToken() {
-    const token = process.env.MP_ACCESS_TOKEN;
+    const token = process.env.MERCADOPAGO_ACCESS_TOKEN || process.env.MP_ACCESS_TOKEN;
     if (!token) {
         throw new functions.https.HttpsError('failed-precondition', 'Mercado Pago is not configured.');
     }
@@ -20,6 +20,12 @@ function getMpAccessToken() {
 }
 function getMpWebhookSecret() {
     return process.env.MERCADOPAGO_WEBHOOK_SECRET || process.env.MP_WEBHOOK_SECRET || '';
+}
+function getMpWebhookUrl() {
+    return process.env.MERCADOPAGO_WEBHOOK_URL || process.env.MP_WEBHOOK_URL || '';
+}
+function getPublicAppUrl() {
+    return (process.env.APP_PUBLIC_URL || process.env.NEXT_PUBLIC_APP_URL || 'https://coroado.org').replace(/\/$/, '');
 }
 function getMpClient() {
     return new mercadopago_1.MercadoPagoConfig({
@@ -173,6 +179,8 @@ exports.createPreference = functions.https.onCall(async (data, context) => {
             throw new functions.https.HttpsError('failed-precondition', 'Event price is not configured.');
         }
         const preference = new mercadopago_1.Preference(getMpClient());
+        const notificationUrl = getMpWebhookUrl();
+        const appUrl = getPublicAppUrl();
         const response = await preference.create({
             body: {
                 items: [
@@ -189,16 +197,23 @@ exports.createPreference = functions.https.onCall(async (data, context) => {
                 },
                 external_reference: enrollmentId,
                 back_urls: {
-                    success: 'https://coroado.org/', // Update these URLs later to your actual domains
-                    pending: 'https://coroado.org/',
-                    failure: 'https://coroado.org/'
+                    success: `${appUrl}/eventos?tab=mytickets`,
+                    pending: `${appUrl}/eventos?tab=mytickets`,
+                    failure: `${appUrl}/eventos`
                 },
+                ...(notificationUrl ? { notification_url: notificationUrl } : {}),
                 auto_return: 'approved'
             }
         });
+        const initPoint = response.init_point || response.sandbox_init_point;
+        // Update the enrollment with the generated preference and init point
+        await db().collection('event_enrollments').doc(enrollmentId).update({
+            paymentInitPoint: initPoint,
+            paymentPreferenceId: response.id
+        });
         return {
             preferenceId: response.id,
-            initPoint: response.init_point || response.sandbox_init_point
+            initPoint
         };
     }
     catch (error) {
@@ -228,6 +243,8 @@ exports.createSubscription = functions.https.onCall(async (data, context) => {
             throw new functions.https.HttpsError('failed-precondition', 'Subscription price is not configured.');
         }
         const preApproval = new mercadopago_1.PreApproval(getMpClient());
+        const notificationUrl = getMpWebhookUrl();
+        const appUrl = getPublicAppUrl();
         const response = await preApproval.create({
             body: {
                 reason: planTitle || 'Assinatura',
@@ -239,12 +256,13 @@ exports.createSubscription = functions.https.onCall(async (data, context) => {
                 },
                 payer_email: context.auth.token.email,
                 external_reference: enrollmentId,
-                back_url: 'https://coroado.org/escola',
+                back_url: `${appUrl}/escola`,
+                ...(notificationUrl ? { notification_url: notificationUrl } : {}),
             }
         });
         return {
             preapprovalId: response.id,
-            initPoint: response.init_point
+            initPoint: response.init_point || response.sandbox_init_point
         };
     }
     catch (error) {

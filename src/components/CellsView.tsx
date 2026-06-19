@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Users, Calendar, MapPin, Search, Plus, Filter, Target, Award, ArrowUpRight, Copy, Share2, MoreVertical, Crosshair, CheckSquare, MessageSquare, Shield, Clock, Phone, QrCode } from 'lucide-react';
+import { Users, Calendar, MapPin, Search, Plus, Filter, Target, Award, ArrowUpRight, Copy, Share2, MoreVertical, Crosshair, CheckSquare, MessageSquare, Shield, Clock, Phone, QrCode, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardHeader, CardTitle, CardContent, CardDescription } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -56,6 +56,9 @@ function CellPublicView({ onTabChange, userData }: { onTabChange: (tab: string) 
   const [search, setSearch] = useState("");
   const [region, setRegion] = useState("Todas as Regiões");
   const [viewMode, setViewMode] = useState<"list" | "map">("map");
+  const [showCreateModal, setShowCreateModal] = useState(false);
+  const [newCell, setNewCell] = useState({ name: "", neighborhood: "", day: "", time: "", phone: "" });
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   useEffect(() => {
     const q = userData?.tenantId 
@@ -66,18 +69,54 @@ function CellPublicView({ onTabChange, userData }: { onTabChange: (tab: string) 
     return () => unsub();
   }, [userData?.tenantId]);
 
+  const isAdmin = userData?.roles?.includes('admin') || userData?.roles?.includes('supervisor');
+
+  const pendingCells = cells.filter(cell => cell.status === 'pending_approval');
+
   const filteredCells = cells.filter(cell => 
-    cell.name?.toLowerCase().includes(search.toLowerCase()) ||
-    cell.neighborhood?.toLowerCase().includes(search.toLowerCase())
+    cell.status !== 'pending_approval' &&
+    (cell.name?.toLowerCase().includes(search.toLowerCase()) ||
+    cell.neighborhood?.toLowerCase().includes(search.toLowerCase()))
   );
+
+  const handleCreateCell = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!userData) return alert("Você precisa estar logado para solicitar uma célula.");
+    setIsSubmitting(true);
+    try {
+      const { createCell } = await import('@/src/lib/services/cellsService');
+      await createCell({
+        ...newCell,
+        leaderId: userData.id,
+        tenantId: userData.tenantId
+      });
+      alert("Célula solicitada com sucesso! Aguarde a aprovação de um administrador.");
+      setShowCreateModal(false);
+      setNewCell({ name: "", neighborhood: "", day: "", time: "", phone: "" });
+    } catch (err: any) {
+      console.error(err);
+      alert("Erro ao solicitar célula: " + err.message);
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
 
   return (
     <div className="space-y-12 pb-20">
       <section className="bg-zinc-900 border border-white/10 p-8 md:p-12 rounded-[2rem]">
-        <h1 className="text-4xl font-black mb-4">Pequenos Grupos</h1>
-        <p className="text-white/60 text-lg mb-8 max-w-2xl">
-          Acreditamos que o pastoreio e o discipulado verdadeiro acontecem de perto. Encontre a célula mais próxima de você!
-        </p>
+        <div className="flex flex-col md:flex-row md:justify-between md:items-start mb-8 gap-4">
+          <div>
+            <h1 className="text-4xl font-black mb-4">Pequenos Grupos</h1>
+            <p className="text-white/60 text-lg max-w-2xl">
+              Acreditamos que o pastoreio e o discipulado verdadeiro acontecem de perto. Encontre a célula mais próxima de você!
+            </p>
+          </div>
+          {userData?.roles?.includes('cellLeader') && (
+            <Button onClick={() => setShowCreateModal(true)} className="bg-primary text-black font-bold whitespace-nowrap">
+              <Plus className="w-4 h-4 mr-2" /> Solicitar Nova Célula
+            </Button>
+          )}
+        </div>
         
         <div className="flex flex-col lg:flex-row gap-6 justify-between items-start lg:items-center">
           <div className="flex flex-col sm:flex-row gap-4 w-full lg:w-auto">
@@ -119,6 +158,55 @@ function CellPublicView({ onTabChange, userData }: { onTabChange: (tab: string) 
           </div>
         </div>
       </section>
+
+      {isAdmin && pendingCells.length > 0 && (
+        <section className="bg-yellow-500/10 border border-yellow-500/30 p-6 md:p-8 rounded-[2rem]">
+          <h2 className="text-2xl font-bold text-yellow-500 mb-4 flex items-center gap-2">
+            <Shield className="w-6 h-6" /> Aprovações Pendentes
+          </h2>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            {pendingCells.map(cell => (
+              <div key={cell.id} className="p-5 bg-zinc-900 border border-yellow-500/30 rounded-2xl">
+                <h4 className="font-serif italic text-xl">{cell.name}</h4>
+                <div className="mt-3 space-y-2 text-sm text-white/60">
+                  <p className="flex items-center gap-2"><MapPin className="w-3.5 h-3.5" /> {cell.neighborhood}</p>
+                  <p className="flex items-center gap-2"><Clock className="w-3.5 h-3.5" /> {cell.day} às {cell.time}</p>
+                </div>
+                <div className="mt-4 flex gap-2">
+                  <Button 
+                    className="flex-1 bg-green-500/20 text-green-400 hover:bg-green-500/30"
+                    onClick={async () => {
+                      try {
+                        const { approveCell } = await import('@/src/lib/services/cellsService');
+                        await approveCell(cell.id);
+                      } catch (e) {
+                        console.error(e);
+                        alert("Erro ao aprovar: " + (e as Error).message);
+                      }
+                    }}
+                  >
+                    Aprovar
+                  </Button>
+                  <Button 
+                    className="flex-1 bg-red-500/20 text-red-400 hover:bg-red-500/30"
+                    onClick={async () => {
+                      try {
+                        const { rejectCell } = await import('@/src/lib/services/cellsService');
+                        await rejectCell(cell.id);
+                      } catch (e) {
+                        console.error(e);
+                        alert("Erro ao rejeitar: " + (e as Error).message);
+                      }
+                    }}
+                  >
+                    Rejeitar
+                  </Button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
 
       {viewMode === "map" ? (
         <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
@@ -189,6 +277,66 @@ function CellPublicView({ onTabChange, userData }: { onTabChange: (tab: string) 
         )}
       </div>
       )}
+
+      <AnimatePresence>
+        {showCreateModal && (
+          <motion.div 
+            initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+            className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4"
+          >
+            <motion.div 
+              initial={{ scale: 0.95 }} animate={{ scale: 1 }} exit={{ scale: 0.95 }}
+              className="bg-zinc-900 border border-white/10 p-6 rounded-2xl w-full max-w-md max-h-[90vh] overflow-y-auto"
+            >
+              <div className="flex justify-between items-center mb-6">
+                <h3 className="text-xl font-bold">Solicitar Nova Célula</h3>
+                <button onClick={() => setShowCreateModal(false)} className="text-white/60 hover:text-white">
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+              <form onSubmit={handleCreateCell} className="space-y-4">
+                <div>
+                  <label className="text-xs font-bold text-white/60 block mb-1">Nome da Célula *</label>
+                  <Input required value={newCell.name} onChange={e => setNewCell({...newCell, name: e.target.value})} className="bg-black border-white/10" placeholder="Ex: Célula Esperança" />
+                </div>
+                <div>
+                  <label className="text-xs font-bold text-white/60 block mb-1">Bairro *</label>
+                  <Input required value={newCell.neighborhood} onChange={e => setNewCell({...newCell, neighborhood: e.target.value})} className="bg-black border-white/10" placeholder="Ex: Centro" />
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="text-xs font-bold text-white/60 block mb-1">Dia da Semana *</label>
+                    <select required value={newCell.day} onChange={e => setNewCell({...newCell, day: e.target.value})} className="w-full bg-black border border-white/10 rounded-md p-2 text-sm text-white h-10">
+                      <option value="">Selecione</option>
+                      <option value="Segunda-feira">Segunda-feira</option>
+                      <option value="Terça-feira">Terça-feira</option>
+                      <option value="Quarta-feira">Quarta-feira</option>
+                      <option value="Quinta-feira">Quinta-feira</option>
+                      <option value="Sexta-feira">Sexta-feira</option>
+                      <option value="Sábado">Sábado</option>
+                      <option value="Domingo">Domingo</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="text-xs font-bold text-white/60 block mb-1">Horário *</label>
+                    <Input required type="time" value={newCell.time} onChange={e => setNewCell({...newCell, time: e.target.value})} className="bg-black border-white/10" />
+                  </div>
+                </div>
+                <div>
+                  <label className="text-xs font-bold text-white/60 block mb-1">Telefone / WhatsApp *</label>
+                  <Input required value={newCell.phone} onChange={e => setNewCell({...newCell, phone: e.target.value})} className="bg-black border-white/10" placeholder="(00) 00000-0000" />
+                </div>
+                <div className="pt-4 flex gap-2 justify-end">
+                  <Button type="button" variant="ghost" onClick={() => setShowCreateModal(false)}>Cancelar</Button>
+                  <Button type="submit" disabled={isSubmitting} className="bg-primary text-black">
+                    {isSubmitting ? "Enviando..." : "Solicitar Aprovação"}
+                  </Button>
+                </div>
+              </form>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }

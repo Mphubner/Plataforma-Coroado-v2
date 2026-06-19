@@ -24,6 +24,7 @@ const protectedChecks = [
   ['/api/checkout', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' }],
   ['/api/events/test/enroll', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' }],
   ['/api/event-enrollments/test/check-in', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' }],
+  ['/api/event-enrollments/test/check-in-preview', { method: 'GET' }],
   ['/api/school/enrollments/test/progress', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' }],
   ['/api/school/subscriptions', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' }],
   ['/api/school/purchases', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' }],
