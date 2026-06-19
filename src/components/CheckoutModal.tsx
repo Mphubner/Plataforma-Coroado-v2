@@ -6,7 +6,7 @@ import { initMercadoPago, Wallet } from '@mercadopago/sdk-react';
 import { functions } from '@/lib/firebase';
 import { httpsCallable } from 'firebase/functions';
 
-const publicKey = import.meta.env.VITE_MERCADOPAGO_PUBLIC_KEY || '';
+const publicKey = import.meta.env.VITE_MERCADOPAGO_PUBLIC_KEY || 'TEST-4939536a-f2c1-4660-af98-2adb043eaa49';
 if (publicKey) {
   initMercadoPago(publicKey, { locale: 'pt-BR' });
 }
