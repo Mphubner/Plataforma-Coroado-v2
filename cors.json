@@ -2,6 +2,7 @@
   {
     "origin": ["*"],
     "method": ["GET", "HEAD", "DELETE", "POST", "PUT", "OPTIONS"],
+    "responseHeader": ["Content-Type", "Access-Control-Allow-Origin", "Authorization", "X-Goog-Resumable", "x-firebase-storage-version", "x-goog-meta-*", "x-firebase-gmpid"],
     "maxAgeSeconds": 3600
   }
 ]
