@@ -156,68 +156,80 @@ export function CheckoutModal({ isOpen, event, onClose, onSuccess, userToken }: 
           {step === 'selection' && (
             <div className="space-y-6">
               <div>
-                <h2 className="text-xl font-black">Opções de Inscrição</h2>
+                <h2 className="text-xl font-black">{!event.requiresRegistration ? 'Informações do Evento' : 'Opções de Inscrição'}</h2>
                 <p className="text-sm text-white/50 mt-1">{event.title}</p>
               </div>
 
               {error && <div className="text-red-400 bg-red-400/10 p-3 rounded-lg text-sm">{error}</div>}
 
-              {isServant && (
-                 <div className="bg-primary/20 border border-primary/30 p-4 rounded-xl">
-                   <p className="font-bold text-primary mb-1">Ingresso Especial (Servos)</p>
-                   <p className="text-xl font-black">R$ {event.servantsPrice?.toFixed(2)}</p>
+              {!event.requiresRegistration ? (
+                 <div className="bg-primary/20 border border-primary/30 p-6 rounded-xl text-center">
+                   <p className="font-black text-xl text-primary mb-3">Evento Aberto</p>
+                   <p className="text-sm text-white/80 leading-relaxed mb-6">Este é um culto ou evento aberto que não requer inscrição prévia nem pagamento. Basta comparecer ao local no horário marcado para participar.</p>
+                   <Button className="w-full h-12 bg-primary text-black font-bold hover:bg-primary/90" onClick={onClose}>
+                     Entendido
+                   </Button>
                  </div>
-              )}
+              ) : (
+                <>
+                  {isServant && (
+                     <div className="bg-primary/20 border border-primary/30 p-4 rounded-xl">
+                       <p className="font-bold text-primary mb-1">Ingresso Especial (Servos)</p>
+                       <p className="text-xl font-black">R$ {event.servantsPrice?.toFixed(2)}</p>
+                     </div>
+                  )}
 
-              {!isServant && hasMultipleTickets && (
-                <div className="space-y-3">
-                  <label className="text-xs font-bold uppercase tracking-widest text-white/40">Selecione o Ingresso</label>
-                  <div className="grid gap-2">
-                    {event.ticketTypes!.map(ticket => (
-                      <button 
-                        key={ticket.id} 
-                        onClick={() => setSelectedTicketId(ticket.id)}
-                        className={`flex justify-between items-center p-4 rounded-xl border text-left transition-colors ${selectedTicketId === ticket.id ? 'border-primary bg-primary/10' : 'border-white/10 hover:border-white/20 bg-white/5'}`}
-                      >
-                        <span className="font-bold">{ticket.name}</span>
-                        <span className="font-black text-lg">R$ {ticket.price.toFixed(2)}</span>
-                      </button>
-                    ))}
+                  {!isServant && hasMultipleTickets && (
+                    <div className="space-y-3">
+                      <label className="text-xs font-bold uppercase tracking-widest text-white/40">Selecione o Ingresso</label>
+                      <div className="grid gap-2">
+                        {event.ticketTypes!.map(ticket => (
+                          <button 
+                            key={ticket.id} 
+                            onClick={() => setSelectedTicketId(ticket.id)}
+                            className={`flex justify-between items-center p-4 rounded-xl border text-left transition-colors ${selectedTicketId === ticket.id ? 'border-primary bg-primary/10' : 'border-white/10 hover:border-white/20 bg-white/5'}`}
+                          >
+                            <span className="font-bold">{ticket.name}</span>
+                            <span className="font-black text-lg">R$ {ticket.price.toFixed(2)}</span>
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {!isServant && !hasMultipleTickets && (
+                    <div className="flex justify-between items-center p-4 rounded-xl border border-white/10 bg-white/5">
+                      <span className="font-bold">Inscrição Padrão</span>
+                      <span className="font-black text-lg">R$ {event.price.toFixed(2)}</span>
+                    </div>
+                  )}
+
+                  {event.allowChildren && (
+                    <div className="space-y-3 pt-4 border-t border-white/10">
+                      <label className="text-xs font-bold uppercase tracking-widest text-white/40">Crianças Adicionais (R$ {event.childTicketPrice?.toFixed(2)}/cada)</label>
+                      <div className="flex items-center gap-4">
+                        <Button variant="outline" size="icon" onClick={() => setKidsCount(Math.max(0, kidsCount - 1))}>-</Button>
+                        <span className="font-bold text-lg w-8 text-center">{kidsCount}</span>
+                        <Button variant="outline" size="icon" onClick={() => setKidsCount(kidsCount + 1)}>+</Button>
+                      </div>
+                    </div>
+                  )}
+
+                  <div className="pt-4 border-t border-white/10 flex justify-between items-end">
+                    <div>
+                      <p className="text-xs text-white/50 uppercase tracking-widest">Total a pagar</p>
+                      <p className="text-3xl font-black text-primary mt-1">R$ {calculateTotal().toFixed(2)}</p>
+                    </div>
+                    <Button 
+                      className="bg-primary text-black font-bold h-12 px-6" 
+                      disabled={isLoading || (!isServant && hasMultipleTickets && !selectedTicketId)}
+                      onClick={handleGeneratePayment}
+                    >
+                      {isLoading ? 'Processando...' : 'Prosseguir para Pagamento'}
+                    </Button>
                   </div>
-                </div>
+                </>
               )}
-
-              {!isServant && !hasMultipleTickets && (
-                <div className="flex justify-between items-center p-4 rounded-xl border border-white/10 bg-white/5">
-                  <span className="font-bold">Inscrição Padrão</span>
-                  <span className="font-black text-lg">R$ {event.price.toFixed(2)}</span>
-                </div>
-              )}
-
-              {event.allowChildren && (
-                <div className="space-y-3 pt-4 border-t border-white/10">
-                  <label className="text-xs font-bold uppercase tracking-widest text-white/40">Crianças Adicionais (R$ {event.childTicketPrice?.toFixed(2)}/cada)</label>
-                  <div className="flex items-center gap-4">
-                    <Button variant="outline" size="icon" onClick={() => setKidsCount(Math.max(0, kidsCount - 1))}>-</Button>
-                    <span className="font-bold text-lg w-8 text-center">{kidsCount}</span>
-                    <Button variant="outline" size="icon" onClick={() => setKidsCount(kidsCount + 1)}>+</Button>
-                  </div>
-                </div>
-              )}
-
-              <div className="pt-4 border-t border-white/10 flex justify-between items-end">
-                <div>
-                  <p className="text-xs text-white/50 uppercase tracking-widest">Total a pagar</p>
-                  <p className="text-3xl font-black text-primary mt-1">R$ {calculateTotal().toFixed(2)}</p>
-                </div>
-                <Button 
-                  className="bg-primary text-black font-bold h-12 px-6" 
-                  disabled={isLoading || (!isServant && hasMultipleTickets && !selectedTicketId)}
-                  onClick={handleGeneratePayment}
-                >
-                  {isLoading ? 'Processando...' : 'Prosseguir para Pagamento'}
-                </Button>
-              </div>
             </div>
           )}
 

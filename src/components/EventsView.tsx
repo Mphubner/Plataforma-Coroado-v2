@@ -68,6 +68,14 @@ export function EventsView({ isLoggedIn = false, userData, onLoginClick }: { isL
   const [dateFilter, setDateFilter] = useState('');
   const [categoryFilter, setCategoryFilter] = useState('');
 
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const tabParam = params.get('tab');
+    if (tabParam === 'mytickets' || tabParam === 'upcoming' || tabParam === 'admin') {
+      setActiveTab(tabParam);
+    }
+  }, []);
+
   // Form states
   const [showNewEventForm, setShowNewEventForm] = useState(false);
   const [newEvent, setNewEvent] = useState<Partial<EventInfo>>({
@@ -567,25 +575,27 @@ export function EventsView({ isLoggedIn = false, userData, onLoginClick }: { isL
                               <span className="flex items-center gap-1.5"><Clock className="w-4 h-4 text-primary" /> {event.time}</span>
                             </div>
                           </div>
-                          <div className="space-y-3">
-                            <div className="flex justify-between text-xs font-bold text-white/60 uppercase tracking-wider">
-                              <span>Vagas: {event.enrolled} preenchidas</span>
-                              <span>Capacidade: {event.capacity}</span>
+                          {event.requiresRegistration && (
+                            <div className="space-y-3">
+                              <div className="flex justify-between text-xs font-bold text-white/60 uppercase tracking-wider">
+                                <span>Vagas: {event.enrolled} preenchidas</span>
+                                <span>Capacidade: {event.capacity}</span>
+                              </div>
+                              <div className="h-1.5 bg-black rounded-full overflow-hidden">
+                                <div className={`h-full ${isFull ? 'bg-red-500' : occupancy > 80 ? 'bg-yellow-500' : 'bg-primary'}`} style={{ width: `${occupancy}%` }} />
+                              </div>
+                              {isFull && !alreadyEnrolled && !isPendingPayment && <p className="text-xs text-red-500 font-bold">Lotação Esgotada</p>}
                             </div>
-                            <div className="h-1.5 bg-black rounded-full overflow-hidden">
-                              <div className={`h-full ${isFull ? 'bg-red-500' : occupancy > 80 ? 'bg-yellow-500' : 'bg-primary'}`} style={{ width: `${occupancy}%` }} />
-                            </div>
-                            {isFull && !alreadyEnrolled && !isPendingPayment && <p className="text-xs text-red-500 font-bold">Lotação Esgotada</p>}
-                          </div>
+                          )}
                           <Button 
                             onClick={() => {
                               if (!isLoggedIn && onLoginClick) return onLoginClick();
-                              if (!alreadyEnrolled || isPendingPayment) setSelectedEvent(event);
+                              if (!event.requiresRegistration || !alreadyEnrolled || isPendingPayment) setSelectedEvent(event);
                             }}
-                            disabled={isFull && !alreadyEnrolled && !isPendingPayment}
-                            className={`w-full font-bold ${(isFull && !alreadyEnrolled && !isPendingPayment) ? 'bg-zinc-800 text-white/40' : isPendingPayment ? 'bg-yellow-500/20 text-yellow-500 border-yellow-500 hover:bg-yellow-500/30' : alreadyEnrolled ? 'bg-primary/20 text-primary border-primary hover:bg-primary/30' : 'bg-white/10 hover:bg-white/20 text-white border border-white/10'}`}
+                            disabled={event.requiresRegistration && isFull && !alreadyEnrolled && !isPendingPayment}
+                            className={`w-full font-bold ${(event.requiresRegistration && isFull && !alreadyEnrolled && !isPendingPayment) ? 'bg-zinc-800 text-white/40' : isPendingPayment ? 'bg-yellow-500/20 text-yellow-500 border-yellow-500 hover:bg-yellow-500/30' : alreadyEnrolled ? 'bg-primary/20 text-primary border-primary hover:bg-primary/30' : 'bg-white/10 hover:bg-white/20 text-white border border-white/10'}`}
                           >
-                            {isPendingPayment ? 'Finalizar Pagamento' : alreadyEnrolled ? 'Já Inscrito' : isFull ? 'Esgotado' : 'Garantir Vaga'}
+                            {!event.requiresRegistration ? 'Conferir' : isPendingPayment ? 'Finalizar Pagamento' : alreadyEnrolled ? 'Já Inscrito' : isFull ? 'Esgotado' : 'Garantir Vaga'}
                           </Button>
                         </CardContent>
                       </Card>
@@ -619,11 +629,11 @@ export function EventsView({ isLoggedIn = false, userData, onLoginClick }: { isL
                                  <Button 
                                    onClick={() => { 
                                      if (!isLoggedIn && onLoginClick) return onLoginClick(); 
-                                     if (!alreadyEnrolled || isPendingPayment) setSelectedEvent(event); 
+                                     if (!event.requiresRegistration || !alreadyEnrolled || isPendingPayment) setSelectedEvent(event); 
                                    }} 
                                    className={`w-full sm:w-auto font-bold ${isPendingPayment ? 'bg-yellow-500/20 text-yellow-500 hover:bg-yellow-500/30' : alreadyEnrolled ? 'bg-primary/20 text-primary hover:bg-primary/30' : 'bg-primary text-black'}`}
                                  >
-                                   {isPendingPayment ? 'Finalizar Pagamento' : alreadyEnrolled ? 'Inscrito' : 'Garantir Vaga'}
+                                   {!event.requiresRegistration ? 'Conferir' : isPendingPayment ? 'Finalizar Pagamento' : alreadyEnrolled ? 'Inscrito' : 'Garantir Vaga'}
                                  </Button>
                                </div>
                              </div>
@@ -999,12 +1009,18 @@ export function EventsView({ isLoggedIn = false, userData, onLoginClick }: { isL
 
                   <div className="bg-black/40 p-4 rounded-xl border border-white/5 space-y-4">
                     <div className="flex items-center gap-2">
-                      <input type="checkbox" checked={newEvent.requiresRegistration} onChange={(e) => setNewEvent({...newEvent, requiresRegistration: e.target.checked})} />
+                      <input type="checkbox" checked={newEvent.requiresRegistration} onChange={(e) => {
+                         const checked = e.target.checked;
+                         setNewEvent({...newEvent, requiresRegistration: checked, isPaid: checked ? newEvent.isPaid : false})
+                      }} />
                       <label className="text-sm font-bold">Requer Inscrição / Check-in de Acesso?</label>
                     </div>
 
                     <div className="flex items-center gap-2">
-                      <input type="checkbox" checked={newEvent.isPaid} onChange={(e) => setNewEvent({...newEvent, isPaid: e.target.checked})} />
+                      <input type="checkbox" checked={newEvent.isPaid} onChange={(e) => {
+                         const checked = e.target.checked;
+                         setNewEvent({...newEvent, isPaid: checked, requiresRegistration: checked ? true : newEvent.requiresRegistration})
+                      }} />
                       <label className="text-sm font-bold">Evento Pago (Mercado Pago - Pix/Cartão)?</label>
                     </div>
                     
