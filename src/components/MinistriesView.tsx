@@ -1,4 +1,4 @@
-﻿import * as React from "react"
+import * as React from "react"
 import { motion } from "motion/react"
 import { Users, Calendar, CheckCircle2, AlertCircle, Plus, Search, ChevronRight, Music, Heart, Camera, Coffee, Shield, Clock, XCircle, BookOpen, Home, CalendarCheck, GraduationCap, MessageSquare } from "lucide-react"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
@@ -166,6 +166,7 @@ export function MinistriesView({ isLoggedIn = true, userData, onLoginClick }: { 
       });
       setShowNewMinistryForm(false);
       setNewMinistry({ name: '', description: '', leaderName: '', icon: 'users', members: [], requiredTracks: [] });
+      alert("Ministério solicitado com sucesso! Aguarde a aprovação de um administrador.");
     } catch (e) {
       console.error(e);
       alert("Erro ao criar ministério: " + (e as Error).message);
@@ -230,9 +231,13 @@ export function MinistriesView({ isLoggedIn = true, userData, onLoginClick }: { 
     };
   }, [selectedMinistry?.id, tenantId]);
 
+  const isAdmin = userData?.roles?.includes('admin') || userData?.roles?.includes('supervisor');
+  const pendingMinistries = ministries.filter(m => m.status === 'pending_approval');
+
   const filteredMinistries = ministries.filter(m => 
-    m.name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    m.leaderName?.toLowerCase().includes(searchQuery.toLowerCase())
+    m.status !== 'pending_approval' &&
+    (m.name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    m.leaderName?.toLowerCase().includes(searchQuery.toLowerCase()))
   );
 
   if (!isLoggedIn) {
@@ -374,7 +379,12 @@ export function MinistriesView({ isLoggedIn = true, userData, onLoginClick }: { 
               {getIcon(selectedMinistry.icon)}
             </div>
             <div>
-              <h1 className="text-3xl font-bold">{selectedMinistry.name}</h1>
+              <h1 className="text-3xl font-bold flex items-center gap-2">
+                {selectedMinistry.name}
+                {selectedMinistry.status === 'pending_approval' && (
+                  <span className="px-3 py-1 rounded-full text-xs font-bold bg-yellow-500/20 text-yellow-500 border border-yellow-500/20 flex items-center gap-1 uppercase tracking-widest"><Clock className="w-3 h-3"/> Aguardando Aprovação</span>
+                )}
+              </h1>
               <p className="text-white/60">Líder: {selectedMinistry.leaderName}</p>
             </div>
           </div>
@@ -1178,10 +1188,66 @@ export function MinistriesView({ isLoggedIn = true, userData, onLoginClick }: { 
               </div>
               <div className="flex gap-3 pt-4">
                 <Button className="flex-1 bg-white/10 text-white hover:bg-white/20" onClick={() => setShowNewMinistryForm(false)}>Cancelar</Button>
-                <Button className="flex-1 bg-primary text-black font-bold" onClick={handleCreateMinistry}>Criar Ministério</Button>
+                <Button className="flex-1 bg-primary text-black font-bold" onClick={handleCreateMinistry}>Solicitar Aprovação</Button>
               </div>
             </div>
           </motion.div>
+        </div>
+      )}
+
+      {isAdmin && pendingMinistries.length > 0 && (
+        <div className="mb-12">
+          <section className="bg-yellow-500/10 border border-yellow-500/30 p-6 md:p-8 rounded-[2rem]">
+            <h2 className="text-2xl font-bold text-yellow-500 mb-4 flex items-center gap-2">
+              <Shield className="w-6 h-6" /> Aprovações Pendentes
+            </h2>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+              {pendingMinistries.map(ministry => (
+                <div key={ministry.id} className="p-5 bg-zinc-900 border border-yellow-500/30 rounded-2xl">
+                  <div className="flex items-start justify-between mb-4">
+                    <div className="w-12 h-12 rounded-xl bg-yellow-500/20 text-yellow-500 flex items-center justify-center">
+                      {getIcon(ministry.icon)}
+                    </div>
+                  </div>
+                  <h4 className="font-serif italic text-xl">{ministry.name}</h4>
+                  <div className="mt-3 space-y-2 text-sm text-white/60">
+                    <p className="flex items-center gap-2"><Users className="w-3.5 h-3.5" /> Solicitado por: {ministry.leaderName}</p>
+                    <p className="flex items-center gap-2"><BookOpen className="w-3.5 h-3.5" /> Descrição: <span className="truncate">{ministry.description}</span></p>
+                  </div>
+                  <div className="mt-4 flex gap-2">
+                    <Button 
+                      className="flex-1 bg-green-500/20 text-green-400 hover:bg-green-500/30"
+                      onClick={async () => {
+                        try {
+                          const { approveMinistry } = await import('@/src/lib/services/ministriesService');
+                          await approveMinistry(ministry.id);
+                        } catch (e) {
+                          console.error(e);
+                          alert("Erro ao aprovar: " + (e as Error).message);
+                        }
+                      }}
+                    >
+                      Aprovar
+                    </Button>
+                    <Button 
+                      className="flex-1 bg-red-500/20 text-red-400 hover:bg-red-500/30"
+                      onClick={async () => {
+                        try {
+                          const { rejectMinistry } = await import('@/src/lib/services/ministriesService');
+                          await rejectMinistry(ministry.id);
+                        } catch (e) {
+                          console.error(e);
+                          alert("Erro ao rejeitar: " + (e as Error).message);
+                        }
+                      }}
+                    >
+                      Rejeitar
+                    </Button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </section>
         </div>
       )}
 

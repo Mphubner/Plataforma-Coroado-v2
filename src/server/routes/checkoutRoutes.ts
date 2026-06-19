@@ -8,6 +8,7 @@ import {
   DEFAULT_TENANT_ID,
   getAdminDb,
   getMercadoPagoAccessToken,
+  getMercadoPagoWebhookUrl,
   type AuthedRequest,
 } from '../context';
 
@@ -93,6 +94,7 @@ export function registerCheckoutRoutes(app: express.Express, port: number) {
       const client = new MercadoPagoConfig({ accessToken, options: { timeout: 5000 } });
       const preference = new Preference(client);
       const origin = String(req.headers.origin || `http://localhost:${port}`);
+      const notificationUrl = getMercadoPagoWebhookUrl();
 
       const response = await preference.create({
         body: {
@@ -114,6 +116,7 @@ export function registerCheckoutRoutes(app: express.Express, port: number) {
             failure: `${origin}/loja?payment=failure`,
             pending: `${origin}/loja?payment=pending`,
           },
+          ...(notificationUrl ? { notification_url: notificationUrl } : {}),
           auto_return: 'approved',
         },
       });

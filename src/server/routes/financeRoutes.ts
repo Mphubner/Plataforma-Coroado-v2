@@ -5,6 +5,8 @@ import {
   authenticateFirebase,
   cleanString,
   DEFAULT_TENANT_ID,
+  getMercadoPagoAccessToken,
+  getMercadoPagoWebhookUrl,
   getAdminDb,
   requireRoles,
   type AuthedRequest,
@@ -83,7 +85,7 @@ export function registerFinanceRoutes(app: express.Express) {
       });
 
       // Integrate Mercado Pago Preference
-      const accessToken = process.env.MERCADO_PAGO_ACCESS_TOKEN;
+      const accessToken = getMercadoPagoAccessToken();
       if (!accessToken) {
         // Fallback to manual approval flow if MP is not configured
         res.json({ success: true, transactionId: transactionRef.id });
@@ -94,6 +96,7 @@ export function registerFinanceRoutes(app: express.Express) {
       const client = new MercadoPagoConfig({ accessToken, options: { timeout: 5000 } });
       const preference = new Preference(client);
       const origin = String(req.headers.origin || `http://localhost:${process.env.PORT || 3000}`);
+      const notificationUrl = getMercadoPagoWebhookUrl();
 
       const title = contribution.contributionType === 'dizimo' ? 'Dízimo' : contribution.contributionType === 'oferta' ? 'Oferta' : 'Contribuição';
 
@@ -117,11 +120,16 @@ export function registerFinanceRoutes(app: express.Express) {
             failure: `${origin}/financeiro?payment=failure`,
             pending: `${origin}/financeiro?payment=pending`,
           },
+          ...(notificationUrl ? { notification_url: notificationUrl } : {}),
           auto_return: 'approved',
         },
       });
 
       const initPoint = response.init_point || response.sandbox_init_point;
+      if (!initPoint) {
+        res.status(502).json({ success: false, error: 'Mercado Pago nao retornou URL de pagamento' });
+        return;
+      }
 
       await transactionRef.set({
         paymentPreferenceId: response.id || '',

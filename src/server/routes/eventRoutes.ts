@@ -5,7 +5,7 @@ import {
   resolveOptionalFirebaseAuth,
   type AuthedRequest,
 } from '../context';
-import { checkInEventEnrollment, createEventEnrollment, OperationError } from '../operations';
+import { checkInEventEnrollment, createEventEnrollment, getEventCheckInPreview, OperationError } from '../operations';
 import { getEventsOverview } from '../queries/eventsOverview';
 
 export function registerEventRoutes(app: express.Express, port: number) {
@@ -42,6 +42,30 @@ export function registerEventRoutes(app: express.Express, port: number) {
 
       console.error('Event check-in failed:', error);
       res.status(500).json({ success: false, error: 'Nao foi possivel confirmar o check-in' });
+    }
+  });
+
+  app.get('/api/event-enrollments/:enrollmentId/check-in-preview', authenticateFirebase, async (req: AuthedRequest, res) => {
+    const parsed = eventCheckInRequestSchema.safeParse({
+      enrollmentId: req.params.enrollmentId,
+    });
+
+    if (!parsed.success) {
+      res.status(400).json({ success: false, error: 'Ingresso invalido' });
+      return;
+    }
+
+    try {
+      const result = await getEventCheckInPreview(req, parsed.data.enrollmentId);
+      res.json({ success: true, ...result });
+    } catch (error) {
+      if (error instanceof OperationError) {
+        res.status(error.status).json({ success: false, error: error.message });
+        return;
+      }
+
+      console.error('Event check-in preview failed:', error);
+      res.status(500).json({ success: false, error: 'Nao foi possivel validar o ingresso' });
     }
   });
 

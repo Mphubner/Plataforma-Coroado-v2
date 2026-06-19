@@ -13,7 +13,7 @@ function db() {
 }
 
 function getMpAccessToken() {
-  const token = process.env.MP_ACCESS_TOKEN;
+  const token = process.env.MERCADOPAGO_ACCESS_TOKEN || process.env.MP_ACCESS_TOKEN;
   if (!token) {
     throw new functions.https.HttpsError('failed-precondition', 'Mercado Pago is not configured.');
   }
@@ -22,6 +22,14 @@ function getMpAccessToken() {
 
 function getMpWebhookSecret() {
   return process.env.MERCADOPAGO_WEBHOOK_SECRET || process.env.MP_WEBHOOK_SECRET || '';
+}
+
+function getMpWebhookUrl() {
+  return process.env.MERCADOPAGO_WEBHOOK_URL || process.env.MP_WEBHOOK_URL || '';
+}
+
+function getPublicAppUrl() {
+  return (process.env.APP_PUBLIC_URL || process.env.NEXT_PUBLIC_APP_URL || 'https://coroado.org').replace(/\/$/, '');
 }
 
 function getMpClient() {
@@ -201,6 +209,8 @@ export const createPreference = functions.https.onCall(async (data: any, context
 
     const preference = new Preference(getMpClient());
 
+    const notificationUrl = getMpWebhookUrl();
+    const appUrl = getPublicAppUrl();
     const response = await preference.create({
       body: {
         items: [
@@ -217,10 +227,11 @@ export const createPreference = functions.https.onCall(async (data: any, context
         },
         external_reference: enrollmentId,
         back_urls: {
-          success: 'https://coroado.org/eventos?tab=mytickets',
-          pending: 'https://coroado.org/eventos?tab=mytickets',
-          failure: 'https://coroado.org/eventos'
+          success: `${appUrl}/eventos?tab=mytickets`,
+          pending: `${appUrl}/eventos?tab=mytickets`,
+          failure: `${appUrl}/eventos`
         },
+        ...(notificationUrl ? { notification_url: notificationUrl } : {}),
         auto_return: 'approved'
       }
     });
@@ -270,6 +281,8 @@ export const createSubscription = functions.https.onCall(async (data: any, conte
     }
 
     const preApproval = new PreApproval(getMpClient());
+    const notificationUrl = getMpWebhookUrl();
+    const appUrl = getPublicAppUrl();
 
     const response = await preApproval.create({
       body: {
@@ -282,13 +295,14 @@ export const createSubscription = functions.https.onCall(async (data: any, conte
         },
         payer_email: context.auth.token.email,
         external_reference: enrollmentId,
-        back_url: 'https://coroado.org/escola',
+        back_url: `${appUrl}/escola`,
+        ...(notificationUrl ? { notification_url: notificationUrl } : {}),
       }
     });
 
     return {
       preapprovalId: response.id,
-      initPoint: response.init_point
+      initPoint: response.init_point || (response as { sandbox_init_point?: string }).sandbox_init_point
     };
   } catch (error) {
     if (error instanceof functions.https.HttpsError) {

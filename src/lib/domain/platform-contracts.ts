@@ -194,8 +194,14 @@ export const memberProfileSchema = tenantScopedSchema.extend({
 
 export const memberProfileUpdateSchema = z.object({
   cellId: optionalText(128),
-  ministryId: optionalText(128),
+  ministryIds: z.array(z.string().max(128)).optional(),
   supervisorId: optionalText(128),
+  cep: optionalText(10),
+  street: optionalText(300),
+  number: optionalText(20),
+  complement: optionalText(200),
+  neighborhood: optionalText(200),
+  city: optionalText(200),
   address: optionalText(500),
   lat: z.coerce.number(),
   lng: z.coerce.number(),

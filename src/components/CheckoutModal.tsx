@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'motion/react';
 import { X, CheckCircle2, MapPin } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -153,7 +154,9 @@ export function CheckoutModal({ isOpen, event, onClose, onSuccess, isLoggedIn, o
     }
   };
 
-  return (
+  };
+
+  return createPortal(
     <AnimatePresence>
       <motion.div 
         initial={{ opacity: 0 }} 
@@ -297,6 +300,7 @@ export function CheckoutModal({ isOpen, event, onClose, onSuccess, isLoggedIn, o
           )}
         </motion.div>
       </motion.div>
-    </AnimatePresence>
+    </AnimatePresence>,
+    document.body
   );
 }

@@ -1,7 +1,7 @@
 import * as React from "react"
 import { motion, AnimatePresence } from "motion/react"
 import { 
-  Play, BookOpen, Award, Clock, Star, ChevronRight, ChevronLeft, 
+  Play, PlayCircle, BookOpen, Award, Clock, Star, ChevronRight, ChevronLeft,
   Search, Filter, Download, MessageSquare, CheckCircle2, Lock, 
   Unlock, FileText, Video, Headphones, CheckSquare, Settings,
   BarChart as BarChartIcon, Users, DollarSign, LayoutDashboard, Plus, MoreVertical,
@@ -19,7 +19,7 @@ import { Input } from "@/components/ui/input"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Separator } from "@/components/ui/separator"
 import { db, auth } from "@/lib/firebase"
-import { collection, query, where, onSnapshot, doc, getDoc } from "firebase/firestore"
+import { collection, query, where, onSnapshot, doc, getDoc, limit } from "firebase/firestore"
 import { onAuthStateChanged } from "firebase/auth"
 import { AdminQuizzes } from "./admin";
 import { postJson } from '@/src/lib/api/http';
@@ -112,7 +112,8 @@ export function SchoolView({ userRole = [], isAdmin = false }: { userRole?: stri
         const docSnap = await getDoc(doc(db, "users", u.uid));
         if (docSnap.exists()) {
           const data = docSnap.data();
-          setIsSubscribed(data.subscriptionStatus === 'active' || data.role?.includes('admin') || data.profileType === 'admin');
+          const roles = Array.isArray(data.roles) ? data.roles : [];
+          setIsSubscribed(data.subscriptionStatus === 'active' || roles.includes('admin') || data.profileType === 'admin');
         }
       }
     })

@@ -135,8 +135,14 @@ export function toEventEnrollmentPayload(input: EventEnrollmentPayloadInput) {
 
 export type MemberProfileUpdatePayloadInput = {
   cellId?: string;
-  ministryId?: string;
+  ministryIds?: string[];
   supervisorId?: string;
+  cep?: string;
+  street?: string;
+  number?: string;
+  complement?: string;
+  neighborhood?: string;
+  city?: string;
   address?: string;
   lat?: number | string;
   lng?: number | string;
@@ -149,11 +155,27 @@ export type MemberProfileUpdatePayloadInput = {
 };
 
 export function toMemberProfileUpdatePayload(input: MemberProfileUpdatePayloadInput) {
+  const cep = cleanText(input.cep, 10);
+  const street = cleanText(input.street, 300);
+  const number = cleanText(input.number, 20);
+  const complement = cleanText(input.complement, 200);
+  const neighborhood = cleanText(input.neighborhood, 200);
+  const city = cleanText(input.city, 200);
+  // Build flat address string for backwards compatibility and map display
+  const addressParts = [street, number, complement, neighborhood, city].filter(Boolean);
+  const address = cleanText(input.address, 500) || addressParts.join(', ');
+
   return {
     cellId: cleanText(input.cellId, 128),
-    ministryId: cleanText(input.ministryId, 128),
+    ministryIds: (input.ministryIds || []).map(id => cleanText(id, 128)).filter(Boolean),
     supervisorId: cleanText(input.supervisorId, 128),
-    address: cleanText(input.address, 500),
+    cep,
+    street,
+    number,
+    complement,
+    neighborhood,
+    city,
+    address,
     lat: Number(input.lat) || 0,
     lng: Number(input.lng) || 0,
     phone: cleanText(input.phone, 50),

@@ -14,6 +14,7 @@ import {
   DEFAULT_TENANT_ID,
   getAdminDb,
   getMercadoPagoAccessToken,
+  getMercadoPagoWebhookUrl,
   type AuthedRequest,
 } from '../context';
 import { OperationError, updateSchoolProgress } from '../operations';
@@ -87,6 +88,7 @@ export function registerSchoolRoutes(app: express.Express, port: number) {
       const origin = String(req.headers.origin || `http://localhost:${port}`);
       const client = new MercadoPagoConfig({ accessToken, options: { timeout: 5000 } });
       const preApproval = new PreApproval(client);
+      const notificationUrl = getMercadoPagoWebhookUrl();
 
       await getAdminDb().collection(COLLECTIONS.subscriptions).doc(subscriptionId).set({
         userId: req.authUser.uid,
@@ -106,6 +108,7 @@ export function registerSchoolRoutes(app: express.Express, port: number) {
           external_reference: subscriptionId,
           payer_email: req.authUser.email || cleanString(req.userProfile?.email, 200),
           back_url: `${origin}/escola?subscription=pending`,
+          ...(notificationUrl ? { notification_url: notificationUrl } : {}),
           auto_recurring: {
             frequency: 1,
             frequency_type: 'months',
@@ -182,6 +185,7 @@ export function registerSchoolRoutes(app: express.Express, port: number) {
       const client = new MercadoPagoConfig({ accessToken, options: { timeout: 5000 } });
       const preference = new Preference(client);
       const origin = String(req.headers.origin || `http://localhost:${port}`);
+      const notificationUrl = getMercadoPagoWebhookUrl();
       const response = await preference.create({
         body: {
           items: [{
@@ -206,6 +210,7 @@ export function registerSchoolRoutes(app: express.Express, port: number) {
             failure: `${origin}/escola?payment=failure`,
             pending: `${origin}/escola?payment=pending`,
           },
+          ...(notificationUrl ? { notification_url: notificationUrl } : {}),
           auto_return: 'approved',
         },
       });

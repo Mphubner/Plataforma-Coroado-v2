@@ -688,9 +688,14 @@ export function CellManagementDashboard({ isLeader, cell, userData }: { isLeader
         
         <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6 relative z-10">
           <div className="space-y-4">
-            <div className="flex gap-2">
+            <div className="flex gap-2 flex-wrap">
                <Badge className="bg-primary/20 text-primary border-primary/20 uppercase tracking-widest text-[10px] font-bold px-3 py-1">Painel de Gestão da Célula</Badge>
                {isSupervisor && <Badge variant="outline" className="border-white/10 text-white/50 uppercase tracking-widest text-[10px]">Acesso de Rede (Multi-Células)</Badge>}
+               {cell?.status === 'pending_approval' && (
+                 <Badge className="bg-yellow-500/20 text-yellow-500 border-yellow-500/20 uppercase tracking-widest text-[10px] font-bold px-3 py-1 flex items-center gap-1">
+                   <Clock className="w-3 h-3" /> Aguardando Aprovação
+                 </Badge>
+               )}
             </div>
             <h1 className="text-5xl md:text-6xl font-black font-serif italic tracking-tight">{cell.name}</h1>
             <p className="text-white/60 flex items-center gap-3 text-lg font-medium">

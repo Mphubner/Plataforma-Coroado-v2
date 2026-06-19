@@ -12,8 +12,10 @@ import { auth, db } from "@/lib/firebase";
 import { collection, query, where, onSnapshot, getDocs } from "firebase/firestore";
 import { httpsCallable } from "firebase/functions";
 import { functions } from "@/lib/firebase";
-import { GoogleMap, useJsApiLoader, Marker } from '@react-google-maps/api';
+import { GoogleMap, useJsApiLoader, Marker, Autocomplete } from '@react-google-maps/api';
 import { motion, AnimatePresence } from 'motion/react';
+
+const libraries: ("places" | "geometry" | "drawing" | "localContext" | "visualization")[] = ["places"];
 import { can } from "@/src/lib/permissions";
 import { updateMemberProfile, syncMinistryLeader } from "@/src/lib/services/membersService";
 
@@ -26,10 +28,17 @@ type UserProfile = {
   roles: string[];
   isApproved: boolean;
   cellId?: string;
+  ministryIds?: string[];
   ministryId?: string;
   tenantId?: string;
   supervisorId?: string;
   address?: string;
+  cep?: string;
+  street?: string;
+  number?: string;
+  complement?: string;
+  neighborhood?: string;
+  city?: string;
   lat?: number;
   lng?: number;
   phone?: string;
@@ -48,11 +57,53 @@ export function MembersView({ userData }: { userData?: any }) {
   const [activeTab, setActiveTab] = useState("list");
   const [cellsMap, setCellsMap] = useState<Record<string, string>>({});
   const [ministriesMap, setMinistriesMap] = useState<Record<string, string>>({});
+  const [supervisorList, setSupervisorList] = useState<{id: string, name: string}[]>([]);
 
   const { isLoaded } = useJsApiLoader({
     id: 'google-map-script',
-    googleMapsApiKey: import.meta.env.VITE_GOOGLE_MAPS_API_KEY || ""
+    googleMapsApiKey: import.meta.env.VITE_GOOGLE_MAPS_API_KEY || "",
+    libraries
   });
+
+  const [autocomplete, setAutocomplete] = useState<google.maps.places.Autocomplete | null>(null);
+
+  const onPlaceChanged = () => {
+    if (autocomplete !== null && editingMember) {
+      const place = autocomplete.getPlace();
+      let newCep = editingMember.cep || "";
+      let newStreet = "";
+      let newNumber = "";
+      let newNeighborhood = "";
+      let newCity = "";
+      let newLat = Number(editingMember.lat) || 0;
+      let newLng = Number(editingMember.lng) || 0;
+
+      if (place.geometry && place.geometry.location) {
+        newLat = place.geometry.location.lat();
+        newLng = place.geometry.location.lng();
+      }
+
+      place.address_components?.forEach(c => {
+        if (c.types.includes("postal_code")) newCep = c.long_name;
+        if (c.types.includes("route")) newStreet = c.long_name;
+        if (c.types.includes("street_number")) newNumber = c.long_name;
+        if (c.types.includes("sublocality") || c.types.includes("sublocality_level_1")) newNeighborhood = c.long_name;
+        if (c.types.includes("administrative_area_level_2")) newCity = c.long_name;
+      });
+
+      setEditingMember({
+        ...editingMember,
+        cep: newCep.replace(/\D/g, ''),
+        street: newStreet || place.name || "",
+        number: newNumber,
+        neighborhood: newNeighborhood,
+        city: newCity,
+        lat: newLat,
+        lng: newLng,
+        address: place.formatted_address || editingMember.address || ""
+      });
+    }
+  };
 
   useEffect(() => {
     if (!userData?.tenantId) return;
@@ -100,6 +151,11 @@ export function MembersView({ userData }: { userData?: any }) {
       }
 
       setMembers(fetchedMembers);
+      
+      const supervisors = fetchedMembers.filter(m => 
+        m.roles?.some(r => ['admin', 'seniorPastor', 'auxPastor', 'supervisor', 'networkPastor', 'cellLeader'].includes(r))
+      );
+      setSupervisorList(supervisors.map(s => ({ id: s.id, name: s.name })));
     });
     return () => unsub();
   }, [userData]);
@@ -125,18 +181,52 @@ export function MembersView({ userData }: { userData?: any }) {
 
   const handleUpdateMember = async () => {
     if (!editingMember) return;
+    
+    if (!editingMember.street || !editingMember.city) {
+      alert("Endereço é obrigatório (Rua e Cidade). Por favor, preencha o endereço.");
+      return;
+    }
+
     try {
       const originalMember = members.find(member => member.id === editingMember.id);
       const rolesChanged = JSON.stringify(originalMember?.roles || []) !== JSON.stringify(editingMember.roles || []);
 
+      // Auto-geocode silently
+      let finalLat = Number(editingMember.lat) || 0;
+      let finalLng = Number(editingMember.lng) || 0;
+      if (editingMember.street && editingMember.number && editingMember.city) {
+        try {
+          const fullAddress = `${editingMember.street}, ${editingMember.number}, ${editingMember.neighborhood || ''}, ${editingMember.city}`;
+          const geocoder = new window.google.maps.Geocoder();
+          const result = await new Promise<google.maps.GeocoderResult[]>((resolve, reject) => {
+            geocoder.geocode({ address: fullAddress }, (results, status) => {
+              if (status === 'OK' && results) resolve(results);
+              else reject(status);
+            });
+          });
+          if (result[0]) {
+            finalLat = result[0].geometry.location.lat();
+            finalLng = result[0].geometry.location.lng();
+          }
+        } catch (e) {
+          console.warn('Geocoding failed, saving without new coordinates:', e);
+        }
+      }
+
       // 1. Atualiza dados de texto no Firestore (independente de falha de Admin API)
       await updateMemberProfile(editingMember.id, {
         cellId: editingMember.cellId || "",
-        ministryId: editingMember.ministryId || "",
+        ministryIds: editingMember.ministryIds || [],
         supervisorId: editingMember.supervisorId || "",
+        cep: editingMember.cep || "",
+        street: editingMember.street || "",
+        number: editingMember.number || "",
+        complement: editingMember.complement || "",
+        neighborhood: editingMember.neighborhood || "",
+        city: editingMember.city || "",
         address: editingMember.address || "",
-        lat: Number(editingMember.lat) || 0,
-        lng: Number(editingMember.lng) || 0,
+        lat: finalLat,
+        lng: finalLng,
         phone: editingMember.phone || "",
         birthdate: editingMember.birthdate || "",
         maritalStatus: editingMember.maritalStatus || "",
@@ -368,58 +458,122 @@ export function MembersView({ userData }: { userData?: any }) {
                       </select>
                     </div>
                     <div className="space-y-2">
-                      <label className="text-xs font-bold text-white/60">Ministério ID</label>
-                      <Input
-                        value={editingMember.ministryId || ""}
-                        onChange={e => setEditingMember({ ...editingMember, ministryId: e.target.value })}
-                        className="bg-black border-white/10" placeholder="Ex: ID do Ministério"
-                      />
+                      <label className="text-xs font-bold text-white/60">Ministérios</label>
+                      <div className="flex flex-col gap-2">
+                        {(editingMember.ministryIds || []).map((id, index) => (
+                          <div key={index} className="flex gap-2">
+                            <select
+                              value={id}
+                              onChange={e => {
+                                const newIds = [...(editingMember.ministryIds || [])];
+                                newIds[index] = e.target.value;
+                                setEditingMember({ ...editingMember, ministryIds: newIds });
+                              }}
+                              className="flex-1 bg-black border border-white/10 rounded-md p-2 text-sm text-white"
+                            >
+                              <option value="">Selecione um ministério</option>
+                              {Object.entries(ministriesMap).map(([mId, mName]) => (
+                                <option key={mId} value={mId}>{mName}</option>
+                              ))}
+                            </select>
+                            <Button variant="outline" size="sm" onClick={() => {
+                              const newIds = [...(editingMember.ministryIds || [])];
+                              newIds.splice(index, 1);
+                              setEditingMember({ ...editingMember, ministryIds: newIds });
+                            }}><X className="h-4 w-4" /></Button>
+                          </div>
+                        ))}
+                        <Button variant="outline" size="sm" onClick={() => {
+                          setEditingMember({ ...editingMember, ministryIds: [...(editingMember.ministryIds || []), ''] });
+                        }}>Adicionar Ministério</Button>
+                      </div>
                     </div>
                     <div className="space-y-2">
-                      <label className="text-xs font-bold text-white/60">Supervisor ID (Hierarquia)</label>
-                      <Input
+                      <label className="text-xs font-bold text-white/60">Supervisor (Hierarquia)</label>
+                      <select
                         value={editingMember.supervisorId || ""}
                         onChange={e => setEditingMember({ ...editingMember, supervisorId: e.target.value })}
-                        className="bg-black border-white/10" placeholder="Ex: ID do supervisor/pastor"
-                      />
+                        className="w-full bg-black border border-white/10 rounded-md p-2 text-sm text-white"
+                      >
+                        <option value="">Nenhum</option>
+                        {supervisorList.map((sup) => (
+                          <option key={sup.id} value={sup.id}>{sup.name}</option>
+                        ))}
+                      </select>
                     </div>
-                    <div className="space-y-2">
-                      <label className="text-xs font-bold text-white/60">Endereço</label>
-                      <div className="flex gap-2">
-                        <Input
-                          value={editingMember.address || ""}
-                          onChange={e => setEditingMember({ ...editingMember, address: e.target.value })}
-                          className="bg-black border-white/10" placeholder="Rua, Numero - Bairro - Cidade"
-                        />
-                        <Button variant="outline" type="button" className="border-white/10" onClick={() => {
-                          if (!editingMember.address) return;
-                          if (!window.google || !window.google.maps) {
-                            alert("Google Maps não está carregado.");
-                            return;
-                          }
-                          const geocoder = new window.google.maps.Geocoder();
-                          geocoder.geocode({ address: editingMember.address }, (results, status) => {
-                              if (status === 'OK' && results && results[0]) {
-                                  const loc = results[0].geometry.location;
-                                  setEditingMember(prev => ({ ...prev!, lat: loc.lat(), lng: loc.lng() }));
-                                  alert("Coordenadas atualizadas com sucesso!");
-                              } else {
-                                  alert("Não foi possível encontrar as coordenadas para este endereço.");
-                              }
-                          });
-                        }}>
-                          Gerar Lat/Lng
-                        </Button>
-                      </div>
-                    </div>
-                    <div className="space-y-2 flex gap-2">
-                      <div className="flex-1">
-                        <label className="text-xs font-bold text-white/60">Lat</label>
-                        <Input type="number" step="any" value={editingMember.lat || ""} onChange={e => setEditingMember({ ...editingMember, lat: parseFloat(e.target.value) })} className="bg-black border-white/10" />
-                      </div>
-                      <div className="flex-1">
-                        <label className="text-xs font-bold text-white/60">Lng</label>
-                        <Input type="number" step="any" value={editingMember.lng || ""} onChange={e => setEditingMember({ ...editingMember, lng: parseFloat(e.target.value) })} className="bg-black border-white/10" />
+                    <div className="space-y-2 col-span-1 md:col-span-2 mt-4 pt-4 border-t border-white/10">
+                      <label className="text-sm font-bold text-white">Endereço</label>
+                      <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mt-2">
+                        <div className="space-y-2 md:col-span-4">
+                          <label className="text-xs font-bold text-white/60">Buscar Endereço (Google Maps)</label>
+                          {isLoaded ? (
+                            <Autocomplete
+                              onLoad={setAutocomplete}
+                              onPlaceChanged={onPlaceChanged}
+                              options={{ fields: ['address_components', 'geometry', 'name', 'formatted_address'] }}
+                            >
+                              <Input
+                                className="bg-black border-white/10"
+                                placeholder="Digite seu endereço para preencher automaticamente"
+                              />
+                            </Autocomplete>
+                          ) : (
+                            <Input className="bg-black border-white/10 opacity-50" placeholder="Carregando mapas..." disabled />
+                          )}
+                        </div>
+                        <div className="space-y-2 md:col-span-1">
+                          <label className="text-xs font-bold text-white/60">CEP</label>
+                          <Input
+                            value={editingMember.cep || ""}
+                            onChange={async e => {
+                              let v = e.target.value.replace(/\D/g, '');
+                              if (v.length > 5) v = v.replace(/^(\d{5})(\d)/, '$1-$2');
+                              setEditingMember({ ...editingMember, cep: v });
+                            }}
+                            className="bg-black border-white/10" placeholder="00000-000"
+                            maxLength={9}
+                          />
+                        </div>
+                        <div className="space-y-2 md:col-span-2">
+                          <label className="text-xs font-bold text-white/60">Rua</label>
+                          <Input
+                            value={editingMember.street || ""}
+                            onChange={e => setEditingMember({ ...editingMember, street: e.target.value })}
+                            className="bg-black border-white/10" placeholder="Nome da rua"
+                          />
+                        </div>
+                        <div className="space-y-2 md:col-span-1">
+                          <label className="text-xs font-bold text-white/60">Número</label>
+                          <Input
+                            value={editingMember.number || ""}
+                            onChange={e => setEditingMember({ ...editingMember, number: e.target.value })}
+                            className="bg-black border-white/10" placeholder="123"
+                          />
+                        </div>
+                        <div className="space-y-2 md:col-span-2">
+                          <label className="text-xs font-bold text-white/60">Complemento</label>
+                          <Input
+                            value={editingMember.complement || ""}
+                            onChange={e => setEditingMember({ ...editingMember, complement: e.target.value })}
+                            className="bg-black border-white/10" placeholder="Apto, Bloco"
+                          />
+                        </div>
+                        <div className="space-y-2 md:col-span-1">
+                          <label className="text-xs font-bold text-white/60">Bairro</label>
+                          <Input
+                            value={editingMember.neighborhood || ""}
+                            onChange={e => setEditingMember({ ...editingMember, neighborhood: e.target.value })}
+                            className="bg-black border-white/10" placeholder="Bairro"
+                          />
+                        </div>
+                        <div className="space-y-2 md:col-span-1">
+                          <label className="text-xs font-bold text-white/60">Cidade</label>
+                          <Input
+                            value={editingMember.city || ""}
+                            onChange={e => setEditingMember({ ...editingMember, city: e.target.value })}
+                            className="bg-black border-white/10" placeholder="Cidade"
+                          />
+                        </div>
                       </div>
                     </div>
                     <div className="space-y-2 flex flex-col justify-end">
