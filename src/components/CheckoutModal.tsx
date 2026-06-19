@@ -154,8 +154,6 @@ export function CheckoutModal({ isOpen, event, onClose, onSuccess, isLoggedIn, o
     }
   };
 
-  };
-
   return createPortal(
     <AnimatePresence>
       <motion.div 
