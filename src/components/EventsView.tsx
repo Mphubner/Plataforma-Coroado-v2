@@ -11,6 +11,7 @@ import { Html5QrcodeScanner, Html5QrcodeScanType, Html5QrcodeSupportedFormats } 
 import { handleFirestoreError, OperationType } from '@/lib/firestoreUtils';
 import { can } from '@/src/lib/permissions';
 import { pageMotion } from '@/src/lib/motion/presets';
+import { postJson } from '@/src/lib/api/http';
 import { ImageUpload } from './ui/ImageUpload';
 import { CheckoutModal } from './CheckoutModal';
 
@@ -569,7 +570,7 @@ export function EventsView({ isLoggedIn = false, userData, onLoginClick }: { isL
                     const alreadyEnrolled = !!userEnrollment;
                     const isPendingPayment = userEnrollment?.paymentStatus === 'pending';
                     return (
-                      <Card key={event.id} className="bg-zinc-900 border-white/10 overflow-hidden flex flex-col group">
+                      <Card key={event.id} className="bg-zinc-900 border-white/10 overflow-hidden flex flex-col group cursor-pointer" onClick={() => setSelectedEvent(event)}>
                         <div className="relative h-48 overflow-hidden">
                           <div className="absolute inset-0 bg-black/40 z-10" />
                           <img src={event.image} alt={event.title} className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110 grayscale group-hover:grayscale-0" />
@@ -610,7 +611,6 @@ export function EventsView({ isLoggedIn = false, userData, onLoginClick }: { isL
                           )}
                           <Button 
                             onClick={() => {
-                              if (!isLoggedIn && onLoginClick) return onLoginClick();
                               if (!event.requiresRegistration || !alreadyEnrolled || isPendingPayment) setSelectedEvent(event);
                             }}
                             disabled={event.requiresRegistration && isFull && !alreadyEnrolled && !isPendingPayment}
@@ -649,7 +649,6 @@ export function EventsView({ isLoggedIn = false, userData, onLoginClick }: { isL
                                <div className="w-full sm:w-auto mt-4 sm:mt-0">
                                  <Button 
                                    onClick={() => { 
-                                     if (!isLoggedIn && onLoginClick) return onLoginClick(); 
                                      if (!event.requiresRegistration || !alreadyEnrolled || isPendingPayment) setSelectedEvent(event); 
                                    }} 
                                    className={`w-full sm:w-auto font-bold ${isPendingPayment ? 'bg-yellow-500/20 text-yellow-500 hover:bg-yellow-500/30' : alreadyEnrolled ? 'bg-primary/20 text-primary hover:bg-primary/30' : 'bg-primary text-black'}`}
