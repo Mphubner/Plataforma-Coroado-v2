@@ -37,6 +37,9 @@ const FinanceView = React.lazy(() => import('./components/FinanceView').then(mod
 const EventsView = React.lazy(() => import('./components/EventsView').then(module => ({ default: module.EventsView })));
 const SchoolView = React.lazy(() => import('./components/SchoolView').then(module => ({ default: module.SchoolView })));
 const MembersView = React.lazy(() => import('./components/MembersView').then(module => ({ default: module.MembersView })));
+const PrivacyPolicyPage = React.lazy(() => import('./components/legal/PrivacyPolicyPage').then(module => ({ default: module.PrivacyPolicyPage })));
+
+const PUBLIC_LEGAL_PATHS = new Set(['/politicas', '/politicas/privacidade']);
 
 // =====================================================
 // Re-export types and context hooks for backward compat
@@ -62,6 +65,7 @@ export default function App() {
   const [authState, setAuthState] = React.useState<AuthGateState>('loading');
   const [userData, setUserData] = React.useState<UserProfile | null>(null);
   const [loading, setLoading] = React.useState(true);
+  const isPublicLegalRoute = PUBLIC_LEGAL_PATHS.has(window.location.pathname.replace(/\/$/, '') || '/');
 
   const refreshProfile = React.useCallback(async () => {
     const user = auth.currentUser;
@@ -131,6 +135,10 @@ export default function App() {
     return () => unsub();
   }, [refreshProfile]);
 
+  if (isPublicLegalRoute) {
+    return <PublicLegalApp />;
+  }
+
   if (loading || authState === 'loading') {
     return (
       <div className="min-h-screen bg-black flex items-center justify-center text-white">
@@ -156,6 +164,20 @@ export default function App() {
           <AppShell userData={userData} authState={authState} onLogout={() => signOut(auth)} refreshProfile={refreshProfile} />
         )}
       </SchoolProvider>
+    </BrowserRouter>
+  );
+}
+
+function PublicLegalApp() {
+  return (
+    <BrowserRouter>
+      <React.Suspense fallback={<RouteLoading />}>
+        <Routes>
+          <Route path="/politicas/privacidade" element={<PrivacyPolicyPage />} />
+          <Route path="/politicas" element={<Navigate to="/politicas/privacidade" replace />} />
+          <Route path="*" element={<Navigate to="/politicas/privacidade" replace />} />
+        </Routes>
+      </React.Suspense>
     </BrowserRouter>
   );
 }
