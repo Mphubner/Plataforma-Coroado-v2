@@ -41,6 +41,14 @@ const PrivacyPolicyPage = React.lazy(() => import('./components/legal/PrivacyPol
 
 const PUBLIC_LEGAL_PATHS = new Set(['/politicas', '/politicas/privacidade']);
 
+function normalizePathname(pathname: string) {
+  return pathname.replace(/\/+$/, '') || '/';
+}
+
+function isPublicLegalPath(pathname: string) {
+  return PUBLIC_LEGAL_PATHS.has(normalizePathname(pathname));
+}
+
 // =====================================================
 // Re-export types and context hooks for backward compat
 // =====================================================
@@ -65,7 +73,7 @@ export default function App() {
   const [authState, setAuthState] = React.useState<AuthGateState>('loading');
   const [userData, setUserData] = React.useState<UserProfile | null>(null);
   const [loading, setLoading] = React.useState(true);
-  const isPublicLegalRoute = PUBLIC_LEGAL_PATHS.has(window.location.pathname.replace(/\/$/, '') || '/');
+  const isPublicLegalRoute = isPublicLegalPath(window.location.pathname);
 
   const refreshProfile = React.useCallback(async () => {
     const user = auth.currentUser;
@@ -168,16 +176,21 @@ export default function App() {
   );
 }
 
+function PublicLegalRoutes() {
+  return (
+    <React.Suspense fallback={<RouteLoading />}>
+      <Routes>
+        <Route path="/politicas/privacidade" element={<PrivacyPolicyPage />} />
+        <Route path="/politicas" element={<Navigate to="/politicas/privacidade" replace />} />
+      </Routes>
+    </React.Suspense>
+  );
+}
+
 function PublicLegalApp() {
   return (
     <BrowserRouter>
-      <React.Suspense fallback={<RouteLoading />}>
-        <Routes>
-          <Route path="/politicas/privacidade" element={<PrivacyPolicyPage />} />
-          <Route path="/politicas" element={<Navigate to="/politicas/privacidade" replace />} />
-          <Route path="*" element={<Navigate to="/politicas/privacidade" replace />} />
-        </Routes>
-      </React.Suspense>
+      <PublicLegalRoutes />
     </BrowserRouter>
   );
 }
@@ -197,6 +210,10 @@ function AppShell({ userData, authState, onLogout, refreshProfile }: { userData:
     },
     [navigate],
   );
+
+  if (isPublicLegalPath(location.pathname)) {
+    return <PublicLegalRoutes />;
+  }
 
   // Se o usuário acessar a rota /login diretamente
   if (location.pathname === '/login' && authState === 'signedOut') {
@@ -221,6 +238,8 @@ function AppShell({ userData, authState, onLogout, refreshProfile }: { userData:
     >
       <React.Suspense fallback={<RouteLoading />}>
         <Routes>
+          <Route path="/politicas/privacidade" element={<PrivacyPolicyPage />} />
+          <Route path="/politicas" element={<Navigate to="/politicas/privacidade" replace />} />
           <Route path="/" element={<HomeView onTabChange={navigateToTab} userData={userData} />} />
           <Route path="/gestao" element={<ProtectedPage user={userData} capability="view:admin"><AdminView userData={userData} /></ProtectedPage>} />
           <Route path="/jornada" element={<ProtectedPage user={userData} capability="view:jornada"><JornadaView /></ProtectedPage>} />
