@@ -37,9 +37,15 @@ const FinanceView = React.lazy(() => import('./components/FinanceView').then(mod
 const EventsView = React.lazy(() => import('./components/EventsView').then(module => ({ default: module.EventsView })));
 const SchoolView = React.lazy(() => import('./components/SchoolView').then(module => ({ default: module.SchoolView })));
 const MembersView = React.lazy(() => import('./components/MembersView').then(module => ({ default: module.MembersView })));
-const PrivacyPolicyPage = React.lazy(() => import('./components/legal/PrivacyPolicyPage').then(module => ({ default: module.PrivacyPolicyPage })));
+const LegalPolicyPage = React.lazy(() => import('./components/legal/PrivacyPolicyPage').then(module => ({ default: module.LegalPolicyPage })));
 
-const PUBLIC_LEGAL_PATHS = new Set(['/politicas', '/politicas/privacidade']);
+const PUBLIC_LEGAL_PATHS = new Set([
+  '/politicas',
+  '/politicas/privacidade',
+  '/politicas/servico',
+  '/politicas/devolucao',
+  '/politicas/frete',
+]);
 
 function normalizePathname(pathname: string) {
   return pathname.replace(/\/+$/, '') || '/';
@@ -180,7 +186,10 @@ function PublicLegalRoutes() {
   return (
     <React.Suspense fallback={<RouteLoading />}>
       <Routes>
-        <Route path="/politicas/privacidade" element={<PrivacyPolicyPage />} />
+        <Route path="/politicas/privacidade" element={<LegalPolicyPage policy="privacidade" />} />
+        <Route path="/politicas/servico" element={<LegalPolicyPage policy="servico" />} />
+        <Route path="/politicas/devolucao" element={<LegalPolicyPage policy="devolucao" />} />
+        <Route path="/politicas/frete" element={<LegalPolicyPage policy="frete" />} />
         <Route path="/politicas" element={<Navigate to="/politicas/privacidade" replace />} />
       </Routes>
     </React.Suspense>
@@ -238,7 +247,10 @@ function AppShell({ userData, authState, onLogout, refreshProfile }: { userData:
     >
       <React.Suspense fallback={<RouteLoading />}>
         <Routes>
-          <Route path="/politicas/privacidade" element={<PrivacyPolicyPage />} />
+          <Route path="/politicas/privacidade" element={<LegalPolicyPage policy="privacidade" />} />
+          <Route path="/politicas/servico" element={<LegalPolicyPage policy="servico" />} />
+          <Route path="/politicas/devolucao" element={<LegalPolicyPage policy="devolucao" />} />
+          <Route path="/politicas/frete" element={<LegalPolicyPage policy="frete" />} />
           <Route path="/politicas" element={<Navigate to="/politicas/privacidade" replace />} />
           <Route path="/" element={<HomeView onTabChange={navigateToTab} userData={userData} />} />
           <Route path="/gestao" element={<ProtectedPage user={userData} capability="view:admin"><AdminView userData={userData} /></ProtectedPage>} />
